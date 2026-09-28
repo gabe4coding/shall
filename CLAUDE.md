@@ -28,8 +28,10 @@ plugins/jrfc/bin/jrfc --config jrfc.yaml eval-verify --retrieval treesitter   # 
 organisation corpus (`corpus/`, prefix `JRFC-`) needs `--config jrfc.yaml` (the Makefile
 does this). The scale eval corpus is a third workspace: `--config eval/scale/.jrfc/jrfc.yaml`.
 
-Jev answers are cached in `.jrfc-cache/jev.json` (per workspace); any change to a question's
-wording or to the state changes the cache key. Use `--no-cache` on `select`/`review` to force calls.
+Jev answers are cached in `.jrfc-cache/jev.json` and Claude answers in `.jrfc-cache/review.json`
+(per workspace, keyed by the exact input: any change to a question, prompt, state or agent
+prompt is a new call). Use `--no-cache` on `select`/`review` to force fresh calls — needed when
+measuring model behavior, since `review` otherwise reuses answers for unchanged chunks.
 
 ## Architecture (plugins/jrfc/tooling/src/jrfc/)
 
@@ -55,7 +57,8 @@ Flow of `jrfc review`: `cli.py` → `config.py` → `corpus.py` → `artifact.py
 - **jev.py**: the only access point to TypeSafe (cache, request packing under the token
   budget, retries, usage incl. cache-independent `est_input_tokens`).
 - **review.py**: reviewer prompt per chunk, `run_claude` (tool-less `claude -p` with JSON
-  schema; system prompt from `plugins/jrfc/agents/*.md`, shared with in-session use),
+  schema; system prompt from `plugins/jrfc/agents/*.md`, shared with in-session use;
+  `AnswerCache` makes re-reviews incremental),
   `validate_findings`, markdown/GitHub rendering with content-hash comment keys.
 - **verify.py / codegraph.py**: evidence for blocking findings (tree-sitter tags + generic
   rules, import resolution, lazy parsing guided by `git grep`, keyword search), verifier

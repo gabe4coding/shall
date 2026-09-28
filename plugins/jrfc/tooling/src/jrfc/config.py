@@ -65,6 +65,7 @@ DEFAULTS: dict[str, Any] = {
         "max_comments": 25,
         "timeout": 300,  # seconds per agent call
         "verify": True,  # verify blocking findings (and those with depends_on) before they block
+        "cache": True,   # reuse agent answers when the prompt is identical (incremental re-review)
     },
 }
 
