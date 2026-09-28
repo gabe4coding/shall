@@ -21,12 +21,17 @@ selection:
     rfc: 0.30
     statement: 0.50
   always_domains: [security]   # cross-cutting: never pruned at the domain layer
+  facts: true              # known_effects from corpus/effects.yaml in the Jev state (+ reviewer)
+  facts_depth: 3           # call hops followed through the repository for indirect effects
   include_status: [approved, enforced]
 
 conflicts:
   fail_threshold: 0.75       # tuned on a handful of pairs; revisit with more authored rules
   report_threshold: 0.60
   exclude_domains: [governance]  # rules about RFC files are not compared with engineering rules
+
+codegraph:
+  download_grammars: true  # false: never download a grammar during a run (CI runs `jrfc prefetch`)
 
 review:
   # jrfc always appends --tools "" (no tools), a JSON schema and a fixed system prompt (JTOOL-0002.1)

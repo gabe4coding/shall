@@ -108,6 +108,7 @@ class Corpus:
     rfcs: dict[str, Rfc]
     issues: list[Issue]
     layers: list[Layer] = field(default_factory=list)
+    effects: list = field(default_factory=list)   # effects.Effect entries of every layer
 
     def statements(self) -> list[tuple[Rfc, Statement]]:
         return [(r, s) for r in self.rfcs.values() for s in r.statements]
@@ -384,7 +385,9 @@ def load_corpus(cfg: Config) -> Corpus:
                 issues.append(Issue(rel, 1, "error", "cross-layer-ref",
                                     f"{rfc.id} and {sup} are in different corpus layers; a local RFC cannot "
                                     "supersede an organisation RFC (propose the change upstream)", rfc.layer))
-    return Corpus(root=cfg.root, domains=domains, rfcs=rfcs, issues=issues, layers=cfg.layers)
+    from .effects import load_effects
+    effects = load_effects([layer.effects_file for layer in cfg.layers], issues)
+    return Corpus(root=cfg.root, domains=domains, rfcs=rfcs, issues=issues, layers=cfg.layers, effects=effects)
 
 
 def check_against(corpus: Corpus, old_index: dict) -> list[Issue]:

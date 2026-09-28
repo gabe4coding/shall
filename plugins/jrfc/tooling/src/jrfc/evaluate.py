@@ -23,13 +23,33 @@ def _pr(expected: set[str], got: set[str]) -> tuple[float, float]:
     return recall, precision
 
 
-async def _run_case(cfg: Config, corpus: Corpus, jev: Jev, base: Path, case: dict, strategy: str) -> dict:
+def _case_facts(cfg: Config, corpus: Corpus, base: Path, case: dict, artifact) -> dict:
+    """known_effects as in a real run; `repo:` (a fixture directory) enables indirect facts."""
+    import shutil
+    import subprocess
+    import tempfile
+
+    from .codegraph import RepoIndex
+    from .effects import chunk_facts
+    depth = int(cfg.get("selection.facts_depth"))
+    if not case.get("repo"):
+        return chunk_facts(corpus.effects, artifact, None, depth)
+    with tempfile.TemporaryDirectory(prefix="jrfc-eval-") as tmp:
+        root = Path(tmp) / "repo"
+        shutil.copytree(base / case["repo"], root)
+        subprocess.run(["git", "init", "-q"], cwd=root, check=True)  # the index uses `git grep`
+        return chunk_facts(corpus.effects, artifact, RepoIndex(root), depth)
+
+
+async def _run_case(cfg: Config, corpus: Corpus, jev: Jev, base: Path, case: dict, strategy: str,
+                    facts: bool = True) -> dict:
     name, raw = read_source(str(base / case["file"]), None)
     kind = case.get("kind") or detect_kind(name, raw)
     if kind == "document":
         kind, _ = await classify_document(jev, name, raw)
-    artifact = build_artifact(name, raw, kind, int(cfg.get("jev.max_chunk_chars")))
-    results = await Selector(cfg, corpus, jev, strategy=strategy).select(artifact)
+    artifact = build_artifact(case.get("path", name), raw, kind, int(cfg.get("jev.max_chunk_chars")))
+    known = _case_facts(cfg, corpus, base, case, artifact) if facts and cfg.get("selection.facts") else {}
+    results = await Selector(cfg, corpus, jev, strategy=strategy, facts=known).select(artifact)
     got = {sid for r in results for sid in r.selected}
     p_max: dict[str, float] = {}
     for r in results:
@@ -41,6 +61,7 @@ async def _run_case(cfg: Config, corpus: Corpus, jev: Jev, base: Path, case: dic
         "case": case["file"], "kind": kind, "expected": sorted(expected), "selected": sorted(got),
         "missed": sorted(expected - got), "extra": sorted(got - expected),
         "lost_at": {sid: _lost_at(corpus, results, sid) for sid in sorted(expected - got)},
+        "facts": known,
         "recall": recall, "precision": precision, "p_max": p_max,
     }
 
@@ -62,13 +83,14 @@ def _lost_at(corpus: Corpus, results, sid: str) -> str:
     return reached
 
 
-async def run_eval(cfg: Config, corpus: Corpus, jev: Jev, labels_path: Path, strategies: list[str]) -> dict:
+async def run_eval(cfg: Config, corpus: Corpus, jev: Jev, labels_path: Path, strategies: list[str],
+                   facts: bool = True) -> dict:
     labels = yaml.safe_load(labels_path.read_text(encoding="utf-8"))
     base = labels_path.parent
     report = {}
     for strategy in strategies:
         before, started = dict(jev.usage), time.perf_counter()
-        cases = await asyncio.gather(*(_run_case(cfg, corpus, jev, base, c, strategy) for c in labels["cases"]))
+        cases = await asyncio.gather(*(_run_case(cfg, corpus, jev, base, c, strategy, facts) for c in labels["cases"]))
         usage = {k: jev.usage[k] - before.get(k, 0) for k in jev.usage}
         usage["calls"] = usage["requests"] + usage["cached"]
         usage["seconds"] = round(time.perf_counter() - started, 1)

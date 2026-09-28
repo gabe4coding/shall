@@ -112,6 +112,26 @@ The selector (Jev) reads **literally**. It answers the words written, not the in
   an area the org corpus does not cover; you cannot redefine an org domain.
 - When the same local rule exists in several repos, suggest upstreaming it.
 
+## Known effects (`effects.yaml`)
+
+A rule about network calls, databases or processes is only selected when Jev can see that
+the code does that. When a library hides it (`get_parser(lang)` downloads a grammar,
+`db.Query` goes to the network), add an entry to `corpus/effects.yaml` (or
+`.jrfc/effects.yaml`) instead of widening the rule's `Applies when:`:
+
+```yaml
+- id: go-database-sql
+  module: database/sql                     # import spec, prefix match
+  calls: [Open]                            # called through the import: sql.Open(...)
+  methods: [Query, QueryRow, Exec]         # on a receiver from the module: db.Query(...)
+  effect: runs a query on a remote database over the network
+  owner: data-platform
+```
+
+Write `effect` as a literal clause ("<call> <effect>"). Prefer `calls` to `methods`: a method
+name only matches when its receiver is traceably from the module. Entries are reviewed by
+their owner like statements; `jrfc lint` checks the fields.
+
 ## Maintaining standards
 
 - **Change a requirement's meaning** → add a new statement and retire the old id, so

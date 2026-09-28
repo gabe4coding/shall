@@ -234,7 +234,21 @@ def cmd_init(args) -> int:
 # ---------------------------------------------------------------- selection and review
 
 
-async def _select(args, cfg, corpus, jev):
+def _facts(cfg, corpus, artifact, index) -> dict:
+    """known_effects per chunk (effects.py); indirect ones need the repository index."""
+    if not cfg.get("selection.facts") or not corpus.effects:
+        return {}
+    from .effects import chunk_facts
+    return chunk_facts(corpus.effects, artifact, index, int(cfg.get("selection.facts_depth")))
+
+
+def _index(cfg, corpus, args):
+    from .verify import repo_index, repo_root
+    root = repo_root(Path(args.search_root) if getattr(args, "search_root", None) else None)
+    return repo_index(cfg, corpus, root)
+
+
+async def _select(args, cfg, corpus, jev, index=None):
     from .select import Selector, classify_document, selection_to_json
     name, raw = read_source(args.path, args.text)
     kind = args.kind or detect_kind(name, raw, inline_text=args.text is not None)
@@ -244,7 +258,8 @@ async def _select(args, cfg, corpus, jev):
         extra["kind_classification"] = answer
     artifact = build_artifact(name, raw, kind, int(cfg.get("jev.max_chunk_chars")))
     statuses = cfg.get("selection.include_status") + (["draft"] if args.include_draft else [])
-    selector = Selector(cfg, corpus, jev, strategy=args.strategy, include_status=statuses)
+    facts = _facts(cfg, corpus, artifact, index)
+    selector = Selector(cfg, corpus, jev, strategy=args.strategy, include_status=statuses, facts=facts)
     results = await selector.select(artifact)
     return artifact, selection_to_json(artifact, results, corpus, selector.strategy, cfg, jev, extra)
 
@@ -266,7 +281,7 @@ def cmd_select(args, cfg) -> int:
 
     async def run():
         async with Jev(cfg, use_cache=not args.no_cache) as jev:
-            return await _select(args, cfg, corpus, jev)
+            return await _select(args, cfg, corpus, jev, _index(cfg, corpus, args))
 
     _, sel = asyncio.run(run())
     if args.out:
@@ -286,14 +301,17 @@ def _load_selection_artifact(args, cfg, selection: dict):
     return artifact
 
 
-def _write_outputs(cfg, out_dir: Path, artifact, selection, findings, dropped, fmt: str) -> int:
+def _write_outputs(cfg, out_dir: Path, artifact, selection, findings, dropped, fmt: str,
+                   health: dict | None = None) -> int:
     from .review import render_github, render_markdown
     out_dir.mkdir(parents=True, exist_ok=True)
     _dump({"findings": findings, "dropped": dropped}, str(out_dir / "findings.json"))
-    md = render_markdown(artifact, selection, findings, dropped)
+    if health is not None:
+        _dump(health, str(out_dir / "health.json"))
+    md = render_markdown(artifact, selection, findings, dropped, health)
     (out_dir / "review.md").write_text(md, encoding="utf-8")
     if fmt == "github":
-        _dump(render_github(artifact, selection, findings, dropped), str(out_dir / "github-review.json"))
+        _dump(render_github(artifact, selection, findings, dropped, health), str(out_dir / "github-review.json"))
     print(md)
     return sum(1 for f in findings if f["blocking"])
 
@@ -329,7 +347,8 @@ def cmd_review(args, cfg) -> int:
 
     async def run():
         async with Jev(cfg, use_cache=not args.no_cache) as jev:
-            artifact, selection = await _select(args, cfg, corpus, jev)
+            index = _index(cfg, corpus, args)
+            artifact, selection = await _select(args, cfg, corpus, jev, index)
             _dump(selection, str(out_dir / "selection.json"))
             print(_selection_summary(selection), file=sys.stderr)
             if args.dry_run:
@@ -339,11 +358,11 @@ def cmd_review(args, cfg) -> int:
             findings, dropped = validate_findings(corpus, artifact, selection, raw,
                                                   int(cfg.get("review.max_comments")))
             if verify and findings:
-                findings, refuted, vstats = await verify_findings(
-                    cfg, corpus, artifact, jev, findings, Path(args.search_root) if args.search_root else None)
+                findings, refuted, vstats = await verify_findings(cfg, corpus, artifact, jev, findings, index=index)
                 dropped += refuted
                 stats["verification"] = vstats
                 stats["cost_usd"] = round(stats["cost_usd"] + vstats["cost_usd"], 6)
+            stats["codegraph_events"] = list(index.events)
             return artifact, selection, findings, dropped, stats
 
     artifact, selection, findings, dropped, stats = asyncio.run(run())
@@ -353,7 +372,11 @@ def cmd_review(args, cfg) -> int:
         return EXIT_OK
     for err in stats.get("errors", []):
         print(f"jrfc review: agent error on {err['chunk']}: {err['error'][:300]}", file=sys.stderr)
-    blocking = _write_outputs(cfg, out_dir, artifact, selection, findings, dropped, args.format)
+    from .health import build_health
+    health = build_health(cfg, selection, stats, findings, dropped, stats.get("codegraph_events", []))
+    blocking = _write_outputs(cfg, out_dir, artifact, selection, findings, dropped, args.format, health)
+    for w in health["warnings"]:
+        print(f"jrfc review: health: {w}", file=sys.stderr)
     v = stats.get("verification")
     vtext = (f", verified {v['verified']} ({v['confirmed']} confirmed, {v['refuted']} refuted, "
              f"{v['unknown']} unknown)") if v else ""
@@ -441,7 +464,7 @@ def cmd_eval(args, cfg) -> int:
 
     async def run():
         async with Jev(cfg) as jev:
-            return await run_eval(cfg, corpus, jev, Path(args.labels), strategies)
+            return await run_eval(cfg, corpus, jev, Path(args.labels), strategies, facts=not args.no_facts)
 
     report = asyncio.run(run())
     if args.out:
@@ -529,6 +552,7 @@ def build_parser() -> argparse.ArgumentParser:
         s.add_argument("--strategy", choices=["layered", "flat"])
         s.add_argument("--include-draft", action="store_true", help="also consider draft RFCs")
         s.add_argument("--no-cache", action="store_true", help="ignore the Jev answer cache")
+        s.add_argument("--search-root", help="repository for facts and verification evidence (default: git toplevel)")
 
     s = sub.add_parser("select", help="find the statements that apply to an artifact (Jev)")
     artifact_args(s)
@@ -543,7 +567,6 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--fail-on-blocking", action="store_true", help=f"exit {EXIT_BLOCKING} on blocking findings")
     s.add_argument("--dry-run", action="store_true", help="select only and write bundle.md, no agent call")
     s.add_argument("--no-verify", action="store_true", help="skip verification of blocking findings")
-    s.add_argument("--search-root", help="where verification searches for evidence (default: git toplevel)")
     s.set_defaults(fn=cmd_review)
 
     s = sub.add_parser("verify", help="verify validated findings against repository evidence (Jev + agent)")
@@ -598,6 +621,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("eval", help="measure selection recall/precision on labelled cases")
     s.add_argument("--labels", default="eval/labels.yaml")
     s.add_argument("--strategy", choices=["layered", "flat", "both"], default="both")
+    s.add_argument("--no-facts", action="store_true", help="leave known_effects out of the Jev state (A/B)")
     s.add_argument("--out")
     s.set_defaults(fn=cmd_eval)
     return p

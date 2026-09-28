@@ -254,22 +254,41 @@ def apply_verdict(finding: dict, verdict: dict | None, excerpts: list[Excerpt]) 
     return kept, None
 
 
-async def verify_findings(cfg: Config, corpus: Corpus, artifact: Artifact, jev: Jev, findings: list[dict],
-                          search_root: Path | None = None, agent=None,
-                          model: str | None = None) -> tuple[list[dict], list[dict], dict]:
-    model = model or cfg.get("review.verify_model") or None
-    agent = agent or (lambda prompt, sem: run_claude(cfg, prompt, agent_prompt("jrfc-verifier"),
-                                                     VERDICT_SCHEMA, sem, model=model))
-    root = search_root or _git_root(Path.cwd()) or Path.cwd()
+def repo_root(search_root: Path | None = None) -> Path:
+    return search_root or _git_root(Path.cwd()) or Path.cwd()
+
+
+def excluded_paths(corpus: Corpus, root: Path) -> set[str]:
+    """The standards' own text is not evidence about the code, and outputs are not code."""
     excluded = {".jrfc-out"}
-    for layer in corpus.layers:  # the standards' own text is not evidence about the code
+    for layer in corpus.layers:
         for folder in (layer.rfcs_dir, layer.index_dir):
             try:
                 excluded.add(str(folder.relative_to(root)))
             except ValueError:
                 pass
+    return excluded
+
+
+def repo_index(cfg: Config, corpus: Corpus, root: Path) -> RepoIndex:
+    """One index per run: selection (facts) and verification share parses and events."""
+    return RepoIndex(root, excluded_paths(corpus, root),
+                     download_grammars=bool(cfg.get("codegraph.download_grammars", True)))
+
+
+async def verify_findings(cfg: Config, corpus: Corpus, artifact: Artifact, jev: Jev, findings: list[dict],
+                          search_root: Path | None = None, agent=None, model: str | None = None,
+                          index: RepoIndex | None = None) -> tuple[list[dict], list[dict], dict]:
+    model = model or cfg.get("review.verify_model") or None
+    agent = agent or (lambda prompt, sem: run_claude(cfg, prompt, agent_prompt("jrfc-verifier"),
+                                                     VERDICT_SCHEMA, sem, model=model))
+    root = index.root if index is not None else repo_root(search_root)
+    excluded = excluded_paths(corpus, root)
     retrieval = cfg.get("review.verify_retrieval") or "treesitter"
-    index = RepoIndex(root, excluded) if retrieval == "treesitter" else None
+    if retrieval != "treesitter":
+        index = None
+    elif index is None:
+        index = repo_index(cfg, corpus, root)
     sem = asyncio.Semaphore(int(cfg.get("review.concurrency")))
     stats = {"verified": 0, "confirmed": 0, "refuted": 0, "unknown": 0, "agent_calls": 0, "cost_usd": 0.0}
 
@@ -318,4 +337,6 @@ async def verify_findings(cfg: Config, corpus: Corpus, artifact: Artifact, jev: 
         if d is not None:
             dropped.append(d)
     kept.sort(key=lambda k: (not k["blocking"], k["path"], k["line"] or 0, k["statement_id"]))
+    stats["downgraded"] = sum(1 for k in kept if k.get("downgraded"))
+    stats["codegraph_events"] = list(index.events) if index is not None else []
     return kept, dropped, stats

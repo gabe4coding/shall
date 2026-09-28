@@ -1,0 +1,192 @@
+# Known side effects of library calls (jrfc effects registry).
+#
+# Jev judges only the text it is given: `requests.post(...)` looks like a network call,
+# `get_parser(lang)` or `h.DB.Query(...)` do not. When code finds a call listed here (in the
+# chunk, or reached from it through the repository), the fact goes into the Jev state as
+# `known_effects` and into the reviewer prompt. Measured on one case: the timeout rule went
+# from p 0.14 to 0.77 with the fact.
+#
+# Reviewed like the RFCs: owners approve entries. Keep `effect` literal and short; it is read
+# as "<call> (<module>) <effect>". Local layers may add entries in .jrfc/effects.yaml.
+#
+#   module:    import spec, prefix match (`requests` also matches `requests.adapters`)
+#   calls:     names called through the import (`requests.post`, `from x import get; get()`)
+#   methods:   names called on any receiver once the module is imported (`db.Query`)
+#   languages: for built-ins without an import (`fetch`)
+effects:
+  # ---------------------------------------------------------------- HTTP clients
+  - id: python-requests
+    module: requests
+    calls: [get, post, put, patch, delete, head, options, request, Session]
+    effect: makes an outbound HTTP request over the network
+    owner: sre
+  - id: python-httpx
+    module: httpx
+    calls: [get, post, put, patch, delete, request, stream, Client, AsyncClient]
+    effect: makes an outbound HTTP request over the network
+    owner: sre
+  - id: python-urllib
+    module: urllib.request
+    calls: [urlopen, Request, urlretrieve]
+    effect: makes an outbound HTTP request over the network
+    owner: sre
+  - id: python-aiohttp
+    module: aiohttp
+    calls: [ClientSession, request]
+    effect: makes an outbound HTTP request over the network
+    owner: sre
+  - id: js-fetch
+    languages: [typescript, javascript]
+    calls: [fetch]
+    effect: makes an outbound HTTP request over the network (no timeout unless an AbortSignal is passed)
+    owner: sre
+  - id: js-axios
+    module: axios
+    calls: [get, post, put, patch, delete, request, create, axios]
+    effect: makes an outbound HTTP request over the network
+    owner: sre
+  - id: go-net-http
+    module: net/http
+    languages: [go]
+    calls: [Get, Post, PostForm, Head, NewRequest, NewRequestWithContext, Client]
+    methods: [Do]
+    effect: makes an outbound HTTP request over the network (http.DefaultClient has no timeout)
+    owner: sre
+  - id: jvm-java-net
+    module: java.net
+    calls: [readText, openConnection, openStream, HttpURLConnection]
+    effect: opens a network connection to the URL (blocking, no timeout by default)
+    owner: mobile
+  - id: jvm-java-http-client
+    module: java.net.http
+    calls: [HttpClient]
+    methods: [send, sendAsync]
+    effect: makes an outbound HTTP request over the network (no request timeout unless one is set)
+    owner: platform
+  - id: jvm-okhttp
+    module: okhttp3
+    calls: [OkHttpClient, newCall]
+    methods: [newCall, execute, enqueue]
+    effect: makes an outbound HTTP request over the network
+    owner: platform
+  - id: jvm-spring-web-client
+    module: org.springframework.web
+    calls: [RestTemplate, WebClient, RestClient]
+    effect: makes outbound HTTP requests over the network
+    owner: platform
+
+  - id: csharp-http-client
+    module: System.Net.Http
+    calls: [HttpClient]
+    methods: [GetAsync, PostAsync, PutAsync, DeleteAsync, SendAsync, GetStringAsync]
+    effect: makes an outbound HTTP request over the network (default timeout 100 seconds)
+    owner: platform
+  - id: php-guzzle
+    module: GuzzleHttp
+    calls: [Client]
+    methods: [request, get, post, put, patch, delete, send]
+    effect: makes an outbound HTTP request over the network (no timeout by default)
+    owner: platform
+  - id: rust-reqwest
+    module: reqwest
+    calls: [Client, get]
+    effect: makes an outbound HTTP request over the network (no timeout by default)
+    owner: platform
+  - id: ruby-faraday
+    module: faraday
+    calls: [new, get, post, put, patch, delete]
+    effect: makes an outbound HTTP request over the network
+    owner: platform
+  - id: ruby-net-http
+    module: net/http
+    languages: [ruby]
+    calls: [get, post, start, new, get_response]
+    effect: makes an outbound HTTP request over the network
+    owner: platform
+
+  # ---------------------------------------------------------------- databases
+  - id: go-database-sql
+    module: database/sql
+    calls: [Open]
+    methods: [Query, QueryRow, QueryContext, QueryRowContext, Exec, ExecContext, Begin, BeginTx, Ping]
+    effect: runs a query on a remote database over the network
+    owner: data-platform
+  - id: python-psycopg
+    module: psycopg2
+    calls: [connect]
+    methods: [execute, executemany, commit]
+    effect: connects to or queries a PostgreSQL database over the network
+    owner: data-platform
+  - id: python-psycopg3
+    module: psycopg
+    calls: [connect, AsyncConnection]
+    methods: [execute, executemany]
+    effect: connects to or queries a PostgreSQL database over the network
+    owner: data-platform
+  - id: python-sqlalchemy
+    module: sqlalchemy
+    calls: [create_engine, create_async_engine]
+    methods: [execute, scalars, scalar]
+    effect: connects to or queries a database over the network
+    owner: data-platform
+  - id: python-redis
+    module: redis
+    calls: [Redis, StrictRedis, from_url]
+    effect: connects to a Redis server over the network
+    owner: platform
+
+  # ---------------------------------------------------------------- messaging
+  - id: python-confluent-kafka
+    module: confluent_kafka
+    calls: [Consumer, Producer, DeserializingConsumer, SerializingProducer]
+    methods: [poll, consume, produce, flush, commit]
+    effect: connects to Kafka brokers over the network to consume or produce messages
+    owner: platform
+  - id: js-kafkajs
+    module: kafkajs
+    calls: [Kafka]
+    methods: [consumer, producer, send, run]
+    effect: connects to Kafka brokers over the network to consume or produce messages
+    owner: platform
+  - id: jvm-kafka-clients
+    module: org.apache.kafka.clients
+    calls: [KafkaConsumer, KafkaProducer]
+    methods: [poll, send, commitSync, commitAsync]
+    effect: connects to Kafka brokers over the network to consume or produce messages
+    owner: platform
+
+  # ---------------------------------------------------------------- email, cloud SDKs
+  - id: python-smtplib
+    module: smtplib
+    calls: [SMTP, SMTP_SSL]
+    methods: [sendmail, send_message]
+    effect: sends email through an SMTP server over the network
+    owner: crm
+  - id: python-boto3
+    module: boto3
+    calls: [client, resource, Session]
+    effect: calls AWS APIs over the network
+    owner: sre
+  - id: js-aws-sdk
+    module: "@aws-sdk"
+    methods: [send]
+    calls: [S3Client, SQSClient, DynamoDBClient, SESClient, SNSClient]
+    effect: calls AWS APIs over the network
+    owner: sre
+
+  # ---------------------------------------------------------------- processes, downloads
+  - id: python-subprocess
+    module: subprocess
+    calls: [run, Popen, call, check_call, check_output]
+    effect: runs an external process (a command line built from input can be injected)
+    owner: security
+  - id: node-child-process
+    module: child_process
+    calls: [exec, execSync, spawn, spawnSync, execFile]
+    effect: runs an external process (a command line built from input can be injected)
+    owner: security
+  - id: python-tree-sitter-language-pack
+    module: tree_sitter_language_pack
+    calls: [get_parser, get_language, download, download_all]
+    effect: downloads the grammar over the network the first time a language is used (no timeout set by the caller), then caches it
+    owner: ai-governance
