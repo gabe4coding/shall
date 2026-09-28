@@ -30,7 +30,7 @@ These rules close them at the workflow file level.
 ## Requirements
 
 ### SCALE-0025.1 Pin third-party actions to a commit SHA
-Actions from outside the `lafourchette` organisation MUST be referenced by a full 40-character
+Actions from outside the `example-org` organisation MUST be referenced by a full 40-character
 commit SHA, with the version in a trailing comment.
 
 - Applies when: the content adds or changes a `uses:` line that references an action outside the organisation.
@@ -96,5 +96,5 @@ Jobs on self-hosted runners MUST NOT run for pull requests from forks.
 Actions and reusable workflows owned by the organisation MAY be referenced by a release tag
 instead of a commit SHA.
 
-- Applies when: the content adds or changes a `uses:` line that references an action or reusable workflow in the `lafourchette` organisation.
+- Applies when: the content adds or changes a `uses:` line that references an action or reusable workflow in the `example-org` organisation.
 - Enforcement: agent

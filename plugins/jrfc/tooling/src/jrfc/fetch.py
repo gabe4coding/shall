@@ -1,7 +1,7 @@
 """Resolve `extends:` to a local folder: a path, or a pinned git ref fetched into a cache.
 
     extends:
-      repo: thefork/engineering-standards   # GitHub owner/name (or `url:` for any git remote)
+      repo: your-org/engineering-standards   # GitHub owner/name (or `url:` for any git remote)
       ref: v2026.09                         # tag or commit sha; a branch is cached until `jrfc fetch --update`
 
     extends:
@@ -29,7 +29,7 @@ GIT_TIMEOUT = 120  # seconds per git command (a shallow fetch of the corpus)
 @dataclass
 class Parent:
     root: Path              # folder that holds the parent jrfc.yaml
-    name: str               # label shown in sources, e.g. thefork/engineering-standards@v2026.09
+    name: str               # label shown in sources, e.g. your-org/engineering-standards@v2026.09
     repo: str | None
     ref: str | None
     sha: str | None

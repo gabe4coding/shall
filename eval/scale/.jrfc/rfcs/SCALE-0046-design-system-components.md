@@ -48,7 +48,7 @@ selectors.
 
 ### SCALE-0046.3 Public entry points only
 Design system components MUST be imported from the package entry point
-(`@thefork/design-system`); internal paths such as `@thefork/design-system/dist/...` or
+(`@acme/design-system`); internal paths such as `@acme/design-system/dist/...` or
 `/src/...` MUST NOT be imported.
 
 - Applies when: the content adds an import from a design system package.

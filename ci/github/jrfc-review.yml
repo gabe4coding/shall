@@ -41,8 +41,8 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: actions/checkout@v4
         with:
-          repository: your-org/jrfc          # TODO: the tooling repository (this plugin)
-          ref: v0.1.0
+          repository: gabe4coding/jrfc       # TODO: the jrfc tooling repository (or your fork)
+          ref: main                          # TODO: pin a tag or commit sha
           path: .jrfc-tooling
           token: ${{ secrets.JRFC_GIT_TOKEN || github.token }}
       - uses: astral-sh/setup-uv@v6
@@ -73,8 +73,8 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: actions/checkout@v4
         with:
-          repository: your-org/jrfc          # TODO: the tooling repository (this plugin)
-          ref: v0.1.0
+          repository: gabe4coding/jrfc       # TODO: the jrfc tooling repository (or your fork)
+          ref: main                          # TODO: pin a tag or commit sha
           path: .jrfc-tooling
           token: ${{ secrets.JRFC_GIT_TOKEN || github.token }}
 
