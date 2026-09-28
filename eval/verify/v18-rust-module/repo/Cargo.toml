@@ -1,0 +1,6 @@
+[package]
+name = "booking"
+version = "0.1.0"
+
+[dependencies]
+reqwest = { version = "0.12", features = ["blocking"] }

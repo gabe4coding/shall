@@ -1,0 +1,12 @@
+why: provider.charge uses a session whose request method gets a default timeout in make_session (two hops).
+artifact: jobs/settle.py
+kind: code
+finding:
+  statement_id: JRFC-0006.1
+  quote: provider.charge(booking.id, booking.amount_cents)
+  message: The call to the payment provider does not set an explicit timeout.
+  depends_on: []
+expected:
+  verdict: refuted
+  evidence:
+  - 'payments/http.py: timeout=DEFAULT_TIMEOUT'

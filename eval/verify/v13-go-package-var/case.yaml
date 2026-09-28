@@ -1,0 +1,12 @@
+why: 'Go: cross-file chain through the language''s own import and call syntax.'
+artifact: cmd/sync/main.go
+kind: code
+finding:
+  statement_id: JRFC-0006.1
+  quote: if _, err := partners.Push("https://partner.example/slots", nil); err != nil {
+  message: The call to the partner API does not set an explicit timeout.
+  depends_on: []
+expected:
+  verdict: refuted
+  evidence:
+  - 'internal/httpx/client.go: Timeout: 3 * time.Second'

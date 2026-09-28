@@ -1,0 +1,12 @@
+why: 'C#: cross-file chain through the language''s own import and call syntax.'
+artifact: src/Partners/PartnerSync.cs
+kind: code
+finding:
+  statement_id: JRFC-0006.1
+  quote: _client.PutAsync("/slots", new StringContent(json));
+  message: The request to the partner is sent without an explicit timeout.
+  depends_on: []
+expected:
+  verdict: refuted
+  evidence:
+  - 'src/Http/HttpClients.cs: Timeout = TimeSpan.FromSeconds(3)'

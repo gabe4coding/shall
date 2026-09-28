@@ -1,0 +1,5 @@
+service: settlement
+http:
+  client:
+    retries: 5
+    backoff_seconds: 0.5

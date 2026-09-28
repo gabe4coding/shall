@@ -91,3 +91,103 @@ def render_eval(report: dict) -> str:
         out.append("")
     out.append(f"Jev usage: {report['usage']}")
     return "\n".join(out)
+
+
+# ---------------------------------------------------------------- verification eval
+
+
+async def _verify_case(cfg: Config, corpus: Corpus, jev: Jev, case_dir: Path, model: str | None) -> dict:
+    import shutil
+    import subprocess
+    import tempfile
+    import time
+
+    from .artifact import build_artifact
+    from .verify import verify_findings
+
+    meta = yaml.safe_load((case_dir / "case.yaml").read_text(encoding="utf-8"))
+    with tempfile.TemporaryDirectory(prefix="jrfc-verify-") as tmp:
+        root = Path(tmp) / "repo"
+        shutil.copytree(case_dir / "repo", root)
+        subprocess.run(["git", "init", "-q"], cwd=root, check=True)  # search runs `git grep` like in CI
+        raw = (root / meta["artifact"]).read_text(encoding="utf-8")
+        artifact = build_artifact(meta["artifact"], raw, meta.get("kind", "code"), int(cfg.get("jev.max_chunk_chars")))
+        chunk = artifact.chunks[0]
+        f = meta["finding"]
+        line = next(n for n, t in sorted(chunk.line_text.items()) if f["quote"] in t)
+        rfc, st = corpus.statement(f["statement_id"])
+        finding = {
+            "statement_id": st.id, "rfc": rfc.id, "title": st.title, "level": st.level,
+            "blocking": rfc.statement_blocking(st), "path": meta["artifact"], "line": line,
+            "quote": f["quote"], "message": f["message"], "suggestion": "", "depends_on": f.get("depends_on", []),
+            "chunk": chunk.id, "statement_text": st.text, "source": corpus.source(rfc, st.line),
+        }
+        # expected evidence is "path: text on the evidence line" -> (path, line number)
+        targets = []
+        for spec in meta["expected"].get("evidence", []):
+            path, _, text = spec.partition(": ")
+            lines = (root / path).read_text(encoding="utf-8").splitlines()
+            targets.append((path, next(n for n, t in enumerate(lines, 1) if text in t)))
+        started = time.perf_counter()
+        kept, dropped, stats = await verify_findings(cfg, corpus, artifact, jev, [finding], search_root=root,
+                                                     model=model)
+        seconds = time.perf_counter() - started
+    result = (kept or dropped)[0]["verification"]
+    expected = meta["expected"]
+    ranges = []
+    for shown in result.get("shown", []):
+        path, _, span = shown.rpartition(":")
+        lo, _, hi = span.partition("-")
+        ranges.append((path, int(lo), int(hi)))
+    covered = all(any(p == path and lo <= line <= hi for p, lo, hi in ranges) for path, line in targets)
+    return {
+        "case": case_dir.name, "expected": expected["verdict"], "verdict": result["verdict"],
+        "correct": result["verdict"] == expected["verdict"],
+        "evidence_expected": expected.get("evidence", []),
+        "evidence_shown": covered,
+        "shown": result.get("shown", []), "reason": result["reason"],
+        "cost_usd": stats["cost_usd"], "seconds": round(seconds, 1),
+    }
+
+
+async def run_verify_eval(cfg: Config, corpus: Corpus, jev: Jev, cases_root: Path, models: list[str],
+                          retrievals: list[str]) -> dict:
+    cases = sorted(p for p in cases_root.iterdir() if (p / "case.yaml").is_file())
+    report = {}
+    for retrieval in retrievals:
+        for model in models:
+            cfg.data.setdefault("review", {})["verify_retrieval"] = retrieval
+            rows = []
+            for case in cases:  # sequential: cases share the verifier concurrency and the API budget
+                rows.append(await _verify_case(cfg, corpus, jev, case, model))
+            report[f"{retrieval} / {model}"] = {
+                "accuracy": sum(r["correct"] for r in rows) / len(rows),
+                "evidence_recall": sum(r["evidence_shown"] for r in rows if r["evidence_expected"])
+                / max(1, sum(1 for r in rows if r["evidence_expected"])),
+                "wrong_refutes": sum(1 for r in rows if r["verdict"] == "refuted" and r["expected"] != "refuted"),
+                "cost_usd": round(sum(r["cost_usd"] for r in rows), 4),
+                "seconds": round(sum(r["seconds"] for r in rows), 1),
+                "cases": rows,
+            }
+    report["usage"] = dict(jev.usage)
+    return report
+
+
+def render_verify_eval(report: dict) -> str:
+    out = ["| retrieval / model | accuracy | evidence recall | wrong refutes | cost | time |", "|---|---|---|---|---|---|"]
+    for key, r in report.items():
+        if key == "usage":
+            continue
+        out.append(f"| {key} | {r['accuracy']:.2f} | {r['evidence_recall']:.2f} | {r['wrong_refutes']} | "
+                   f"${r['cost_usd']:.3f} | {r['seconds']:.0f}s |")
+    for key, r in report.items():
+        if key == "usage":
+            continue
+        out += ["", f"### {key}", "", "| case | expected | verdict | evidence shown |", "|---|---|---|---|"]
+        for c in r["cases"]:
+            mark = "" if c["correct"] else " ❌"
+            ev = "-" if not c["evidence_expected"] else ("yes" if c["evidence_shown"] else "**no**")
+            out.append(f"| {c['case']} | {c['expected']} | {c['verdict']}{mark} | {ev} |")
+    out.append("")
+    out.append(f"Jev usage: {report['usage']}")
+    return "\n".join(out)

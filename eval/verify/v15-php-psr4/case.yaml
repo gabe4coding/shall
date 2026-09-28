@@ -1,0 +1,12 @@
+why: 'PHP: cross-file chain through the language''s own import and call syntax.'
+artifact: src/Partners/PartnerSync.php
+kind: code
+finding:
+  statement_id: JRFC-0006.1
+  quote: ClientFactory::partner()->put('/slots', ['json' => $slots]);
+  message: The request to the partner is sent without an explicit timeout.
+  depends_on: []
+expected:
+  verdict: refuted
+  evidence:
+  - 'src/Http/ClientFactory.php: ''timeout'' => 2.0'

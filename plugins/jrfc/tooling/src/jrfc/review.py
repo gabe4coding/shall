@@ -107,10 +107,10 @@ def write_bundle(corpus: Corpus, artifact: Artifact, selection: dict, out: Path)
 
 
 async def run_claude(cfg: Config, prompt: str, system: str, schema: dict,
-                     sem: asyncio.Semaphore) -> tuple[dict | None, dict]:
+                     sem: asyncio.Semaphore, model: str | None = None) -> tuple[dict | None, dict]:
     """One tool-less Claude call with a JSON schema (JTOOL-0002.1). Returns (output, meta)."""
     cmd = list(cfg.get("review.command")) + [
-        "--model", cfg.get("review.model"),
+        "--model", model or cfg.get("review.model"),
         "--output-format", "json",
         "--json-schema", json.dumps(schema),
         "--system-prompt", system,

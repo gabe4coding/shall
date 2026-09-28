@@ -1,0 +1,13 @@
+why: getJson<T>() is generic with a multi-line signature; it uses this.http, created with a timeout in
+  the constructor 15 lines above.
+artifact: src/reviews/widget.ts
+kind: code
+finding:
+  statement_id: JRFC-0006.1
+  quote: return this.api.getJson<Review[]>(`/restaurants/${restaurantId}/reviews`);
+  message: The call to the reviews API does not set an explicit timeout.
+  depends_on: []
+expected:
+  verdict: refuted
+  evidence:
+  - 'src/reviews/api.ts: timeout: 2000'

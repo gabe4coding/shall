@@ -1,0 +1,12 @@
+why: 'Ruby: cross-file chain through the language''s own import and call syntax.'
+artifact: lib/partners/sync.rb
+kind: code
+finding:
+  statement_id: JRFC-0006.1
+  quote: connection.put("/slots", slots.to_json)
+  message: The request to the partner is sent without an explicit timeout.
+  depends_on: []
+expected:
+  verdict: refuted
+  evidence:
+  - 'lib/http/client.rb: f.options.timeout = 3'

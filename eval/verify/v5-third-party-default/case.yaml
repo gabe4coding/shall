@@ -1,0 +1,13 @@
+why: The retry policy comes from a third-party decorator whose defaults are not in the repo; the repo's
+  own utils.retry is a decoy.
+artifact: jobs/sync.py
+kind: code
+finding:
+  statement_id: JRFC-0006.2
+  quote: '@retry()'
+  message: The retries use the library's default policy, with no visible bound on attempts, backoff or
+    jitter.
+  depends_on: []
+expected:
+  verdict: unknown
+  evidence: []

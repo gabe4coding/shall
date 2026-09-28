@@ -1,0 +1,13 @@
+why: 'The timeout is set two calls away: gateway.hold -> request -> AbortSignal.timeout. No name in the
+  quote appears in the file with the timeout.'
+artifact: src/bookings/confirm.ts
+kind: code
+finding:
+  statement_id: JRFC-0006.1
+  quote: 'const hold = await gateway.hold({ bookingId: b.id, amount: 20 });'
+  message: The outbound call to the payment gateway does not set an explicit timeout.
+  depends_on: []
+expected:
+  verdict: refuted
+  evidence:
+  - 'src/http/client.ts: AbortSignal.timeout'

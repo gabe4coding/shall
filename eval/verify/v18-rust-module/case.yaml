@@ -1,0 +1,12 @@
+why: 'Rust: cross-file chain through the language''s own import and call syntax.'
+artifact: src/partners/sync.rs
+kind: code
+finding:
+  statement_id: JRFC-0006.1
+  quote: client::partner().put("https://partner.example/slots").body(slots.to_owned()).send()?;
+  message: The request to the partner is sent without an explicit timeout.
+  depends_on: []
+expected:
+  verdict: refuted
+  evidence:
+  - 'src/http/client.rs: .timeout(Duration::from_secs(3))'

@@ -1,0 +1,14 @@
+why: The retries value is read with nested dict access and wrapped in a Retry with backoff, jitter and
+  idempotent methods only.
+artifact: config/app.yaml
+kind: code
+finding:
+  statement_id: JRFC-0006.2
+  quote: 'retries: 5'
+  message: Retries are configured without exponential backoff with jitter and without limiting them to
+    idempotent operations.
+  depends_on: []
+expected:
+  verdict: refuted
+  evidence:
+  - 'src/http_client.py: backoff_jitter'

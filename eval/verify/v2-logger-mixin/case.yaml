@@ -1,0 +1,13 @@
+why: The correlation id is added to every record by the logger's mixin, fed by a request-context middleware.
+artifact: src/bookings/cancel.ts
+kind: code
+finding:
+  statement_id: JRFC-0003.3
+  quote: logger.info({ bookingId }, "booking.cancelled");
+  message: The log record written while handling the cancellation does not include the correlation id
+    of the request.
+  depends_on: []
+expected:
+  verdict: refuted
+  evidence:
+  - 'src/observability/logger.ts: mixin:'

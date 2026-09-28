@@ -1,0 +1,11 @@
+why: The query helper supports bound parameters, but the caller interpolates the value into the SQL string.
+artifact: src/reports/search.ts
+kind: code
+finding:
+  statement_id: JRFC-0005.1
+  quote: return query(`SELECT * FROM restaurants WHERE name = '${name}'`);
+  message: The SQL query interpolates `name` into the query string instead of passing it as a bound parameter.
+  depends_on: []
+expected:
+  verdict: confirmed
+  evidence: []

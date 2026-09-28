@@ -81,6 +81,8 @@ with `uv`.
 | `jrfc conflicts FILE` | Jev | duplicate / weakens / conflict / overlap of a draft against the corpus |
 | `jrfc conflicts --local` | Jev | every local rule against every org rule; fails on duplicate / weakens / conflict |
 | `jrfc eval` | Jev | recall/precision per case, strategy comparison, threshold sweep |
+| `jrfc eval-verify [--retrieval keyword\|treesitter\|all] [--models …]` | Jev + Claude | verification verdicts and evidence reach on `eval/verify` fixture repos |
+| `jrfc prefetch` | download | tree-sitter grammars for the repository's languages (cache them in CI) |
 
 ## Verification: a finding blocks only if its evidence was seen
 
@@ -95,9 +97,18 @@ Instead, after validation:
    the reviewer filled `depends_on`. Not trusting the reviewer to flag its own blind spot is
    the point: the false positive that motivated this came from a reviewer that ignored
    "don't assume unseen code is wrong".
-2. **Code gathers evidence**: search terms are the YAML key path of the line
-   (`review.command`), `depends_on`, the statement's code spans (`--tools`) and identifiers
-   of the quote; `git grep` in the repo; code before docs; the standards' own text excluded.
+2. **Code gathers evidence** with a language-generic code graph (`codegraph.py`): from the
+   calls on the flagged line it follows definitions → calls, base classes, decorators and
+   imports inside them, up to 3 hops. It uses tree-sitter grammars and their standard *tags*
+   queries (plus a small table of query parents, e.g. TypeScript → JavaScript), generic tree
+   rules for what tags miss (`this.x =` / `self.x =` / `@x =` / `$this->x =` members,
+   top-level constants, nested declarators, base-class nodes), and import resolution by path
+   suffix; a package listed in a dependency manifest is external and never matched to
+   same-named local code. Files are parsed lazily (`git grep` first), hops resolved only by
+   name are marked "(by name)". Keyword search (YAML key path, `depends_on`, statement code
+   spans, quote identifiers; code before docs) runs alongside and covers files without a
+   grammar (YAML, SQL, Terraform, Dockerfile). Grammars download on first use; CI runs
+   `jrfc prefetch` and caches them.
 3. **Jev keeps the relevant excerpts** (one Noul per excerpt, small state).
 4. **The `jrfc-verifier` agent** (tool-less, its own prompt) answers confirmed / refuted /
    unknown and cites excerpt ids.
@@ -105,14 +116,30 @@ Instead, after validation:
    evidence exists; unknown → advisory ("the evidence it depends on was not seen");
    confirmed → unchanged. Rules: JTOOL-0002.5 and JTOOL-0002.6.
 
-Regression (2026-09-28): the two false positives of the self-review are handled — "claude runs
-with tools" is **refuted** with `review.py:99-116` (where `--tools ""` is appended), "Jev has
-no timeout" is **refuted** with `jev.py:39-67`, and "no retry jitter" (an SDK default outside
-the repo) is **unknown → advisory**. On true positives with no repository evidence available,
-case 01 keeps 10 of 11 blocking findings confirmed (the 11th, "correlation id", becomes
-advisory because a logger middleware could add it) and case 08's SQL injection is confirmed.
-Cost: one verifier call per verified finding (case 01: +$0.12). Retrieval is keyword-based;
-a code index would find wrappers that share no identifier with the quote.
+Measured on `eval/verify` (19 fixture repos, `jrfc eval-verify`): the same finding goes to
+the verifier with different retrieval, so reviewer variance plays no part. Cases include
+two-hop wrappers, decorators, base classes, generic multi-line methods, a third-party default,
+and decoys (an unused wrapper with a timeout, two classes with the same `send()`), in Python,
+TypeScript, Java, Go, Kotlin, PHP, Ruby, C#, Rust and YAML.
+
+| retrieval / verifier | verdict accuracy | evidence reached | wrong refutes |
+| --- | --- | --- | --- |
+| keyword / claude-sonnet-5 | 0.63 | 0.50 | 0 |
+| **tree-sitter graph + keyword / claude-sonnet-5** | **1.00** | **1.00** | 0 |
+| tree-sitter graph + keyword / claude-haiku-4-5 | 1.00 | 1.00 | 0 |
+
+Verifier model: Haiku matched Sonnet on every case but cost the same per finding through
+`claude -p` ($0.0147 vs $0.0145) and was 2.7× slower (26 s vs 10 s on average), so Sonnet stays
+the default; `review.verify_model` switches it. A cheaper verifier needs the API directly
+(prompt caching, no CLI overhead), not a smaller model through the CLI.
+
+Every keyword miss ended as `unknown` (advisory), never as a wrong refute — the safe failure.
+Earlier, on the self-review, the two real false positives were refuted with the right
+evidence (`review.py:99-116`, `jev.py:39-67`), and case 01 kept 10/11 blocking findings
+confirmed with no repository evidence available. Limits: resolution is by imports and names,
+not types (a language server or SCIP index would resolve `this.partner.notify` by type); the
+fixtures are small repositories; Jev's excerpt filtering did not trigger on them (≤ 6
+candidates each).
 
 ## Corpus layers
 
