@@ -278,10 +278,11 @@ def repo_index(cfg: Config, corpus: Corpus, root: Path) -> RepoIndex:
 
 async def verify_findings(cfg: Config, corpus: Corpus, artifact: Artifact, jev: Jev, findings: list[dict],
                           search_root: Path | None = None, agent=None, model: str | None = None,
-                          index: RepoIndex | None = None) -> tuple[list[dict], list[dict], dict]:
+                          index: RepoIndex | None = None,
+                          cache=None) -> tuple[list[dict], list[dict], dict]:
     model = model or cfg.get("review.verify_model") or None
     agent = agent or (lambda prompt, sem: run_claude(cfg, prompt, agent_prompt("jrfc-verifier"),
-                                                     VERDICT_SCHEMA, sem, model=model))
+                                                     VERDICT_SCHEMA, sem, model=model, cache=cache))
     root = index.root if index is not None else repo_root(search_root)
     excluded = excluded_paths(corpus, root)
     retrieval = cfg.get("review.verify_retrieval") or "treesitter"
@@ -290,7 +291,8 @@ async def verify_findings(cfg: Config, corpus: Corpus, artifact: Artifact, jev: 
     elif index is None:
         index = repo_index(cfg, corpus, root)
     sem = asyncio.Semaphore(int(cfg.get("review.concurrency")))
-    stats = {"verified": 0, "confirmed": 0, "refuted": 0, "unknown": 0, "agent_calls": 0, "cost_usd": 0.0}
+    stats = {"verified": 0, "confirmed": 0, "refuted": 0, "unknown": 0, "agent_calls": 0, "reused": 0,
+             "cost_usd": 0.0}
 
     async def one(f: dict):
         if not needs_verification(f):
@@ -322,7 +324,7 @@ async def verify_findings(cfg: Config, corpus: Corpus, artifact: Artifact, jev: 
             scored = sorted(zip(excerpts, answers), key=lambda t: -t[1]["relevant"]["p"])
             excerpts = [e for e, a in scored if a["relevant"]["p"] >= SELECT_THRESHOLD][:KEEP_EXCERPTS]
         verdict, meta = await agent(verifier_prompt(f, chunk_context(artifact, f), excerpts, notes), sem)
-        stats["agent_calls"] += 1
+        stats["reused" if meta.get("cached") else "agent_calls"] += 1
         stats["cost_usd"] = round(stats["cost_usd"] + meta.get("cost_usd", 0.0), 6)
         return apply_verdict(f, verdict, excerpts)
 

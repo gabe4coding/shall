@@ -50,6 +50,7 @@ def build_health(cfg: Config, selection: dict, stats: dict, findings: list[dict]
         },
         "review": {
             "agent_calls": stats.get("agent_calls", 0),
+            "reused": stats.get("reused", 0) + int(v.get("reused", 0)),   # incremental re-review
             "agent_errors": len(stats.get("errors", [])),
             "findings": len(findings),
             "blocking": sum(1 for f in findings if f["blocking"]),
@@ -85,6 +86,7 @@ def render_health(health: dict) -> list[str]:
     near = s["near_threshold"]
     line = (f"Health: {s['eligible']} statement(s) checked, {s['selected']} selected, {s['facts']} known effect(s)"
             + (f", {len(near)} just below the threshold ({', '.join(n['id'] for n in near[:3])})" if near else "")
+            + (f", {health['review']['reused']} answer(s) reused from earlier runs" if health["review"].get("reused") else "")
             + (f" · verification {v['confirmed']} confirmed / {v['refuted']} refuted / {v['unknown']} unknown"
                if v["verified"] else ""))
     if not health["warnings"]:

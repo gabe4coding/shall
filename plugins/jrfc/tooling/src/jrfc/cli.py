@@ -339,11 +339,13 @@ def cmd_validate(args, cfg) -> int:
 
 def cmd_review(args, cfg) -> int:
     from .jev import Jev
-    from .review import run_agents, validate_findings
+    from .review import answer_cache, run_agents, validate_findings
     from .verify import verify_findings
     corpus = load_corpus(cfg)
     out_dir = Path(args.out_dir)
     verify = cfg.get("review.verify") and not args.no_verify
+    # incremental re-review: unchanged chunks and unchanged evidence reuse earlier answers
+    cache = answer_cache(cfg, enabled=not args.no_cache)
 
     async def run():
         async with Jev(cfg, use_cache=not args.no_cache) as jev:
@@ -353,19 +355,23 @@ def cmd_review(args, cfg) -> int:
             print(_selection_summary(selection), file=sys.stderr)
             if args.dry_run:
                 return artifact, selection, [], [], {"agent_calls": 0}
-            raw, stats = await run_agents(cfg, corpus, artifact, selection, out_dir / "prompts")
+            raw, stats = await run_agents(cfg, corpus, artifact, selection, out_dir / "prompts", cache)
             _dump({"findings": raw, "stats": stats}, str(out_dir / "findings.raw.json"))
             findings, dropped = validate_findings(corpus, artifact, selection, raw,
                                                   int(cfg.get("review.max_comments")))
             if verify and findings:
-                findings, refuted, vstats = await verify_findings(cfg, corpus, artifact, jev, findings, index=index)
+                findings, refuted, vstats = await verify_findings(cfg, corpus, artifact, jev, findings,
+                                                                  index=index, cache=cache)
                 dropped += refuted
                 stats["verification"] = vstats
                 stats["cost_usd"] = round(stats["cost_usd"] + vstats["cost_usd"], 6)
             stats["codegraph_events"] = list(index.events)
             return artifact, selection, findings, dropped, stats
 
-    artifact, selection, findings, dropped, stats = asyncio.run(run())
+    try:
+        artifact, selection, findings, dropped, stats = asyncio.run(run())
+    finally:
+        cache.save()  # also after a failure: answers already paid for are kept
     if args.dry_run:
         from .review import write_bundle
         print(write_bundle(corpus, artifact, selection, out_dir / "bundle.md"))
@@ -380,7 +386,9 @@ def cmd_review(args, cfg) -> int:
     v = stats.get("verification")
     vtext = (f", verified {v['verified']} ({v['confirmed']} confirmed, {v['refuted']} refuted, "
              f"{v['unknown']} unknown)") if v else ""
-    print(f"jrfc review: {stats['agent_calls']} review call(s){vtext}, ${stats.get('cost_usd', 0):.4f}, "
+    reused = stats.get("reused", 0) + (v or {}).get("reused", 0)
+    rtext = f", {reused} answer(s) reused from earlier runs" if reused else ""
+    print(f"jrfc review: {stats['agent_calls']} review call(s){vtext}{rtext}, ${stats.get('cost_usd', 0):.4f}, "
           f"outputs in {out_dir}", file=sys.stderr)
     if stats.get("errors"):
         return EXIT_ERROR

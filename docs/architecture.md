@@ -101,6 +101,22 @@ Limits: resolution is by imports and names, not types (a language server or SCIP
 would resolve `this.partner.notify` by type); dependency injection, reflection and clients
 configured in YAML or environment variables are invisible to the graph.
 
+## Incremental re-review
+
+Every agent call goes through `run_claude`, which can reuse an earlier answer keyed by
+`hash(model, system prompt, schema, prompt)` (`AnswerCache`, `.jrfc-cache/review.json`):
+
+- a review prompt contains the chunk's diff, its selected statements and its known effects,
+  so a file is reviewed again exactly when one of those changed;
+- a verification prompt contains the finding and the evidence excerpts, so a finding is
+  re-checked when the code it depends on changed, even in another file;
+- only successful answers are stored; entries unused for 30 days are dropped; the file is
+  saved even when the run fails, so answers already paid for are kept.
+
+Trade-off: an answer is stable until its input changes, so a wrong finding on an unchanged
+file does not disappear by chance on the next push (it also cannot flap). `--no-cache`
+forces fresh calls. The PR workflow restores the cache per pull request.
+
 ## Run health
 
 A missed rule, a file that could not be parsed, or evidence that was not found all look the

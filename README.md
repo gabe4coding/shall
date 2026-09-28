@@ -179,9 +179,27 @@ Other CI systems: run `plugins/jrfc/bin/jrfc-pr-review --base origin/main --post
 --fail-on-blocking` from the repository root (see the header of that script). Posting uses
 `gh`; add `--dry-run` to see what would be posted without writing.
 
-Re-running on every push is safe: comments are keyed by rule and line content, so the same
-finding is not posted twice, a fixed line resolves its thread, and threads a person resolved
-stay resolved.
+Re-running on every push is safe and cheap:
+
+- comments are keyed by rule and line content, so the same finding is not posted twice, a
+  fixed line resolves its thread, and threads a person resolved stay resolved;
+- only files whose diff, applicable rules or known effects changed are reviewed again, and a
+  blocking finding is only re-checked when its evidence changed. Earlier answers are kept in
+  `.jrfc-cache/review.json`, which the workflow caches per pull request. A push that changes
+  one file of a two-file PR cost $0.15 instead of $0.39; re-running an unchanged push cost $0.
+
+### What it costs
+
+Estimated per review run, from measured unit costs (Claude review ≈ $0.01–0.08 per changed
+file where a rule applies, verification ≈ $0.015 per blocking finding, Jev < $0.003 per file):
+
+| Pull request | Files reviewed | First run | Later pushes |
+| --- | --- | --- | --- |
+| small | 1–3 | ~$0.05–0.15 | only the files that changed |
+| medium | 5–10 | ~$0.30–0.60 | only the files that changed |
+| big | 20–40 | ~$1.20–2.50 | only the files that changed |
+
+Files with no applicable rule (styles, typos in docs) are not sent to Claude.
 
 ## Write and maintain standards
 
@@ -293,6 +311,7 @@ Settings live in `jrfc.yaml` (organisation) and can be overridden in `.jrfc/jrfc
 | `selection.facts` | `true` | add known effects to Jev's input and the review |
 | `review.model` | `claude-sonnet-5` | reviewer and verifier model |
 | `review.verify` | `true` | verify blocking findings against the repository before they block |
+| `review.cache` | `true` | reuse Claude's answer when its input is identical (incremental re-review); `--no-cache` forces new calls |
 | `review.max_comments` | `25` | cap on comments per review |
 | `conflicts.fail_threshold` | `0.75` | `conflicts --local` fails at or above this |
 | `codegraph.download_grammars` | `true` | `false`: never download parser grammars during a run (run `jrfc prefetch` first) |

@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import re
+import time
 from pathlib import Path
 
 from .artifact import Artifact, Chunk
@@ -109,11 +110,79 @@ def write_bundle(corpus: Corpus, artifact: Artifact, selection: dict, out: Path)
     return out
 
 
+class AnswerCache:
+    """Agent answers keyed by exactly what the agent was given (model, system prompt, schema,
+    prompt). A re-run on a new push reuses the answer for every chunk whose prompt did not
+    change (same diff, same selected statements, same known effects), and for every
+    verification whose evidence did not change. Only successful answers are stored; entries
+    unused for `MAX_AGE_DAYS` are dropped on save. Merge-safe like the Jev cache."""
+
+    MAX_AGE_DAYS = 30
+
+    def __init__(self, path: Path | None):
+        self.path = path
+        self.entries: dict = {}
+        self.reused = 0
+        if path is not None and path.is_file():
+            try:
+                self.entries = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                self.entries = {}
+
+    @staticmethod
+    def key(model: str, system: str, schema: dict, prompt: str) -> str:
+        payload = json.dumps({"m": model, "s": system, "j": schema, "p": prompt}, sort_keys=True)
+        return hashlib.sha256(payload.encode()).hexdigest()
+
+    def get(self, key: str) -> dict | None:
+        entry = self.entries.get(key)
+        if entry is None:
+            return None
+        entry["used"] = time.time()
+        self.reused += 1
+        return entry["output"]
+
+    def put(self, key: str, output: dict) -> None:
+        self.entries[key] = {"output": output, "used": time.time()}
+
+    def save(self) -> None:
+        if self.path is None:
+            return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        merged: dict = {}
+        if self.path.is_file():
+            try:
+                merged = json.loads(self.path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                merged = {}
+        merged.update(self.entries)
+        cutoff = time.time() - self.MAX_AGE_DAYS * 86400
+        merged = {k: v for k, v in merged.items() if v.get("used", 0) >= cutoff}
+        tmp = self.path.with_suffix(f".{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(merged, sort_keys=True), encoding="utf-8")
+        os.replace(tmp, self.path)
+
+
+def answer_cache(cfg: Config, enabled: bool = True) -> AnswerCache:
+    """The review answer cache next to the Jev cache (`review.cache: false` disables it)."""
+    if not enabled or not cfg.get("review.cache", True):
+        return AnswerCache(None)
+    return AnswerCache(cfg.cache_file.parent / "review.json")
+
+
 async def run_claude(cfg: Config, prompt: str, system: str, schema: dict,
-                     sem: asyncio.Semaphore, model: str | None = None) -> tuple[dict | None, dict]:
-    """One tool-less Claude call with a JSON schema (JTOOL-0002.1). Returns (output, meta)."""
+                     sem: asyncio.Semaphore, model: str | None = None,
+                     cache: AnswerCache | None = None) -> tuple[dict | None, dict]:
+    """One tool-less Claude call with a JSON schema (JTOOL-0002.1). Returns (output, meta).
+    With `cache`, an identical earlier call is reused (meta has `cached: True`, no cost)."""
+    model = model or cfg.get("review.model")
+    key = AnswerCache.key(model, system, schema, prompt) if cache is not None else None
+    if key is not None:
+        hit = cache.get(key)
+        if hit is not None:
+            return hit, {"cost_usd": 0.0, "cached": True}
     cmd = list(cfg.get("review.command")) + [
-        "--model", model or cfg.get("review.model"),
+        "--model", model,
         "--output-format", "json",
         "--json-schema", json.dumps(schema),
         "--system-prompt", system,
@@ -140,16 +209,19 @@ async def run_claude(cfg: Config, prompt: str, system: str, schema: dict,
     if result is None:  # fall back to parsing the text result
         m = re.search(r"\{.*\}", data.get("result", ""), re.S)
         result = json.loads(m.group(0)) if m else None
+    if key is not None and result is not None:
+        cache.put(key, result)
     return result, {"cost_usd": data.get("total_cost_usd", 0.0)}
 
 
-async def _run_agent(cfg: Config, prompt: str, sem: asyncio.Semaphore) -> tuple[list[dict], dict]:
-    result, meta = await run_claude(cfg, prompt, reviewer_prompt(), FINDINGS_SCHEMA, sem)
+async def _run_agent(cfg: Config, prompt: str, sem: asyncio.Semaphore,
+                     cache: AnswerCache | None = None) -> tuple[list[dict], dict]:
+    result, meta = await run_claude(cfg, prompt, reviewer_prompt(), FINDINGS_SCHEMA, sem, cache=cache)
     return (result or {}).get("findings", []), meta
 
 
 async def run_agents(cfg: Config, corpus: Corpus, artifact: Artifact, selection: dict,
-                     prompts_dir: Path | None = None) -> tuple[list[dict], dict]:
+                     prompts_dir: Path | None = None, cache: AnswerCache | None = None) -> tuple[list[dict], dict]:
     chunks = {c.id: c for c in artifact.chunks}
     sem = asyncio.Semaphore(int(cfg.get("review.concurrency")))
     jobs = []
@@ -160,10 +232,11 @@ async def run_agents(cfg: Config, corpus: Corpus, artifact: Artifact, selection:
         if prompts_dir:
             prompts_dir.mkdir(parents=True, exist_ok=True)
             (prompts_dir / f"{c['id']}.md").write_text(prompt, encoding="utf-8")
-        jobs.append((c["id"], _run_agent(cfg, prompt, sem)))
+        jobs.append((c["id"], _run_agent(cfg, prompt, sem, cache)))
     results = await asyncio.gather(*(job for _, job in jobs))
-    raw, stats = [], {"agent_calls": len(jobs), "cost_usd": 0.0, "errors": []}
+    raw, stats = [], {"agent_calls": 0, "reused": 0, "cost_usd": 0.0, "errors": []}
     for (cid, _), (findings, meta) in zip(jobs, results):
+        stats["reused" if meta.get("cached") else "agent_calls"] += 1
         for f in findings:
             raw.append({"chunk": cid, **f})
         if "error" in meta:
