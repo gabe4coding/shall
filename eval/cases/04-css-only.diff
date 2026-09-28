@@ -1,0 +1,19 @@
+diff --git a/web/src/components/SlotPicker.module.css b/web/src/components/SlotPicker.module.css
+index 1a2b3c4..5d6e7f8 100644
+--- a/web/src/components/SlotPicker.module.css
++++ b/web/src/components/SlotPicker.module.css
+@@ -4,9 +4,12 @@
+ .slot {
+   display: inline-flex;
+-  padding: 4px 8px;
+-  border-radius: 4px;
++  padding: 6px 12px;
++  border-radius: 999px;
++  font-variant-numeric: tabular-nums;
+ }
+ 
+ .slot--selected {
+-  background: #2e7d32;
++  background: var(--color-brand-primary);
++  color: var(--color-on-brand);
+ }

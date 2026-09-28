@@ -1,0 +1,1444 @@
+{
+  "corpus_hash": "73800c4f93bc87e7",
+  "counts": {
+    "domains": 10,
+    "rfcs": 11,
+    "statements": 44
+  },
+  "domains": [
+    {
+      "applies_when": "The content adds, changes or describes an HTTP endpoint, route, controller, request or response payload, or an API contract (OpenAPI).",
+      "description": "Design of HTTP/REST endpoints exposed by services, including paths, methods, status codes, errors, pagination and versioning.",
+      "id": "api",
+      "layer": "local",
+      "not_applies_when": "No HTTP interface is added, changed or described.",
+      "owner": "platform",
+      "rfcs": [
+        "JRFC-0002"
+      ],
+      "title": "HTTP API design"
+    },
+    {
+      "applies_when": "The content adds or changes a database migration, a schema definition, DDL (CREATE/ALTER/DROP) or an ORM model mapped to a table.",
+      "description": "Changes to relational database schemas and the migrations that apply them.",
+      "id": "data",
+      "layer": "local",
+      "not_applies_when": "No database schema or migration is added, changed or described.",
+      "owner": "data-platform",
+      "rfcs": [
+        "JRFC-0008"
+      ],
+      "title": "Database schema and migrations"
+    },
+    {
+      "applies_when": "The content adds, reads, changes or removes a feature flag, or changes user-visible behavior of a production service.",
+      "description": "How risky behavior changes are rolled out, including feature flags, flag ownership and cleanup.",
+      "id": "delivery",
+      "layer": "local",
+      "not_applies_when": "No feature flag is involved and no user-visible production behavior changes.",
+      "owner": "platform",
+      "rfcs": [
+        "JRFC-0010"
+      ],
+      "title": "Safe delivery and feature flags"
+    },
+    {
+      "applies_when": "The content is an engineering standard, an RFC, or a change to the standards corpus.",
+      "description": "How engineering standards (jrfc RFCs) are written, reviewed and maintained.",
+      "id": "governance",
+      "layer": "local",
+      "not_applies_when": "Application code, product specs or docs that are not engineering standards.",
+      "owner": "ai-governance",
+      "rfcs": [
+        "JRFC-0001"
+      ],
+      "title": "Standards governance"
+    },
+    {
+      "applies_when": "The content writes or configures logs, log messages, error messages, metrics, traces or telemetry.",
+      "description": "How services write logs, metrics and traces, and what data may appear in them.",
+      "id": "observability",
+      "layer": "local",
+      "not_applies_when": "No logging, metrics, tracing or telemetry is written or configured.",
+      "owner": "sre",
+      "rfcs": [
+        "JRFC-0003"
+      ],
+      "title": "Logging and observability"
+    },
+    {
+      "applies_when": "The content is or changes Python source code (.py files).",
+      "description": "Conventions for Python source code in services, jobs and tools.",
+      "id": "python",
+      "layer": "local",
+      "not_applies_when": "The content is not Python source code.",
+      "owner": "data-platform",
+      "rfcs": [
+        "JRFC-0011"
+      ],
+      "title": "Python code"
+    },
+    {
+      "applies_when": "The content makes or configures an outbound network call (HTTP client, RPC, message broker, third-party SDK) or describes such a dependency.",
+      "description": "Timeouts, retries, backoff and failure handling for network calls to other services, databases or third parties.",
+      "id": "reliability",
+      "layer": "local",
+      "not_applies_when": "No outbound network call is made, configured or described.",
+      "owner": "sre",
+      "rfcs": [
+        "JRFC-0006"
+      ],
+      "title": "Reliability of service-to-service calls"
+    },
+    {
+      "applies_when": "The content handles credentials, tokens, keys, user input, database queries, shell commands, authentication or authorization.",
+      "description": "Handling of secrets, credentials, untrusted input, queries and authentication in application code and designs.",
+      "id": "security",
+      "layer": "local",
+      "not_applies_when": "The content is pure styling, copy text or documentation with no code that handles input, data or credentials.",
+      "owner": "security",
+      "rfcs": [
+        "JRFC-0004",
+        "JRFC-0005"
+      ],
+      "title": "Application security"
+    },
+    {
+      "applies_when": "The content is a technical design document or spec that proposes how to build or change a system.",
+      "description": "The structure and completeness of technical design documents (specs, design docs, RFCs for systems) written before building.",
+      "id": "specs",
+      "layer": "local",
+      "not_applies_when": "The content is code, a diff, an incident report, or a doc that does not propose a system design.",
+      "owner": "architecture",
+      "rfcs": [
+        "JRFC-0009"
+      ],
+      "title": "Technical design specs"
+    },
+    {
+      "applies_when": "The content is or changes TypeScript source code (.ts or .tsx files).",
+      "description": "Conventions for TypeScript source code in services and frontends.",
+      "id": "typescript",
+      "layer": "local",
+      "not_applies_when": "The content is not TypeScript source code.",
+      "owner": "frontend",
+      "rfcs": [
+        "JRFC-0007"
+      ],
+      "title": "TypeScript code"
+    }
+  ],
+  "extends": [],
+  "rfcs": [
+    {
+      "applies_when": "The content is a jrfc RFC file (front matter with an id like JRFC-0000) or a change to one.",
+      "artifacts": [
+        "doc",
+        "diff"
+      ],
+      "domain": "governance",
+      "id": "JRFC-0001",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "not_applies_when": "Any content that is not a jrfc RFC file.",
+      "owner": "ai-governance",
+      "path": "corpus/rfcs/JRFC-0001-rfc-format.md",
+      "retired": [],
+      "review_by": "2027-06-30",
+      "statements": [
+        "JRFC-0001.1",
+        "JRFC-0001.2",
+        "JRFC-0001.3",
+        "JRFC-0001.4",
+        "JRFC-0001.5"
+      ],
+      "status": "enforced",
+      "summary": "How a jrfc standard is structured so humans can read it and agents can select and enforce single statements from it.",
+      "superseded_by": null,
+      "supersedes": [],
+      "title": "Format and lifecycle of jrfc standards"
+    },
+    {
+      "applies_when": "The content adds, changes or describes an HTTP endpoint, route, controller, handler, request/response payload or OpenAPI contract.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "domain": "api",
+      "id": "JRFC-0002",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "not_applies_when": "No HTTP endpoint or API contract is added, changed or described.",
+      "owner": "platform",
+      "path": "corpus/rfcs/JRFC-0002-http-api-design.md",
+      "retired": [],
+      "review_by": "2027-03-31",
+      "statements": [
+        "JRFC-0002.1",
+        "JRFC-0002.2",
+        "JRFC-0002.3",
+        "JRFC-0002.4",
+        "JRFC-0002.5",
+        "JRFC-0002.6"
+      ],
+      "status": "enforced",
+      "summary": "Conventions for HTTP endpoints: resource paths, methods, errors, pagination, idempotency and versioning.",
+      "superseded_by": null,
+      "supersedes": [],
+      "title": "HTTP API design"
+    },
+    {
+      "applies_when": "The content writes log lines, error messages, traces or metric attributes, or configures a logger.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "domain": "observability",
+      "id": "JRFC-0003",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "not_applies_when": "No logging, tracing, metrics or telemetry is written or configured.",
+      "owner": "sre",
+      "path": "corpus/rfcs/JRFC-0003-logging-personal-data.md",
+      "retired": [],
+      "review_by": "2027-03-31",
+      "statements": [
+        "JRFC-0003.1",
+        "JRFC-0003.2",
+        "JRFC-0003.3",
+        "JRFC-0003.4"
+      ],
+      "status": "enforced",
+      "summary": "How services write logs so that they are searchable, correlated and free of personal data.",
+      "superseded_by": null,
+      "supersedes": [],
+      "title": "Logging and personal data"
+    },
+    {
+      "applies_when": "The content uses, stores, passes or describes a password, API key, token, private key, connection string or other credential.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "domain": "security",
+      "id": "JRFC-0004",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "not_applies_when": "No credential of any kind is used, stored, passed or described.",
+      "owner": "security",
+      "path": "corpus/rfcs/JRFC-0004-secrets.md",
+      "retired": [],
+      "review_by": "2027-01-31",
+      "statements": [
+        "JRFC-0004.1",
+        "JRFC-0004.2",
+        "JRFC-0004.3",
+        "JRFC-0004.4"
+      ],
+      "status": "enforced",
+      "summary": "Where credentials, tokens and keys live and how code obtains and handles them.",
+      "superseded_by": null,
+      "supersedes": [],
+      "title": "Secrets management"
+    },
+    {
+      "applies_when": "The content reads request parameters, bodies, headers, files or messages, or builds a database query, shell command, template or HTML from data.",
+      "artifacts": [
+        "diff",
+        "code"
+      ],
+      "domain": "security",
+      "id": "JRFC-0005",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "not_applies_when": "The content does not read external input and does not build queries, commands or markup.",
+      "owner": "security",
+      "path": "corpus/rfcs/JRFC-0005-untrusted-input.md",
+      "retired": [],
+      "review_by": "2027-01-31",
+      "statements": [
+        "JRFC-0005.1",
+        "JRFC-0005.2",
+        "JRFC-0005.3"
+      ],
+      "status": "enforced",
+      "summary": "How code treats data that comes from users, clients or other systems, to prevent injection flaws (OWASP A03).",
+      "superseded_by": null,
+      "supersedes": [],
+      "title": "Untrusted input and injection"
+    },
+    {
+      "applies_when": "The content makes, configures or describes an outbound network call: HTTP client, RPC, database driver, message broker or third-party SDK.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "domain": "reliability",
+      "id": "JRFC-0006",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "not_applies_when": "No outbound network call is made, configured or described.",
+      "owner": "sre",
+      "path": "corpus/rfcs/JRFC-0006-outbound-calls.md",
+      "retired": [],
+      "review_by": "2027-03-31",
+      "statements": [
+        "JRFC-0006.1",
+        "JRFC-0006.2",
+        "JRFC-0006.3",
+        "JRFC-0006.4"
+      ],
+      "status": "enforced",
+      "summary": "Timeouts, retries and fallbacks for calls to other services, databases and third parties.",
+      "superseded_by": null,
+      "supersedes": [],
+      "title": "Resilient outbound calls"
+    },
+    {
+      "applies_when": "The content is or changes TypeScript source code (.ts or .tsx).",
+      "artifacts": [
+        "diff",
+        "code"
+      ],
+      "domain": "typescript",
+      "id": "JRFC-0007",
+      "languages": [
+        "typescript"
+      ],
+      "layer": "local",
+      "not_applies_when": "The content is not TypeScript source code.",
+      "owner": "frontend",
+      "path": "corpus/rfcs/JRFC-0007-typescript.md",
+      "retired": [],
+      "review_by": "2027-03-31",
+      "statements": [
+        "JRFC-0007.1",
+        "JRFC-0007.2",
+        "JRFC-0007.3",
+        "JRFC-0007.4"
+      ],
+      "status": "enforced",
+      "summary": "Type-safety and async conventions for TypeScript services and frontends.",
+      "superseded_by": null,
+      "supersedes": [],
+      "title": "TypeScript code"
+    },
+    {
+      "applies_when": "The content adds or changes a database migration, DDL statement or schema definition.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "domain": "data",
+      "id": "JRFC-0008",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "not_applies_when": "No database schema or migration is involved.",
+      "owner": "data-platform",
+      "path": "corpus/rfcs/JRFC-0008-db-migrations.md",
+      "retired": [],
+      "review_by": "2027-02-28",
+      "statements": [
+        "JRFC-0008.1",
+        "JRFC-0008.2",
+        "JRFC-0008.3",
+        "JRFC-0008.4"
+      ],
+      "status": "approved",
+      "summary": "How to change relational schemas without downtime, using the expand/contract pattern.",
+      "superseded_by": null,
+      "supersedes": [],
+      "title": "Zero-downtime database migrations"
+    },
+    {
+      "applies_when": "The content is a technical design document or spec that proposes how to build or change a system.",
+      "artifacts": [
+        "spec"
+      ],
+      "domain": "specs",
+      "id": "JRFC-0009",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "not_applies_when": "The content is code, a diff, an incident report or a document that does not propose a system design.",
+      "owner": "architecture",
+      "path": "corpus/rfcs/JRFC-0009-design-specs.md",
+      "retired": [],
+      "review_by": "2027-06-30",
+      "statements": [
+        "JRFC-0009.1",
+        "JRFC-0009.2",
+        "JRFC-0009.3",
+        "JRFC-0009.4",
+        "JRFC-0009.5",
+        "JRFC-0009.6"
+      ],
+      "status": "enforced",
+      "summary": "The sections every technical design spec contains before implementation starts.",
+      "superseded_by": null,
+      "supersedes": [],
+      "title": "Technical design specs"
+    },
+    {
+      "applies_when": "The content adds, reads, changes or removes a feature flag, or changes user-visible behavior of a production service.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "domain": "delivery",
+      "id": "JRFC-0010",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "not_applies_when": "No feature flag is involved and no user-visible production behavior changes.",
+      "owner": "platform",
+      "path": "corpus/rfcs/JRFC-0010-feature-flags.md",
+      "retired": [],
+      "review_by": "2027-03-31",
+      "statements": [
+        "JRFC-0010.1",
+        "JRFC-0010.2",
+        "JRFC-0010.3"
+      ],
+      "status": "approved",
+      "summary": "When to put a change behind a feature flag and how flags are owned and removed.",
+      "superseded_by": null,
+      "supersedes": [],
+      "title": "Feature flags"
+    },
+    {
+      "applies_when": "The content is or changes Python source code.",
+      "artifacts": [
+        "diff",
+        "code"
+      ],
+      "domain": "python",
+      "id": "JRFC-0011",
+      "languages": [
+        "python"
+      ],
+      "layer": "local",
+      "not_applies_when": "The content is not Python source code.",
+      "owner": "data-platform",
+      "path": "corpus/rfcs/JRFC-0011-python-typing.md",
+      "retired": [],
+      "review_by": "2027-06-30",
+      "statements": [
+        "JRFC-0011.1"
+      ],
+      "status": "draft",
+      "summary": "Draft proposal: type hints on public Python functions. Not used by agents until approved.",
+      "superseded_by": null,
+      "supersedes": [],
+      "title": "Python type hints"
+    }
+  ],
+  "schema": 2,
+  "statements": [
+    {
+      "applies_when": "the content adds or edits a `### JRFC-` statement heading or its text.",
+      "artifacts": [
+        "doc",
+        "diff"
+      ],
+      "blocking": true,
+      "domain": "governance",
+      "enforcement": "linter",
+      "id": "JRFC-0001.1",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "Any content that is not a jrfc RFC file.",
+      "rfc": "JRFC-0001",
+      "source": "corpus/rfcs/JRFC-0001-rfc-format.md#L41",
+      "status": "enforced",
+      "text": "Each statement MUST use normative keywords of exactly one level (`MUST`/`SHALL`/`REQUIRED`, `SHOULD`/`RECOMMENDED`, or `MAY`/`OPTIONAL`); a statement that needs two levels is split in two.",
+      "title": "One normative level per statement"
+    },
+    {
+      "applies_when": "the content renames, removes or reorders `### JRFC-` statement headings.",
+      "artifacts": [
+        "doc",
+        "diff"
+      ],
+      "blocking": true,
+      "domain": "governance",
+      "enforcement": "agent",
+      "id": "JRFC-0001.2",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "Any content that is not a jrfc RFC file.",
+      "rfc": "JRFC-0001",
+      "source": "corpus/rfcs/JRFC-0001-rfc-format.md#L48",
+      "status": "enforced",
+      "text": "A published statement identifier MUST NOT be renumbered or reused for a different requirement; a removed statement keeps its number retired.",
+      "title": "Stable statement identifiers"
+    },
+    {
+      "applies_when": "the content adds or edits a `### JRFC-` statement.",
+      "artifacts": [
+        "doc",
+        "diff"
+      ],
+      "blocking": false,
+      "domain": "governance",
+      "enforcement": "agent",
+      "id": "JRFC-0001.3",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "SHOULD",
+      "not_applies_when": "Any content that is not a jrfc RFC file.",
+      "rfc": "JRFC-0001",
+      "source": "corpus/rfcs/JRFC-0001-rfc-format.md#L55",
+      "status": "enforced",
+      "text": "Each statement SHOULD have an `Applies when:` line that names the concrete code, text or situation it governs, written literally enough for a classifier to match.",
+      "title": "Explicit applicability"
+    },
+    {
+      "applies_when": "the content changes the `status:` field of an RFC front matter.",
+      "artifacts": [
+        "doc",
+        "diff"
+      ],
+      "blocking": true,
+      "domain": "governance",
+      "enforcement": "agent",
+      "id": "JRFC-0001.4",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "Any content that is not a jrfc RFC file.",
+      "rfc": "JRFC-0001",
+      "source": "corpus/rfcs/JRFC-0001-rfc-format.md#L62",
+      "status": "enforced",
+      "text": "The `status` of an RFC MUST only move to `approved` or `enforced` with the approval of the domain owner; agents propose drafts and never promote them.",
+      "title": "Human approval of status"
+    },
+    {
+      "applies_when": "the content adds a statement about syntax, formatting, config flags or other mechanically checkable properties.",
+      "artifacts": [
+        "doc",
+        "diff"
+      ],
+      "blocking": false,
+      "domain": "governance",
+      "enforcement": "agent",
+      "id": "JRFC-0001.5",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "SHOULD",
+      "not_applies_when": "Any content that is not a jrfc RFC file.",
+      "rfc": "JRFC-0001",
+      "source": "corpus/rfcs/JRFC-0001-rfc-format.md#L69",
+      "status": "enforced",
+      "text": "A statement that a linter or static check can verify exactly SHOULD be marked `Enforcement: linter` and implemented as a lint rule instead of an agent check.",
+      "title": "Mechanical rules go to linters"
+    },
+    {
+      "applies_when": "the content defines or changes an HTTP route path.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "api",
+      "enforcement": "agent",
+      "id": "JRFC-0002.1",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No HTTP endpoint or API contract is added, changed or described.",
+      "rfc": "JRFC-0002",
+      "source": "corpus/rfcs/JRFC-0002-http-api-design.md#L31",
+      "status": "enforced",
+      "text": "Endpoint paths MUST name resources with plural nouns in kebab-case (for example `/booking-requests/{id}`) and MUST NOT contain verbs such as `get`, `create` or `update`.",
+      "title": "Resource-oriented paths"
+    },
+    {
+      "applies_when": "the content defines an HTTP handler and its method.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "api",
+      "enforcement": "agent",
+      "id": "JRFC-0002.2",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No HTTP endpoint or API contract is added, changed or described.",
+      "rfc": "JRFC-0002",
+      "source": "corpus/rfcs/JRFC-0002-http-api-design.md#L38",
+      "status": "enforced",
+      "text": "Handlers MUST use HTTP methods according to RFC 9110: GET and HEAD MUST NOT change server state, and state changes use POST, PUT, PATCH or DELETE.",
+      "title": "Methods match semantics"
+    },
+    {
+      "applies_when": "the content builds or returns an HTTP error response, or describes API errors.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "api",
+      "enforcement": "agent",
+      "id": "JRFC-0002.3",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No HTTP endpoint or API contract is added, changed or described.",
+      "rfc": "JRFC-0002",
+      "source": "corpus/rfcs/JRFC-0002-http-api-design.md#L45",
+      "status": "enforced",
+      "text": "Error responses MUST use the `application/problem+json` format of RFC 9457 with at least `type`, `title` and `status`, and MUST NOT expose stack traces or internal exception text.",
+      "title": "Problem details for errors"
+    },
+    {
+      "applies_when": "the content adds or changes an endpoint that returns a list or collection of items.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "api",
+      "enforcement": "agent",
+      "id": "JRFC-0002.4",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No HTTP endpoint or API contract is added, changed or described.",
+      "rfc": "JRFC-0002",
+      "source": "corpus/rfcs/JRFC-0002-http-api-design.md#L52",
+      "status": "enforced",
+      "text": "Endpoints that return a collection MUST be paginated with a bounded maximum page size.",
+      "title": "Paginated collections"
+    },
+    {
+      "applies_when": "the content adds or changes a POST endpoint that creates a reservation, booking, payment, order or similar resource.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "api",
+      "enforcement": "agent",
+      "id": "JRFC-0002.5",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No HTTP endpoint or API contract is added, changed or described.",
+      "rfc": "JRFC-0002",
+      "source": "corpus/rfcs/JRFC-0002-http-api-design.md#L58",
+      "status": "enforced",
+      "text": "POST endpoints that create reservations, payments or other resources with business side effects MUST accept an `Idempotency-Key` header and return the original result for a repeated key.",
+      "title": "Idempotent creation of money- or booking-related resources"
+    },
+    {
+      "applies_when": "the content removes or renames response fields, changes field types, or changes required request fields of an existing endpoint.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": false,
+      "domain": "api",
+      "enforcement": "agent",
+      "id": "JRFC-0002.6",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "SHOULD",
+      "not_applies_when": "No HTTP endpoint or API contract is added, changed or described.",
+      "rfc": "JRFC-0002",
+      "source": "corpus/rfcs/JRFC-0002-http-api-design.md#L66",
+      "status": "enforced",
+      "text": "A breaking change to a public API contract SHOULD be released as a new major version path (for example `/v2/`) while the previous version keeps working during a deprecation period.",
+      "title": "Versioning of breaking changes"
+    },
+    {
+      "applies_when": "a log, print, logger, span attribute or metric label call includes fields of a user, customer, guest, reservation or payment.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "observability",
+      "enforcement": "agent",
+      "id": "JRFC-0003.1",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No logging, tracing, metrics or telemetry is written or configured.",
+      "rfc": "JRFC-0003",
+      "source": "corpus/rfcs/JRFC-0003-logging-personal-data.md#L31",
+      "status": "enforced",
+      "text": "Services MUST NOT write personal data — names, email addresses, phone numbers, postal addresses, payment card data, or free-text messages written by customers — to logs, traces or metric attributes; use an opaque identifier such as the customer id instead.",
+      "title": "No personal data in logs"
+    },
+    {
+      "applies_when": "the content adds or changes a log call.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "observability",
+      "enforcement": "agent",
+      "id": "JRFC-0003.2",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "the content only changes logger configuration.",
+      "rfc": "JRFC-0003",
+      "source": "corpus/rfcs/JRFC-0003-logging-personal-data.md#L39",
+      "status": "enforced",
+      "text": "Services MUST emit logs as structured key-value records through the shared logger, not as interpolated free-text strings built by concatenation.",
+      "title": "Structured logs"
+    },
+    {
+      "applies_when": "the content logs inside an HTTP handler, message consumer or job that processes a request or message.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "observability",
+      "enforcement": "agent",
+      "id": "JRFC-0003.3",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No logging, tracing, metrics or telemetry is written or configured.",
+      "rfc": "JRFC-0003",
+      "source": "corpus/rfcs/JRFC-0003-logging-personal-data.md#L47",
+      "status": "enforced",
+      "text": "Every log record written while handling a request or message MUST include the correlation id of that request or message.",
+      "title": "Correlation identifier"
+    },
+    {
+      "applies_when": "the content adds or changes a log call with a level.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": false,
+      "domain": "observability",
+      "enforcement": "agent",
+      "id": "JRFC-0003.4",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "SHOULD",
+      "not_applies_when": "No logging, tracing, metrics or telemetry is written or configured.",
+      "rfc": "JRFC-0003",
+      "source": "corpus/rfcs/JRFC-0003-logging-personal-data.md#L54",
+      "status": "enforced",
+      "text": "Log levels SHOULD be used as follows: `error` for failures that need human action, `warn` for degraded but handled situations, `info` for business events, and `debug` for diagnostic detail that is off in production.",
+      "title": "Meaningful levels"
+    },
+    {
+      "applies_when": "the content contains a string literal, constant, config value or default that is or looks like a password, key, token or credential.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "security",
+      "enforcement": "agent",
+      "id": "JRFC-0004.1",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No credential of any kind is used, stored, passed or described.",
+      "rfc": "JRFC-0004",
+      "source": "corpus/rfcs/JRFC-0004-secrets.md#L29",
+      "status": "enforced",
+      "text": "Source code, configuration files and tests MUST NOT contain real credentials (passwords, API keys, tokens, private keys, connection strings with passwords).",
+      "title": "No secrets in source"
+    },
+    {
+      "applies_when": "the content loads, configures or passes a credential for a database, broker, third-party API or service.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "security",
+      "enforcement": "agent",
+      "id": "JRFC-0004.2",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No credential of any kind is used, stored, passed or described.",
+      "rfc": "JRFC-0004",
+      "source": "corpus/rfcs/JRFC-0004-secrets.md#L36",
+      "status": "enforced",
+      "text": "Services MUST read credentials at runtime from the secret manager (directly or through environment variables injected by the platform), never from files committed to the repository.",
+      "title": "Secrets from the secret manager"
+    },
+    {
+      "applies_when": "the content builds a URL, a log record or an error message in code that has access to a credential.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "security",
+      "enforcement": "agent",
+      "id": "JRFC-0004.3",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No credential of any kind is used, stored, passed or described.",
+      "rfc": "JRFC-0004",
+      "source": "corpus/rfcs/JRFC-0004-secrets.md#L44",
+      "status": "enforced",
+      "text": "Credentials MUST NOT be placed in URL query strings, log records, error messages or exception text.",
+      "title": "Secrets never in URLs or logs"
+    },
+    {
+      "applies_when": "the content is a design that introduces a new credential, key or service account.",
+      "artifacts": [
+        "spec"
+      ],
+      "blocking": false,
+      "domain": "security",
+      "enforcement": "agent",
+      "id": "JRFC-0004.4",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "SHOULD",
+      "not_applies_when": "No credential of any kind is used, stored, passed or described.",
+      "rfc": "JRFC-0004",
+      "source": "corpus/rfcs/JRFC-0004-secrets.md#L51",
+      "status": "enforced",
+      "text": "A design that introduces a new credential SHOULD describe how it is rotated and who owns the rotation.",
+      "title": "Rotation"
+    },
+    {
+      "applies_when": "the content builds or executes a SQL or NoSQL query.",
+      "artifacts": [
+        "diff",
+        "code"
+      ],
+      "blocking": true,
+      "domain": "security",
+      "enforcement": "agent",
+      "id": "JRFC-0005.1",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content does not read external input and does not build queries, commands or markup.",
+      "rfc": "JRFC-0005",
+      "source": "corpus/rfcs/JRFC-0005-untrusted-input.md#L30",
+      "status": "enforced",
+      "text": "Database queries MUST pass values as bound parameters (prepared statements or the ORM query builder) and MUST NOT build SQL by concatenating or interpolating values into the query string.",
+      "title": "Parameterized queries"
+    },
+    {
+      "applies_when": "the content reads request parameters, query strings, bodies or headers in a handler.",
+      "artifacts": [
+        "diff",
+        "code"
+      ],
+      "blocking": true,
+      "domain": "security",
+      "enforcement": "agent",
+      "id": "JRFC-0005.2",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content does not read external input and does not build queries, commands or markup.",
+      "rfc": "JRFC-0005",
+      "source": "corpus/rfcs/JRFC-0005-untrusted-input.md#L38",
+      "status": "enforced",
+      "text": "Request input MUST be validated against an explicit schema (types, required fields, lengths, allowed values) before it is used by business logic.",
+      "title": "Validate at the boundary"
+    },
+    {
+      "applies_when": "the content calls eval, exec, a subprocess or shell, or compiles a template.",
+      "artifacts": [
+        "diff",
+        "code"
+      ],
+      "blocking": true,
+      "domain": "security",
+      "enforcement": "agent",
+      "id": "JRFC-0005.3",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content does not read external input and does not build queries, commands or markup.",
+      "rfc": "JRFC-0005",
+      "source": "corpus/rfcs/JRFC-0005-untrusted-input.md#L45",
+      "status": "enforced",
+      "text": "Code MUST NOT pass untrusted input to `eval`, `Function`, `exec`, a shell, or a template compiler.",
+      "title": "No dynamic code or shell with input"
+    },
+    {
+      "applies_when": "the content creates an HTTP client, performs a fetch/request/RPC, or configures a client for another service or third party.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "reliability",
+      "enforcement": "agent",
+      "id": "JRFC-0006.1",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No outbound network call is made, configured or described.",
+      "rfc": "JRFC-0006",
+      "source": "corpus/rfcs/JRFC-0006-outbound-calls.md#L30",
+      "status": "enforced",
+      "text": "Every outbound network call MUST set an explicit timeout that is shorter than the caller's own deadline.",
+      "title": "Explicit timeouts"
+    },
+    {
+      "applies_when": "the content adds or configures retry logic, or loops that repeat a remote call.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "reliability",
+      "enforcement": "agent",
+      "id": "JRFC-0006.2",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No outbound network call is made, configured or described.",
+      "rfc": "JRFC-0006",
+      "source": "corpus/rfcs/JRFC-0006-outbound-calls.md#L37",
+      "status": "enforced",
+      "text": "Retries MUST be bounded in count, MUST use exponential backoff with jitter, and MUST only be applied to idempotent operations or requests carrying an idempotency key.",
+      "title": "Bounded retries with backoff"
+    },
+    {
+      "applies_when": "the content calls a dependency whose result is optional for the response, such as recommendations, reviews or analytics.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": false,
+      "domain": "reliability",
+      "enforcement": "agent",
+      "id": "JRFC-0006.3",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "SHOULD",
+      "not_applies_when": "No outbound network call is made, configured or described.",
+      "rfc": "JRFC-0006",
+      "source": "corpus/rfcs/JRFC-0006-outbound-calls.md#L44",
+      "status": "enforced",
+      "text": "A call to a dependency that is not required for the core user flow SHOULD have a fallback (cached value, default, or feature disabled) instead of failing the request.",
+      "title": "Degradation for optional dependencies"
+    },
+    {
+      "applies_when": "the content is a design that adds a call to a new service, database or third party.",
+      "artifacts": [
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "reliability",
+      "enforcement": "agent",
+      "id": "JRFC-0006.4",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No outbound network call is made, configured or described.",
+      "rfc": "JRFC-0006",
+      "source": "corpus/rfcs/JRFC-0006-outbound-calls.md#L51",
+      "status": "enforced",
+      "text": "A design that adds a new synchronous dependency MUST state its expected latency, its timeout, and the behavior of the system when the dependency is down.",
+      "title": "Dependencies in designs"
+    },
+    {
+      "applies_when": "the content adds or changes a tsconfig file.",
+      "artifacts": [
+        "diff",
+        "code"
+      ],
+      "blocking": true,
+      "domain": "typescript",
+      "enforcement": "linter",
+      "id": "JRFC-0007.1",
+      "languages": [
+        "typescript"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content is not TypeScript source code.",
+      "rfc": "JRFC-0007",
+      "source": "corpus/rfcs/JRFC-0007-typescript.md#L23",
+      "status": "enforced",
+      "text": "Projects MUST compile with `\"strict\": true` in `tsconfig.json`.",
+      "title": "Strict compiler mode"
+    },
+    {
+      "applies_when": "the content adds or changes an exported function, class, interface or type.",
+      "artifacts": [
+        "diff",
+        "code"
+      ],
+      "blocking": true,
+      "domain": "typescript",
+      "enforcement": "agent",
+      "id": "JRFC-0007.2",
+      "languages": [
+        "typescript"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content is not TypeScript source code.",
+      "rfc": "JRFC-0007",
+      "source": "corpus/rfcs/JRFC-0007-typescript.md#L29",
+      "status": "enforced",
+      "text": "Exported functions, classes and types MUST NOT use `any` in their public signatures; use `unknown` or a precise type instead.",
+      "title": "No `any` in exported signatures"
+    },
+    {
+      "applies_when": "the content calls an async function or creates a promise.",
+      "artifacts": [
+        "diff",
+        "code"
+      ],
+      "blocking": true,
+      "domain": "typescript",
+      "enforcement": "agent",
+      "id": "JRFC-0007.3",
+      "languages": [
+        "typescript"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content is not TypeScript source code.",
+      "rfc": "JRFC-0007",
+      "source": "corpus/rfcs/JRFC-0007-typescript.md#L36",
+      "status": "enforced",
+      "text": "A promise MUST be awaited, returned, or explicitly handled with `.catch`; it MUST NOT be created and silently dropped.",
+      "title": "No floating promises"
+    },
+    {
+      "applies_when": "the content adds or changes a try/catch block or a `.catch` handler.",
+      "artifacts": [
+        "diff",
+        "code"
+      ],
+      "blocking": false,
+      "domain": "typescript",
+      "enforcement": "agent",
+      "id": "JRFC-0007.4",
+      "languages": [
+        "typescript"
+      ],
+      "layer": "local",
+      "level": "SHOULD",
+      "not_applies_when": "The content is not TypeScript source code.",
+      "rfc": "JRFC-0007",
+      "source": "corpus/rfcs/JRFC-0007-typescript.md#L43",
+      "status": "enforced",
+      "text": "Code in a `catch` block SHOULD treat the error as `unknown` and narrow it (for example with `instanceof`) before reading its properties.",
+      "title": "Narrow caught errors"
+    },
+    {
+      "applies_when": "the content adds a migration that drops, renames or changes the type of a column or table.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": false,
+      "domain": "data",
+      "enforcement": "agent",
+      "id": "JRFC-0008.1",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No database schema or migration is involved.",
+      "rfc": "JRFC-0008",
+      "source": "corpus/rfcs/JRFC-0008-db-migrations.md#L29",
+      "status": "approved",
+      "text": "Each migration MUST be compatible with the previous version of the application code; a breaking change is split into expand, migrate and contract steps deployed separately.",
+      "title": "Backward-compatible steps"
+    },
+    {
+      "applies_when": "the content adds a column to an existing table.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": false,
+      "domain": "data",
+      "enforcement": "agent",
+      "id": "JRFC-0008.2",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No database schema or migration is involved.",
+      "rfc": "JRFC-0008",
+      "source": "corpus/rfcs/JRFC-0008-db-migrations.md#L36",
+      "status": "approved",
+      "text": "A column added to an existing table MUST be nullable or have a default value.",
+      "title": "New columns are nullable or defaulted"
+    },
+    {
+      "applies_when": "the content creates an index, rewrites a table, or updates many rows in a migration.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": false,
+      "domain": "data",
+      "enforcement": "agent",
+      "id": "JRFC-0008.3",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No database schema or migration is involved.",
+      "rfc": "JRFC-0008",
+      "source": "corpus/rfcs/JRFC-0008-db-migrations.md#L42",
+      "status": "approved",
+      "text": "Migrations on large tables MUST NOT take locks that block writes for long periods; indexes are created concurrently and data backfills run in batches outside the migration.",
+      "title": "No long locks on large tables"
+    },
+    {
+      "applies_when": "the content adds a migration file.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": false,
+      "domain": "data",
+      "enforcement": "agent",
+      "id": "JRFC-0008.4",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "SHOULD",
+      "not_applies_when": "No database schema or migration is involved.",
+      "rfc": "JRFC-0008",
+      "source": "corpus/rfcs/JRFC-0008-db-migrations.md#L50",
+      "status": "approved",
+      "text": "Migrations SHOULD provide a down step, or state in a comment why the change cannot be reversed.",
+      "title": "Reversible migrations"
+    },
+    {
+      "applies_when": "the content is a design spec.",
+      "artifacts": [
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "specs",
+      "enforcement": "agent",
+      "id": "JRFC-0009.1",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content is code, a diff, an incident report or a document that does not propose a system design.",
+      "rfc": "JRFC-0009",
+      "source": "corpus/rfcs/JRFC-0009-design-specs.md#L30",
+      "status": "enforced",
+      "text": "A spec MUST state the problem, who has it and why it matters now, before it describes the solution.",
+      "title": "Problem before solution"
+    },
+    {
+      "applies_when": "the content is a design spec.",
+      "artifacts": [
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "specs",
+      "enforcement": "agent",
+      "id": "JRFC-0009.2",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content is code, a diff, an incident report or a document that does not propose a system design.",
+      "rfc": "JRFC-0009",
+      "source": "corpus/rfcs/JRFC-0009-design-specs.md#L37",
+      "status": "enforced",
+      "text": "A spec MUST list explicit non-goals.",
+      "title": "Non-goals"
+    },
+    {
+      "applies_when": "the content is a design spec.",
+      "artifacts": [
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "specs",
+      "enforcement": "agent",
+      "id": "JRFC-0009.3",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content is code, a diff, an incident report or a document that does not propose a system design.",
+      "rfc": "JRFC-0009",
+      "source": "corpus/rfcs/JRFC-0009-design-specs.md#L43",
+      "status": "enforced",
+      "text": "A spec MUST describe at least one alternative that was considered and why it was not chosen.",
+      "title": "Alternatives considered"
+    },
+    {
+      "applies_when": "the content is a design spec for a change that reaches production.",
+      "artifacts": [
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "specs",
+      "enforcement": "agent",
+      "id": "JRFC-0009.4",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content is code, a diff, an incident report or a document that does not propose a system design.",
+      "rfc": "JRFC-0009",
+      "source": "corpus/rfcs/JRFC-0009-design-specs.md#L50",
+      "status": "enforced",
+      "text": "A spec MUST describe how the change is rolled out to production and how it is rolled back if it misbehaves.",
+      "title": "Rollout and rollback"
+    },
+    {
+      "applies_when": "the content is a design spec for a service, job or pipeline that runs in production.",
+      "artifacts": [
+        "spec"
+      ],
+      "blocking": false,
+      "domain": "specs",
+      "enforcement": "agent",
+      "id": "JRFC-0009.5",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "SHOULD",
+      "not_applies_when": "The content is code, a diff, an incident report or a document that does not propose a system design.",
+      "rfc": "JRFC-0009",
+      "source": "corpus/rfcs/JRFC-0009-design-specs.md#L57",
+      "status": "enforced",
+      "text": "A spec SHOULD define how success and failure are observed: key metrics, alerts, and service level objectives where relevant.",
+      "title": "Operability"
+    },
+    {
+      "applies_when": "the content is a design spec.",
+      "artifacts": [
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "specs",
+      "enforcement": "agent",
+      "id": "JRFC-0009.6",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content is code, a diff, an incident report or a document that does not propose a system design.",
+      "rfc": "JRFC-0009",
+      "source": "corpus/rfcs/JRFC-0009-design-specs.md#L64",
+      "status": "enforced",
+      "text": "A spec MUST describe what personal or sensitive data the system handles and how access to it is controlled, or state that it handles none.",
+      "title": "Security and privacy"
+    },
+    {
+      "applies_when": "the content changes the behavior of search, booking, payment or login flows.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": false,
+      "domain": "delivery",
+      "enforcement": "agent",
+      "id": "JRFC-0010.1",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "SHOULD",
+      "not_applies_when": "No feature flag is involved and no user-visible production behavior changes.",
+      "rfc": "JRFC-0010",
+      "source": "corpus/rfcs/JRFC-0010-feature-flags.md#L24",
+      "status": "approved",
+      "text": "A change to a critical user flow (search, booking, payment, login) SHOULD be released behind a feature flag that can be turned off without a deploy.",
+      "title": "Risky changes behind a flag"
+    },
+    {
+      "applies_when": "the content defines a new feature flag.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": false,
+      "domain": "delivery",
+      "enforcement": "agent",
+      "id": "JRFC-0010.2",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No feature flag is involved and no user-visible production behavior changes.",
+      "rfc": "JRFC-0010",
+      "source": "corpus/rfcs/JRFC-0010-feature-flags.md#L31",
+      "status": "approved",
+      "text": "Every new feature flag MUST declare an owning team and an expiry date in its definition.",
+      "title": "Owner and expiry"
+    },
+    {
+      "applies_when": "the content reads the value of a feature flag.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": false,
+      "domain": "delivery",
+      "enforcement": "agent",
+      "id": "JRFC-0010.3",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No feature flag is involved and no user-visible production behavior changes.",
+      "rfc": "JRFC-0010",
+      "source": "corpus/rfcs/JRFC-0010-feature-flags.md#L37",
+      "status": "approved",
+      "text": "Code that reads a flag MUST behave safely when the flag service is unavailable, using the old behavior as the default value.",
+      "title": "Safe default"
+    },
+    {
+      "applies_when": "the content adds or changes a public Python function or method.",
+      "artifacts": [
+        "diff",
+        "code"
+      ],
+      "blocking": false,
+      "domain": "python",
+      "enforcement": "agent",
+      "id": "JRFC-0011.1",
+      "languages": [
+        "python"
+      ],
+      "layer": "local",
+      "level": "SHOULD",
+      "not_applies_when": "The content is not Python source code.",
+      "rfc": "JRFC-0011",
+      "source": "corpus/rfcs/JRFC-0011-python-typing.md#L23",
+      "status": "draft",
+      "text": "Public functions and methods in Python modules SHOULD have type hints for all parameters and the return value.",
+      "title": "Typed public functions"
+    }
+  ]
+}

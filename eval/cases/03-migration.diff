@@ -1,0 +1,14 @@
+diff --git a/db/migrations/20260928_add_guest_tier.sql b/db/migrations/20260928_add_guest_tier.sql
+new file mode 100644
+index 0000000..5e6f7a8
+--- /dev/null
++++ b/db/migrations/20260928_add_guest_tier.sql
+@@ -0,0 +1,9 @@
++-- Add loyalty tier to guests and speed up lookups by email.
++ALTER TABLE guests ADD COLUMN loyalty_tier VARCHAR(16) NOT NULL;
++
++CREATE INDEX idx_guests_email ON guests (email);
++
++ALTER TABLE reservations RENAME COLUMN party_size TO covers;
++
++UPDATE guests SET loyalty_tier = 'bronze';

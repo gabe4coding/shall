@@ -1,0 +1,73 @@
+# Domain layer of the corpus. Each RFC belongs to exactly one domain.
+# `applies_when` / `not_applies_when` become the Jev criteria for the domain layer,
+# so write them literally: Jev answers the words written, not the intent.
+domains:
+  governance:
+    title: Standards governance
+    description: How engineering standards (jrfc RFCs) are written, reviewed and maintained.
+    owner: ai-governance
+    applies_when: The content is an engineering standard, an RFC, or a change to the standards corpus.
+    not_applies_when: Application code, product specs or docs that are not engineering standards.
+
+  api:
+    title: HTTP API design
+    description: Design of HTTP/REST endpoints exposed by services, including paths, methods, status codes, errors, pagination and versioning.
+    owner: platform
+    applies_when: The content adds, changes or describes an HTTP endpoint, route, controller, request or response payload, or an API contract (OpenAPI).
+    not_applies_when: No HTTP interface is added, changed or described.
+
+  security:
+    title: Application security
+    description: Handling of secrets, credentials, untrusted input, queries and authentication in application code and designs.
+    owner: security
+    applies_when: The content handles credentials, tokens, keys, user input, database queries, shell commands, authentication or authorization.
+    not_applies_when: The content is pure styling, copy text or documentation with no code that handles input, data or credentials.
+
+  observability:
+    title: Logging and observability
+    description: How services write logs, metrics and traces, and what data may appear in them.
+    owner: sre
+    applies_when: The content writes or configures logs, log messages, error messages, metrics, traces or telemetry.
+    not_applies_when: No logging, metrics, tracing or telemetry is written or configured.
+
+  reliability:
+    title: Reliability of service-to-service calls
+    description: Timeouts, retries, backoff and failure handling for network calls to other services, databases or third parties.
+    owner: sre
+    applies_when: The content makes or configures an outbound network call (HTTP client, RPC, message broker, third-party SDK) or describes such a dependency.
+    not_applies_when: No outbound network call is made, configured or described.
+
+  typescript:
+    title: TypeScript code
+    description: Conventions for TypeScript source code in services and frontends.
+    owner: frontend
+    applies_when: The content is or changes TypeScript source code (.ts or .tsx files).
+    not_applies_when: The content is not TypeScript source code.
+
+  python:
+    title: Python code
+    description: Conventions for Python source code in services, jobs and tools.
+    owner: data-platform
+    applies_when: The content is or changes Python source code (.py files).
+    not_applies_when: The content is not Python source code.
+
+  data:
+    title: Database schema and migrations
+    description: Changes to relational database schemas and the migrations that apply them.
+    owner: data-platform
+    applies_when: The content adds or changes a database migration, a schema definition, DDL (CREATE/ALTER/DROP) or an ORM model mapped to a table.
+    not_applies_when: No database schema or migration is added, changed or described.
+
+  specs:
+    title: Technical design specs
+    description: The structure and completeness of technical design documents (specs, design docs, RFCs for systems) written before building.
+    owner: architecture
+    applies_when: The content is a technical design document or spec that proposes how to build or change a system.
+    not_applies_when: The content is code, a diff, an incident report, or a doc that does not propose a system design.
+
+  delivery:
+    title: Safe delivery and feature flags
+    description: How risky behavior changes are rolled out, including feature flags, flag ownership and cleanup.
+    owner: platform
+    applies_when: The content adds, reads, changes or removes a feature flag, or changes user-visible behavior of a production service.
+    not_applies_when: No feature flag is involved and no user-visible production behavior changes.

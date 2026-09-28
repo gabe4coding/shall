@@ -1,0 +1,32 @@
+diff --git a/corpus/rfcs/JRFC-0012-caching.md b/corpus/rfcs/JRFC-0012-caching.md
+new file mode 100644
+index 0000000..abcdef1
+--- /dev/null
++++ b/corpus/rfcs/JRFC-0012-caching.md
+@@ -0,0 +1,26 @@
++---
++id: JRFC-0012
++title: HTTP caching
++status: enforced
++domain: api
++artifacts: [diff, code]
++languages: [any]
++owner: platform
++review_by: 2027-06-30
++supersedes: []
++summary: >
++  Cache headers for HTTP responses.
++applies_when: >
++  The content returns HTTP responses.
++not_applies_when: >
++  No HTTP response is returned.
++---
++
++# JRFC-0012: HTTP caching
++
++## Requirements
++
++### JRFC-0012.1 Cache-Control on GET
++GET responses MUST set a Cache-Control header, and they should use ETags where possible.
++
++- Enforcement: agent

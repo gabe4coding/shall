@@ -1,0 +1,5 @@
+.jrfc-cache/
+.jrfc-out/
+.venv/
+__pycache__/
+*.pyc

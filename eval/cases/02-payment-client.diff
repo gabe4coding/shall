@@ -1,0 +1,42 @@
+diff --git a/payments/provider_client.py b/payments/provider_client.py
+new file mode 100644
+index 0000000..a1b2c3d
+--- /dev/null
++++ b/payments/provider_client.py
+@@ -0,0 +1,41 @@
++import logging
++import time
++
++import psycopg2
++import requests
++
++API_KEY = "sk_live_51HxQpR2eZvKYlo2C8f3Jd0Wq"
++BASE_URL = "https://api.payprovider.example/v1"
++
++log = logging.getLogger(__name__)
++
++
++def charge(card_number, amount_cents, customer_email):
++    log.info(f"charging card {card_number} for {customer_email}")
++    for attempt in range(10):
++        try:
++            resp = requests.post(
++                f"{BASE_URL}/charges?api_key={API_KEY}",
++                json={"card": card_number, "amount": amount_cents},
++            )
++            return resp.json()
++        except requests.RequestException:
++            time.sleep(1)
++    raise RuntimeError("payment provider unavailable")
++
++
++def record_charge(conn, booking_id, charge_id):
++    cur = conn.cursor()
++    cur.execute(
++        "INSERT INTO charges (booking_id, charge_id) VALUES ('%s', '%s')" % (booking_id, charge_id)
++    )
++    conn.commit()
++
++
++def connect():
++    return psycopg2.connect("postgresql://payments:Sup3rS3cret@db.internal:5432/payments")
