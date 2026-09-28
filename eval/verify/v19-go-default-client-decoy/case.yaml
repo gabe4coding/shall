@@ -1,0 +1,11 @@
+why: 'Go: cross-file chain through the language''s own import and call syntax.'
+artifact: internal/partners/partner.go
+kind: code
+finding:
+  statement_id: JRFC-0006.1
+  quote: return http.Post(url, "application/json", bytes.NewReader(body))
+  message: http.Post uses the default client, which has no timeout.
+  depends_on: []
+expected:
+  verdict: confirmed
+  evidence: []

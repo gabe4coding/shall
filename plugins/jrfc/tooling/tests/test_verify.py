@@ -23,7 +23,7 @@ def test_what_gets_verified_is_decided_by_code():
 
 def test_search_terms_use_depends_on_first_and_skip_noise():
     terms = search_terms(finding(depends_on=["review.command", "RetryPolicy defaults"]))
-    assert terms[:3] == ["review.command", "command", "RetryPolicy"]
+    assert terms[:4] == ["review.command", "review", "command", "RetryPolicy"]
     assert "claude" in terms and "defaults" not in terms
 
 

@@ -83,15 +83,19 @@ jobs:
         with: { node-version: 22 }
       - run: npm install -g @anthropic-ai/claude-code
 
-      - name: Restore corpus and Jev answer caches
+      - name: Restore corpus, grammar and Jev answer caches
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/jrfc
+            ~/.cache/tree-sitter-language-pack
             .jrfc/.jrfc-cache
             .jrfc-cache
           key: jrfc-${{ github.event.pull_request.number }}-${{ github.sha }}
           restore-keys: jrfc-${{ github.event.pull_request.number }}-
+
+      - name: Grammars for the languages in this repository (verification code graph)
+        run: $JRFC/jrfc prefetch
 
       - name: jrfc review
         env:

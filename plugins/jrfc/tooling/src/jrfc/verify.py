@@ -21,10 +21,11 @@ from __future__ import annotations
 import asyncio
 import re
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .artifact import Artifact
+from .codegraph import RepoIndex, expand, names_in
 from .config import Config
 from .corpus import Corpus
 from .jev import Jev, noul
@@ -52,7 +53,7 @@ MAX_TERMS = 8
 HITS_PER_TERM = 8
 CONTEXT_LINES = 6
 MAX_EXCERPTS = 20
-KEEP_EXCERPTS = 5
+KEEP_EXCERPTS = 6
 SELECT_THRESHOLD = 0.4
 GREP_TIMEOUT = 30
 SKIP_DIRS = {".git", ".venv", "node_modules", ".jrfc-out", ".jrfc-cache", "__pycache__", "dist", "build"}
@@ -66,6 +67,7 @@ class Excerpt:
     end: int
     text: str        # numbered lines
     terms: list[str]
+    via: list[str] = field(default_factory=list)  # graph path from the flagged line, e.g. [gateway.hold, request]
 
 
 def needs_verification(finding: dict) -> bool:
@@ -109,12 +111,14 @@ def search_terms(finding: dict, key_path: str | None = None) -> list[str]:
     for source in finding.get("depends_on", []):
         for token in IDENT_RE.findall(source):
             add(token)
-            add(token.split(".")[-1])
+            for part in token.split("."):  # the receiver matters too: logger.info -> logger
+                add(part)
     for span in CODE_SPAN_RE.findall(finding.get("statement_text", "")):
         add(span.split()[0].strip("\"'"))
     for token in IDENT_RE.findall(finding.get("quote", "")):
         add(token)
-        add(token.split(".")[-1])
+        for part in token.split("."):
+            add(part)
     return out[:MAX_TERMS]
 
 
@@ -188,9 +192,10 @@ def gather_excerpts(root: Path, terms: list[str], excluded: set[str]) -> list[Ex
 
 def relevance_question():
     return noul(
-        "Does `excerpt` contain code or configuration that shows how the thing quoted in "
-        "`finding.quote` is actually configured, called, wrapped or given a default, so that it "
-        "helps decide whether `finding.requirement` is met?",
+        "The `excerpt` was reached from the code in `finding.quote` through `reached_via` (each "
+        "arrow is a call, an import or a base class). Does `excerpt` define, wrap, configure or set "
+        "a default for something on that path, so that it helps decide whether "
+        "`finding.requirement` is met?",
         true="The excerpt defines, calls, wraps, configures or sets a default for what the quote uses.",
         false="The excerpt only mentions similar words, or is documentation or a standard's text.",
     )
@@ -207,9 +212,15 @@ def chunk_context(artifact: Artifact, finding: dict, radius: int = 20) -> str:
     return "\n".join(f"{n:>5} | {chunk.line_text[n]}" for n in numbers)
 
 
-def verifier_prompt(finding: dict, context: str, excerpts: list[Excerpt]) -> str:
-    evidence = "\n\n".join(f'<excerpt id="{e.id}" file="{e.path}" lines="{e.start}-{e.end}">\n{e.text}\n</excerpt>'
-                           for e in excerpts) or "(no excerpt found)"
+def _via(e: Excerpt) -> str:
+    return " -> ".join(e.via) if e.via else f"text match on {', '.join(e.terms)}"
+
+
+def verifier_prompt(finding: dict, context: str, excerpts: list[Excerpt], notes: list[str] | None = None) -> str:
+    evidence = "\n\n".join(f'<excerpt id="{e.id}" file="{e.path}" lines="{e.start}-{e.end}" via="{_via(e)}">\n'
+                           f'{e.text}\n</excerpt>' for e in excerpts) or "(no excerpt found)"
+    if notes:
+        evidence += "\n\n<notes>\n" + "\n".join(f"- {n}" for n in notes) + "\n</notes>"
     return (
         f"<finding>\nstatement: {finding['statement_id']} [{finding['level']}] {finding['statement_text']}\n"
         f"file: {finding['path']}:{finding['line']}\nquote: {finding['quote']}\n"
@@ -228,6 +239,7 @@ def apply_verdict(finding: dict, verdict: dict | None, excerpts: list[Excerpt]) 
         "verdict": verdict.get("verdict", "unknown"),
         "reason": verdict.get("reason", ""),
         "evidence": [i if i == "chunk" else f"{known[i].path}:{known[i].start}-{known[i].end}" for i in cited],
+        "shown": [f"{e.path}:{e.start}-{e.end}" for e in excerpts],  # audit: what the verifier saw
     }
     if record["verdict"] == "refuted" and cited:
         return None, {**finding, "verification": record, "reason": f"refuted by verification: {record['reason']}"}
@@ -243,9 +255,11 @@ def apply_verdict(finding: dict, verdict: dict | None, excerpts: list[Excerpt]) 
 
 
 async def verify_findings(cfg: Config, corpus: Corpus, artifact: Artifact, jev: Jev, findings: list[dict],
-                          search_root: Path | None = None, agent=None) -> tuple[list[dict], list[dict], dict]:
+                          search_root: Path | None = None, agent=None,
+                          model: str | None = None) -> tuple[list[dict], list[dict], dict]:
+    model = model or cfg.get("review.verify_model") or None
     agent = agent or (lambda prompt, sem: run_claude(cfg, prompt, agent_prompt("jrfc-verifier"),
-                                                     VERDICT_SCHEMA, sem))
+                                                     VERDICT_SCHEMA, sem, model=model))
     root = search_root or _git_root(Path.cwd()) or Path.cwd()
     excluded = {".jrfc-out"}
     for layer in corpus.layers:  # the standards' own text is not evidence about the code
@@ -254,6 +268,8 @@ async def verify_findings(cfg: Config, corpus: Corpus, artifact: Artifact, jev: 
                 excluded.add(str(folder.relative_to(root)))
             except ValueError:
                 pass
+    retrieval = cfg.get("review.verify_retrieval") or "treesitter"
+    index = RepoIndex(root, excluded) if retrieval == "treesitter" else None
     sem = asyncio.Semaphore(int(cfg.get("review.concurrency")))
     stats = {"verified": 0, "confirmed": 0, "refuted": 0, "unknown": 0, "agent_calls": 0, "cost_usd": 0.0}
 
@@ -262,16 +278,31 @@ async def verify_findings(cfg: Config, corpus: Corpus, artifact: Artifact, jev: 
             return f, None
         chunk = next((c for c in artifact.chunks if c.id == f.get("chunk")), None)
         key_path = yaml_key_path(chunk.line_text, f.get("line")) if chunk and chunk.language == "yaml" else None
-        excerpts = gather_excerpts(root, search_terms(f, key_path), excluded | {f["path"]})
-        if excerpts:
+        terms = search_terms(f, key_path)
+        notes: list[str] = []
+        excerpts: list[Excerpt] = []
+        if index is not None:
+            seeds = (index.seeds_at(f["path"], f["line"], f.get("quote", "")) if f.get("line") else
+                     names_in(f.get("quote", ""))) + [t for t in f.get("depends_on", []) if IDENT_RE.fullmatch(t)]
+            hide = {f["path"]} if artifact.kind != "diff" else set()  # a whole file is already in the chunk
+            windows, notes = expand(index, seeds, f["path"], hide=hide)
+            excerpts = [Excerpt(id="", path=w.path, start=w.start, end=w.end, text=w.text, terms=[], via=w.via)
+                        for w in windows]
+        taken = {(e.path, e.start) for e in excerpts}
+        excerpts += [e for e in gather_excerpts(root, terms, excluded | {f["path"]}) if (e.path, e.start) not in taken]
+        for i, e in enumerate(excerpts[:MAX_EXCERPTS]):
+            e.id = f"e{i}"
+        excerpts = excerpts[:MAX_EXCERPTS]
+        if len(excerpts) > KEEP_EXCERPTS:  # Jev only cuts down; a short chain goes through whole
             base = {"requirement": f["statement_text"], "quote": f["quote"], "message": f["message"]}
             answers = await jev.gather(
-                jev.ask({"finding": base, "excerpt_file": e.path, "excerpt": e.text}, {"relevant": relevance_question()})
+                jev.ask({"finding": base, "excerpt_file": e.path, "reached_via": _via(e), "excerpt": e.text},
+                        {"relevant": relevance_question()})
                 for e in excerpts
             )
             scored = sorted(zip(excerpts, answers), key=lambda t: -t[1]["relevant"]["p"])
             excerpts = [e for e, a in scored if a["relevant"]["p"] >= SELECT_THRESHOLD][:KEEP_EXCERPTS]
-        verdict, meta = await agent(verifier_prompt(f, chunk_context(artifact, f), excerpts), sem)
+        verdict, meta = await agent(verifier_prompt(f, chunk_context(artifact, f), excerpts, notes), sem)
         stats["agent_calls"] += 1
         stats["cost_usd"] = round(stats["cost_usd"] + meta.get("cost_usd", 0.0), 6)
         return apply_verdict(f, verdict, excerpts)

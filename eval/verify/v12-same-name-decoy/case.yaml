@@ -1,0 +1,12 @@
+why: 'Two classes have send(); only FastClient.send has a timeout. The code uses LegacyClient: the violation
+  is real.'
+artifact: src/partners/push.ts
+kind: code
+finding:
+  statement_id: JRFC-0006.1
+  quote: await new LegacyClient(url).send(booking);
+  message: The call to the partner sends the booking without an explicit timeout.
+  depends_on: []
+expected:
+  verdict: confirmed
+  evidence: []

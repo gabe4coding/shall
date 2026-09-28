@@ -168,6 +168,19 @@ def cmd_list(args, cfg) -> int:
     return EXIT_OK
 
 
+def cmd_prefetch(args) -> int:
+    """Download the tree-sitter grammars for the languages in this repository (CI caches them)."""
+    from .codegraph import RepoIndex, treesitter_available
+    if not treesitter_available():
+        print("tree-sitter is not installed; verification uses keyword search only", file=sys.stderr)
+        return EXIT_OK
+    from tree_sitter_language_pack import cache_dir, detect_language_from_path, download
+    langs = sorted({lang for f in RepoIndex(Path.cwd()).all_files() if (lang := detect_language_from_path(f))})
+    count = download(langs) if langs else 0
+    print(f"grammars for {', '.join(langs) or 'no language'} ({count} downloaded) in {cache_dir()}")
+    return EXIT_OK
+
+
 def cmd_catalog(args, cfg) -> int:
     from .index import build_index, render_catalog
     corpus = load_corpus(cfg)
@@ -437,6 +450,24 @@ def cmd_eval(args, cfg) -> int:
     return EXIT_OK
 
 
+def cmd_eval_verify(args, cfg) -> int:
+    from .evaluate import render_verify_eval, run_verify_eval
+    from .jev import Jev
+    corpus = load_corpus(cfg)
+    models = [m for m in args.models.split(",") if m]
+    retrievals = ["keyword", "treesitter"] if args.retrieval == "all" else [args.retrieval]
+
+    async def run():
+        async with Jev(cfg) as jev:
+            return await run_verify_eval(cfg, corpus, jev, Path(args.cases), models, retrievals)
+
+    report = asyncio.run(run())
+    if args.out:
+        _dump(report, args.out)
+    print(render_verify_eval(report))
+    return EXIT_OK
+
+
 # ---------------------------------------------------------------- parser
 
 
@@ -469,6 +500,9 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("fetch", help="download (or --update) the extended corpus into the cache")
     s.add_argument("--update", action="store_true", help="re-fetch even if cached (for branch refs)")
     s.set_defaults(fn=cmd_fetch)
+
+    s = sub.add_parser("prefetch", help="download tree-sitter grammars for this repository's languages (CI)")
+    s.set_defaults(fn=cmd_prefetch, no_config=True)
 
     s = sub.add_parser("catalog", help="print the merged catalog (organisation + local)")
     s.set_defaults(fn=cmd_catalog)
@@ -553,6 +587,13 @@ def build_parser() -> argparse.ArgumentParser:
                    help="fail threshold (default: conflicts.fail_threshold in jrfc.yaml)")
     s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_conflicts)
+
+    s = sub.add_parser("eval-verify", help="measure verification verdicts and evidence recall on fixture repos")
+    s.add_argument("--cases", default="eval/verify")
+    s.add_argument("--models", default="claude-sonnet-5", help="comma-separated verifier models")
+    s.add_argument("--retrieval", choices=["keyword", "treesitter", "all"], default="all")
+    s.add_argument("--out")
+    s.set_defaults(fn=cmd_eval_verify)
 
     s = sub.add_parser("eval", help="measure selection recall/precision on labelled cases")
     s.add_argument("--labels", default="eval/labels.yaml")

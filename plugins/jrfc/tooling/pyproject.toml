@@ -3,7 +3,12 @@ name = "jrfc"
 version = "0.1.0"
 description = "jrfc: RFC-2119 standards corpus tooling - lint, index, Jev-based applicability selection, agent review, CI reports"
 requires-python = ">=3.11"
-dependencies = ["typesafe-sdk>=0.7.2,<0.8", "pyyaml>=6"]
+dependencies = [
+    "typesafe-sdk>=0.7.2,<0.8",
+    "pyyaml>=6",
+    "tree-sitter>=0.25",
+    "tree-sitter-language-pack>=1.0",
+]
 
 [project.scripts]
 jrfc = "jrfc.cli:main"

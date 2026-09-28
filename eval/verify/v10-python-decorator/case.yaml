@@ -1,0 +1,13 @@
+why: sync_slots has timeout=None in its signature, but the @with_timeout(3) decorator fills it in. Without
+  the decorator a verifier can wrongly confirm.
+artifact: jobs/partner_sync.py
+kind: code
+finding:
+  statement_id: JRFC-0006.1
+  quote: sync_slots(r.id, r.slots)
+  message: The call to the partner API does not pass a timeout, and sync_slots defaults it to None.
+  depends_on: []
+expected:
+  verdict: refuted
+  evidence:
+  - 'partners/transport.py: kwargs.setdefault'

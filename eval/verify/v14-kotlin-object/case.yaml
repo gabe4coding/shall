@@ -1,0 +1,12 @@
+why: 'Kotlin: cross-file chain through the language''s own import and call syntax.'
+artifact: src/main/kotlin/com/tf/partners/PartnerGateway.kt
+kind: code
+finding:
+  statement_id: JRFC-0006.1
+  quote: Clients.partner.newCall(Request.Builder().url(url).build()).execute().close()
+  message: The HTTP call to the partner is executed without an explicit timeout.
+  depends_on: []
+expected:
+  verdict: refuted
+  evidence:
+  - 'src/main/kotlin/com/tf/http/Clients.kt: .callTimeout(Duration.ofSeconds(3))'

@@ -32,5 +32,7 @@ review:
   model: claude-sonnet-5   # pinned id, not the `sonnet` alias (JTOOL-0001.4)
   timeout: 300             # seconds per agent call
   verify: true             # a finding blocks only if the verifier saw its evidence
+  verify_retrieval: treesitter  # treesitter (code graph + keyword) | keyword
+  # verify_model: claude-haiku-4-5-20251001   # measured: same accuracy, same cost, 2.7x slower
   concurrency: 4
   max_comments: 25

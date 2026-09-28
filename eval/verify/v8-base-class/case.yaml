@@ -1,0 +1,13 @@
+why: 'notify() uses this.http, created with a timeout in the base class: notify -> PartnerClient extends
+  BaseHttpClient.'
+artifact: src/bookings/notify.ts
+kind: code
+finding:
+  statement_id: JRFC-0006.1
+  quote: await this.partner.notify(bookingId);
+  message: The call to the partner service does not set an explicit timeout.
+  depends_on: []
+expected:
+  verdict: refuted
+  evidence:
+  - 'src/http/base.ts: timeout: 2000'

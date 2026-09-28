@@ -1,0 +1,13 @@
+why: The request is built by Requests.put, which sets .timeout(...); the helper method is far from the
+  class declaration.
+artifact: src/main/java/com/tf/partners/PartnerSync.java
+kind: code
+finding:
+  statement_id: JRFC-0006.1
+  quote: client.send(Requests.put(PARTNER_URI, body), HttpResponse.BodyHandlers.discarding());
+  message: The HTTP request to the partner is sent without an explicit timeout.
+  depends_on: []
+expected:
+  verdict: refuted
+  evidence:
+  - 'src/main/java/com/tf/http/Requests.java: .timeout(DEFAULT_TIMEOUT)'

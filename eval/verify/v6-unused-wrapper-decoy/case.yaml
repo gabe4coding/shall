@@ -1,0 +1,12 @@
+why: 'A request() wrapper with a timeout exists, but the flagged code calls fetch directly: the violation
+  is real.'
+artifact: src/partners/sync.ts
+kind: code
+finding:
+  statement_id: JRFC-0006.1
+  quote: 'await fetch(`${partnerUrl}/availability`, { method: "PUT", body: JSON.stringify(slots) });'
+  message: The call to the partner API uses fetch without an explicit timeout.
+  depends_on: []
+expected:
+  verdict: confirmed
+  evidence: []
