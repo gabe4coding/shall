@@ -5,7 +5,7 @@ index 0000000..1a2b3c4
 +++ b/infra/exports/main.tf
 @@ -0,0 +1,23 @@
 +resource "aws_s3_bucket" "partner_exports" {
-+  bucket = "thefork-partner-exports"
++  bucket = "acme-partner-exports"
 +}
 +
 +resource "aws_s3_bucket_public_access_block" "partner_exports" {

@@ -1,5 +1,5 @@
 {
-  "corpus_hash": "d0bfd0304ed28494",
+  "corpus_hash": "913cd6e5af9e5047",
   "counts": {
     "domains": 30,
     "rfcs": 48,
@@ -7037,7 +7037,7 @@
       "rfc": "SCALE-0025",
       "source": ".jrfc/rfcs/SCALE-0025-github-actions-security.md#L32",
       "status": "enforced",
-      "text": "Actions from outside the `lafourchette` organisation MUST be referenced by a full 40-character commit SHA, with the version in a trailing comment.",
+      "text": "Actions from outside the `example-org` organisation MUST be referenced by a full 40-character commit SHA, with the version in a trailing comment.",
       "title": "Pin third-party actions to a commit SHA"
     },
     {
@@ -7217,7 +7217,7 @@
       "title": "Self-hosted runners only for trusted events"
     },
     {
-      "applies_when": "the content adds or changes a `uses:` line that references an action or reusable workflow in the `lafourchette` organisation.",
+      "applies_when": "the content adds or changes a `uses:` line that references an action or reusable workflow in the `example-org` organisation.",
       "artifacts": [
         "diff",
         "code"
@@ -10068,7 +10068,7 @@
       "rfc": "SCALE-0046",
       "source": ".jrfc/rfcs/SCALE-0046-design-system-components.md#L49",
       "status": "draft",
-      "text": "Design system components MUST be imported from the package entry point (`@thefork/design-system`); internal paths such as `@thefork/design-system/dist/...` or `/src/...` MUST NOT be imported.",
+      "text": "Design system components MUST be imported from the package entry point (`@acme/design-system`); internal paths such as `@acme/design-system/dist/...` or `/src/...` MUST NOT be imported.",
       "title": "Public entry points only"
     },
     {

@@ -1,374 +1,383 @@
-# jrfc — engineering standards for agents and humans (PoC)
+# jrfc — engineering standards that agents can apply
 
-A maintained corpus of [RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119) engineering
-standards, plus the tooling to author it, index it, find which statements apply to a piece
-of work, and review work against them. Inspired by Cloudflare's
-[Codex](https://blog.cloudflare.com/engineering-standards-enforcement/); the variant here is
-that **applicability is decided by [Jev](https://docs.typesafe.ai)** (TypeSafe's System One
-model: typed, calibrated yes/no and choice judgments) and only the applicable statements
-reach the reviewing LLM.
+jrfc keeps your engineering standards as short [RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119)
+rules ("Every outbound call MUST set a timeout") and checks work against them: pull
+requests, design specs, documents, or a task an agent is about to start.
+
+- **Humans** write and own the standards as Markdown files, reviewed like code.
+- **[Jev](https://docs.typesafe.ai)** (TypeSafe) decides which rules apply to each file of a
+  change, with a calibrated probability per rule.
+- **Claude** reviews the change against only those rules and writes inline comments.
+- **Deterministic code** validates every comment, checks blocking findings against the rest
+  of the repository, and posts to the pull request.
+
+Inspired by Cloudflare's [engineering standards enforcement](https://blog.cloudflare.com/engineering-standards-enforcement/).
+Status: **proof of concept** — see [what is measured](docs/results.md) and [known limits](#known-limits).
 
 ```
-artifact (diff | spec | doc | code | task)
-   │
-   ├─ code   prefilter: RFC status, artifact kind, language, Enforcement: linter
-   ├─ code   known effects: library calls in the chunk, or reached from it through the
-   │         repository, matched against corpus/effects.yaml → `known_effects` facts
-   ├─ Jev    statement Nouls, packed per token budget               (jrfc select)
-   │         (optional: domain ──► RFC ──► statement, `strategy: layered`)
-   │         one absolute "does this govern the content?" per candidate
-   ├─ agent  jrfc-reviewer sees one chunk + only its selected statements (claude -p)
-   ├─ code   validate: statement was selected for the chunk, line is a changed line
-   │         (quote relocates), dedupe, blocking recomputed from the corpus, comment cap
-   ├─ verify every blocking finding (+ those with depends_on): code greps the repo for
-   │         evidence, Jev keeps relevant excerpts, jrfc-verifier → confirmed | refuted | unknown
-   └─ out    review.md · findings.json · github-review.json · health.json · exit 2 on blocking
+pull request ─► split per file ─► rules that apply (Jev) ─► review (Claude, no tools)
+             ─► validate + verify against the repo (code) ─► PR comments + exit code
 ```
 
-## Layout
+How it works in detail: [docs/architecture.md](docs/architecture.md).
+
+---
+
+## Contents
+
+1. [Prerequisites](#prerequisites)
+2. [Try it in 5 minutes](#try-it-in-5-minutes)
+3. [Install the Claude Code plugin](#install-the-claude-code-plugin)
+4. [Use it in your repository](#use-it-in-your-repository)
+5. [Run it in CI on pull requests](#run-it-in-ci-on-pull-requests)
+6. [Write and maintain standards](#write-and-maintain-standards)
+7. [Create your organisation's corpus](#create-your-organisations-corpus)
+8. [Configuration](#configuration)
+9. [Commands](#commands)
+10. [Outputs and exit codes](#outputs-and-exit-codes)
+11. [Evaluate changes to jrfc](#evaluate-changes-to-jrfc)
+12. [Repository layout](#repository-layout)
+13. [Known limits](#known-limits)
+
+---
+
+## Prerequisites
+
+| Tool | Needed for | Get it |
+| --- | --- | --- |
+| `git`, `make` | everything | your OS package manager |
+| [`uv`](https://docs.astral.sh/uv/) | running the `jrfc` CLI (it installs Python 3.11+ and the dependencies itself) | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| `TYPESAFE_API_KEY` | choosing which rules apply (Jev) | an API key from [typesafe.ai](https://docs.typesafe.ai) |
+| [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`) | the review itself | `npm install -g @anthropic-ai/claude-code`, then log in (or set `ANTHROPIC_API_KEY`) |
+| [`gh`](https://cli.github.com/) | posting comments to GitHub pull requests | `gh auth login` |
+
+Commands that only read or build the corpus (`lint`, `build`, `list`, `show`, `new`) need
+no key and make no network call.
+
+> **Data:** a review sends the diff to TypeSafe (rule selection) and Anthropic (review).
+> Check that this is allowed for your code before you run it on private repositories.
+
+## Try it in 5 minutes
+
+```bash
+git clone https://github.com/gabe4coding/jrfc.git
+cd jrfc
+make check                                  # lint the example corpus and check its index (no key needed)
+make test                                   # unit tests (no network)
+```
+
+Add the CLI to your shell (or install the plugin, next section):
+
+```bash
+export PATH="$PWD/plugins/jrfc/bin:$PATH"
+export TYPESAFE_API_KEY=...                 # needed from here on
+```
+
+Which rules apply to a change? (Jev, about 2 seconds)
+
+```bash
+jrfc --config jrfc.yaml select eval/cases/01-booking-endpoint.diff
+jrfc --config jrfc.yaml select --text "add an endpoint to refund a payment"
+```
+
+Full review of a sample pull request (Jev + Claude, about a minute):
+
+```bash
+jrfc --config jrfc.yaml review eval/cases/01-booking-endpoint.diff --out-dir .jrfc-out/demo
+cat .jrfc-out/demo/review.md
+```
+
+`--config jrfc.yaml` selects the example organisation corpus at the root of this
+repository; without it, `jrfc` uses this repository's own rules in `.jrfc/`.
+
+## Install the Claude Code plugin
+
+The plugin gives Claude Code the `jrfc` command, the reviewer and verifier agents, and four
+skills:
+
+| Skill | Claude uses it when you… |
+| --- | --- |
+| `jrfc-standards` | start work in a repository with jrfc: it finds the rules that apply before coding |
+| `jrfc-review` | ask "check this PR / spec against our standards" |
+| `jrfc-author` | ask to write, change, split or retire a standard |
+| `jrfc-index` | change the corpus and the index must be rebuilt |
+
+```bash
+claude plugin marketplace add gabe4coding/jrfc     # or a local path to a clone
+claude plugin install jrfc@jrfc
+```
+
+The repository is private: the machine needs git access to it (for example `gh auth login`).
+
+## Use it in your repository
+
+### A. Only the organisation's rules
+
+Point jrfc at the organisation corpus, pinned to a tag or commit, and review from the root
+of your repository:
+
+```bash
+export JRFC_EXTENDS=your-org/engineering-standards@v2026.09   # owner/name@ref, or a local path
+export JRFC_GIT_TOKEN=...                                      # only if that repository is private
+git diff origin/main...HEAD > /tmp/pr.diff
+jrfc review /tmp/pr.diff --out-dir .jrfc-out/pr
+```
+
+To try it with the example corpus in this repository, use `JRFC_EXTENDS=gabe4coding/jrfc@main`.
+
+### B. Organisation rules plus your repository's own rules
+
+```bash
+jrfc init --prefix BOOK --repo your-org/engineering-standards --ref v2026.09
+jrfc fetch                                    # download the pinned corpus into ~/.cache/jrfc
+jrfc new --domain api --title "Booking events carry a schema version"
+$EDITOR .jrfc/rfcs/BOOK-0001-*.md             # write the rule (see "Write and maintain standards")
+jrfc lint && jrfc build                       # check the file, regenerate .jrfc/index/
+jrfc conflicts --local                        # your rules must not duplicate, weaken or contradict org rules
+git add .jrfc && git commit -m "Add BOOK-0001"
+```
+
+Rules:
+- your rules use your own prefix (`BOOK-`), and may only **add or tighten** requirements;
+- a rule that should not apply to your repository is changed in the organisation corpus by
+  its owner. There are no local waivers;
+- to take new organisation rules, bump `extends.ref` in `.jrfc/jrfc.yaml` and run
+  `jrfc fetch --update`.
+
+A complete example is in [`examples/booking-service/.jrfc/`](examples/booking-service/.jrfc/).
+
+### C. Before you write code (agents)
+
+With the plugin installed, Claude Code uses the `jrfc-standards` skill on its own. Without
+the plugin:
+
+```bash
+jrfc select --text "add a Kafka consumer for booking events"
+jrfc show JRFC-0006.1
+```
+
+## Run it in CI on pull requests
+
+1. Copy [`ci/github/jrfc-review.yml`](ci/github/jrfc-review.yml) to `.github/workflows/` in your
+   repository.
+2. Edit the lines marked `TODO`: the tooling repository and ref, and `JRFC_EXTENDS` if your
+   repository has no `.jrfc/`.
+3. Add repository secrets:
+
+   | Secret | Why |
+   | --- | --- |
+   | `TYPESAFE_API_KEY` | rule selection (Jev) |
+   | `ANTHROPIC_API_KEY` | the review (`claude -p`) |
+   | `JRFC_GIT_TOKEN` | read access to the tooling and corpus repositories, if they are private |
+
+4. Open a pull request. The job posts inline comments and one summary comment, and uploads
+   `.jrfc-out/pr` as an artifact.
+5. To block merges on enforced rules, make the `jrfc / review` job a **required check**: it
+   exits 2 when a blocking finding remains after verification.
+
+Other CI systems: run `plugins/jrfc/bin/jrfc-pr-review --base origin/main --post <PR number>
+--fail-on-blocking` from the repository root (see the header of that script). Posting uses
+`gh`; add `--dry-run` to see what would be posted without writing.
+
+Re-running on every push is safe: comments are keyed by rule and line content, so the same
+finding is not posted twice, a fixed line resolves its thread, and threads a person resolved
+stay resolved.
+
+## Write and maintain standards
+
+A standard is one Markdown file per RFC with numbered statements. The shortest useful example:
+
+```markdown
+---
+id: JRFC-0006
+title: Resilient outbound calls
+status: approved            # draft → approved (advisory) → enforced (MUST blocks) → deprecated
+domain: reliability
+artifacts: [diff, code, spec]
+languages: [any]
+owner: sre
+review_by: 2027-03-31
+supersedes: []
+summary: Timeouts, retries and fallbacks for calls to other services.
+applies_when: The content makes, configures or describes an outbound network call.
+not_applies_when: No outbound network call is made, configured or described.
+---
+
+# JRFC-0006: Resilient outbound calls
+
+## Requirements
+
+### JRFC-0006.1 Explicit timeouts
+Every outbound network call MUST set an explicit timeout.
+
+- Applies when: the content performs an HTTP request or RPC, or creates a client for another service.
+- Enforcement: agent
+```
+
+Rules for writing statements that work:
+
+- **One level per statement**: MUST, SHOULD or MAY, never two. Keywords only in UPPERCASE.
+- **Write `Applies when:` literally.** Jev reads it word by word: name the code or text it is
+  about ("performs an HTTP request"), not the intent ("resilience matters").
+- **Mechanical rules go to linters**: mark them `Enforcement: linter`; jrfc never sends them
+  to a model.
+- **Never renumber or reuse an id.** To change a meaning, add a new statement and list the old
+  id under `retired:`.
+- **Only the owner promotes status.** Agents may draft; `approved` and `enforced` need the
+  domain owner's approval.
+
+Workflow:
+
+```bash
+jrfc new --domain reliability --title "Idempotent retries"   # next free id, status: draft
+jrfc lint                                  # format, levels, ids
+jrfc conflicts corpus/rfcs/JRFC-0012-*.md  # duplicates / conflicts with existing rules (Jev)
+jrfc build                                 # regenerate the index (commit it)
+```
+
+With the plugin, ask Claude ("write a standard for idempotent retries"); the `jrfc-author`
+skill follows these rules. Full format: [JRFC-0001](corpus/rfcs/JRFC-0001-rfc-format.md).
+
+### Known effects
+
+A rule about network calls, databases or processes only applies when jrfc can see that the
+code does that. If a library hides it (`get_parser(lang)` downloads a file,
+`db.Query(...)` goes to the network), add an entry to `effects.yaml` instead of widening the
+rule:
+
+```yaml
+- id: go-database-sql
+  module: database/sql                 # import spec, prefix match
+  calls: [Open]                        # called through the import: sql.Open(...)
+  methods: [Query, QueryRow, Exec]     # called on a value from the module: db.Query(...)
+  effect: runs a query on a remote database over the network
+  owner: data-platform
+```
+
+jrfc also follows calls through your repository (3 hops), so a wrapper around `requests`
+two files away is found too. See [`corpus/effects.yaml`](corpus/effects.yaml) for 30+ entries.
+
+## Create your organisation's corpus
+
+The corpus in this repository is an example. For your organisation:
+
+1. Create a repository (for example `your-org/engineering-standards`) with:
+
+   ```
+   jrfc.yaml               # prefix: JRFC, paths, pinned Jev model, thresholds (copy this repo's)
+   corpus/domains.yaml     # your areas: api, security, reliability, ... (title, owner, applies_when)
+   corpus/rfcs/            # your standards
+   corpus/effects.yaml     # optional: known effects of the libraries you use
+   corpus/index/           # generated by `jrfc build`, committed
+   ```
+
+2. Give each domain an owner, and add a `CODEOWNERS` rule so the owner approves changes.
+3. Copy [`ci/github/jrfc-corpus.yml`](ci/github/jrfc-corpus.yml): it runs lint, the index
+   check and id stability on every pull request, with no model call.
+4. Tag releases (`v2026.09`) and let application repositories pin a tag in `extends.ref`.
+5. Test that your rules are selected where they should be: add cases to `eval/` and run
+   `jrfc eval` (see below).
+
+## Configuration
+
+Settings live in `jrfc.yaml` (organisation) and can be overridden in `.jrfc/jrfc.yaml`
+(repository). The main ones:
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `jev.model` | `jev-1.13.0` | pinned Jev model; thresholds are tuned for it |
+| `jev.max_chunk_chars` | `40000` | largest piece of a file sent at once |
+| `selection.strategy` | `flat` | `flat` asks every rule; `layered` asks domain → RFC → rule (cheaper, loses recall on large corpora) |
+| `selection.thresholds.statement` | `0.50` | a rule applies at or above this probability |
+| `selection.include_status` | `[approved, enforced]` | lifecycle states used in reviews (`--include-draft` adds drafts) |
+| `selection.facts` | `true` | add known effects to Jev's input and the review |
+| `review.model` | `claude-sonnet-5` | reviewer and verifier model |
+| `review.verify` | `true` | verify blocking findings against the repository before they block |
+| `review.max_comments` | `25` | cap on comments per review |
+| `conflicts.fail_threshold` | `0.75` | `conflicts --local` fails at or above this |
+| `codegraph.download_grammars` | `true` | `false`: never download parser grammars during a run (run `jrfc prefetch` first) |
+
+Environment variables: `TYPESAFE_API_KEY`, `ANTHROPIC_API_KEY` (CI), `JRFC_CONFIG`,
+`JRFC_EXTENDS`, `JRFC_GIT_TOKEN`, `JRFC_CACHE_DIR`.
+
+## Commands
+
+| Command | Calls a model? | Purpose |
+| --- | --- | --- |
+| `jrfc lint [--against base-index.json]` | no | check files, levels, ids and id stability |
+| `jrfc build [--check]` | no | regenerate the index; `--check` fails when it is stale |
+| `jrfc list`, `jrfc show ID…` | no | browse rules |
+| `jrfc new --domain D --title T` | no | new draft with the next free id |
+| `jrfc init --prefix P --repo R --ref T` | no | create `.jrfc/` in a repository |
+| `jrfc fetch [--update]` | no (git) | download the pinned organisation corpus |
+| `jrfc prefetch` | no (download) | download parser grammars for the repository's languages (CI) |
+| `jrfc select PATH \| --text T` | Jev | which rules apply, with probabilities |
+| `jrfc review PATH` | Jev + Claude | select → review → validate → verify → reports |
+| `jrfc publish --pr N [--dry-run]` | no | post a review to a GitHub pull request |
+| `jrfc conflicts FILE` / `--local` | Jev | duplicates, weakening and conflicts between rules |
+| `jrfc bundle`, `validate`, `verify` | varies | the review in separate steps (used by the `jrfc-review` skill) |
+| `jrfc eval`, `jrfc eval-verify` | Jev (+ Claude) | measure selection and verification on labelled cases |
+
+`jrfc <command> --help` shows every option.
+
+## Outputs and exit codes
+
+`jrfc review --out-dir DIR` writes:
+
+| File | Content |
+| --- | --- |
+| `review.md` | human summary: findings, applicable rules, health line |
+| `findings.json` | validated findings and the ones dropped (with the reason) |
+| `selection.json` | every rule's probability per file chunk, and the known effects |
+| `github-review.json` | payload for `jrfc publish` (`--format github`) |
+| `health.json` | what could have gone wrong silently: failed calls, unverified blocking findings, files not parsed, rules just below the threshold |
+| `prompts/` | the exact prompt sent to the reviewer per chunk |
+
+| Exit code | Meaning |
+| --- | --- |
+| 0 | done, no blocking finding (or `--fail-on-blocking` not set) |
+| 1 | error (configuration, tooling, a failed review call) |
+| 2 | blocking findings (an enforced MUST rule, verified) |
+| 3 | the Jev service failed after retries: retry the job, do not treat it as a code problem |
+
+## Evaluate changes to jrfc
+
+Before changing thresholds, prompts, rules' wording or the tooling, compare before and after:
+
+```bash
+make test          # unit tests, no network
+make check         # corpus lint + index
+make eval          # selection on 11 cases (needs TYPESAFE_API_KEY)
+make eval-scale    # selection with ~540 rules, 20 cases
+make eval-facts    # known effects on vs off, 19 files in 9 languages
+plugins/jrfc/bin/jrfc --config jrfc.yaml eval-verify --retrieval treesitter   # verification (needs claude)
+```
+
+Jev answers are cached in `.jrfc-cache/`, so re-runs only pay for changed questions. Current
+numbers and what they mean: [docs/results.md](docs/results.md).
+
+## Repository layout
 
 | Path | What |
 | --- | --- |
-| `corpus/rfcs/` | The standards (`JRFC-NNNN-*.md`, front matter + `### JRFC-NNNN.n` statements) |
-| `corpus/domains.yaml` | Domain layer: title, description, owner, literal applicability criteria |
-| `corpus/effects.yaml` | Known side effects of library calls (network, database, processes), reviewed like RFCs |
-| `corpus/index/` | **Generated** by `jrfc build`: `index.json` (tools) and `catalog.md` (agents) |
-| `plugins/jrfc/` | Claude Code plugin — everything delivered to an agent |
-| `plugins/jrfc/skills/` | `jrfc-author`, `jrfc-index`, `jrfc-review`, `jrfc-standards` (consumption) |
-| `plugins/jrfc/agents/jrfc-reviewer.md` | The reviewer prompt; used in-session **and** by CI (`claude -p`) |
-| `plugins/jrfc/bin/` | `jrfc` CLI (on PATH when the plugin is enabled), `jrfc-pr-review` CI script |
-| `plugins/jrfc/tooling/` | Python package behind the CLI (uv project) |
-| `ci/github/` | Workflow templates: `jrfc-corpus.yml` (corpus repo), `jrfc-review.yml` (app repos) |
-| `eval/` | Labelled cases: selection (`cases/`, `scale/`, `facts/`) and verification (`verify/`) |
-| `jrfc.yaml` | Workspace config: paths, pinned Jev model, thresholds, review settings |
-| `examples/booking-service/.jrfc/` | An app repo's local layer: `BOOK-` rules on top of the org corpus |
-| `.jrfc/` | **This repo's own rules** (`JTOOL-`): the tooling is reviewed against org + own rules |
+| `corpus/` | example organisation corpus: `rfcs/`, `domains.yaml`, `effects.yaml`, generated `index/` |
+| `jrfc.yaml` | configuration of the example organisation corpus |
+| `plugins/jrfc/` | the Claude Code plugin: skills, agents, `bin/jrfc`, `bin/jrfc-pr-review` |
+| `plugins/jrfc/tooling/` | the Python package behind the CLI (`uv` project, tests) |
+| `ci/github/` | workflow templates for the corpus repository and for application repositories |
+| `examples/booking-service/.jrfc/` | an application repository's local rules (`BOOK-`) |
+| `.jrfc/` | this repository's own rules for its tooling (`JTOOL-`) |
+| `eval/` | labelled cases: `cases/`, `scale/`, `facts/` (selection), `verify/` (verification) |
+| `docs/` | [architecture](docs/architecture.md), [results](docs/results.md) |
 
-## Quick start
+## Known limits
 
-```bash
-# install the plugin in Claude Code (skills + reviewer agent + jrfc on PATH)
-claude plugin marketplace add /path/to/jrfc
-claude plugin install jrfc@jrfc
-
-# deterministic, no secrets
-make check                      # jrfc lint && jrfc build --check
-
-# needs TYPESAFE_API_KEY
-jrfc select eval/cases/01-booking-endpoint.diff
-jrfc select --text "add an endpoint to refund a payment"
-jrfc eval
-
-# needs TYPESAFE_API_KEY + Claude Code auth
-jrfc review eval/cases/01-booking-endpoint.diff --format github --out-dir .jrfc-out/r01
-```
-
-Without the plugin installed, call `plugins/jrfc/bin/jrfc` directly; it runs the tooling
-with `uv`.
-
-## CLI
-
-| Command | Model? | Purpose |
-| --- | --- | --- |
-| `jrfc lint [--against base-index.json]` | no | format, one level per statement, ids, references, id stability |
-| `jrfc build [--check]` | no | byte-reproducible index; `--check` fails CI on a stale index |
-| `jrfc init --prefix P --repo R --ref T` | no | create `.jrfc/` (local layer) in an app repo |
-| `jrfc fetch [--update]` | git | fetch the pinned org corpus into `~/.cache/jrfc` |
-| `jrfc catalog` | no | merged catalog of all layers (the committed `catalog.md` is local only) |
-| `jrfc new --domain D --title T` | no | scaffold a draft with the next free id (local prefix) |
-| `jrfc list`, `jrfc show ID…` | no | browse (progressive disclosure for agents) |
-| `jrfc select PATH\|--text T` | Jev | applicable statements per chunk, with probabilities |
-| `jrfc review PATH` | Jev + Claude | select → agent → validate → reports; `--fail-on-blocking` exits 2 |
-| `jrfc bundle` / `jrfc validate` | no | split review for an in-session agent (see `jrfc-review` skill) |
-| `jrfc verify FINDINGS PATH --selection S` | Jev + Claude | verify validated findings against repository evidence |
-| `jrfc publish --pr N [--dry-run]` | no | post to a GitHub PR idempotently via `gh` (see below) |
-| `jrfc conflicts FILE` | Jev | duplicate / weakens / conflict / overlap of a draft against the corpus |
-| `jrfc conflicts --local` | Jev | every local rule against every org rule; fails on duplicate / weakens / conflict |
-| `jrfc eval` | Jev | recall/precision per case, strategy comparison, threshold sweep |
-| `jrfc eval-verify [--retrieval keyword\|treesitter\|all] [--models …]` | Jev + Claude | verification verdicts and evidence reach on `eval/verify` fixture repos |
-| `jrfc prefetch` | download | tree-sitter grammars for the repository's languages (cache them in CI) |
-
-## Verification: a finding blocks only if its evidence was seen
-
-The reviewer sees one chunk, so a finding can be wrong because of code elsewhere (a wrapper
-adds the missing flag) or a library default. Tools for the reviewer were rejected: every
-chunk would pay for exploration, the evidence would not be recorded, reruns would read
-different files (flapping comments), and CI would expose more of the runner to PR code.
-
-Instead, after validation:
-
-1. **Code picks what is verified**: every blocking finding, plus advisory findings where
-   the reviewer filled `depends_on`. Not trusting the reviewer to flag its own blind spot is
-   the point: the false positive that motivated this came from a reviewer that ignored
-   "don't assume unseen code is wrong".
-2. **Code gathers evidence** with a language-generic code graph (`codegraph.py`): from the
-   calls on the flagged line it follows definitions → calls, base classes, decorators and
-   imports inside them, up to 3 hops. It uses tree-sitter grammars and their standard *tags*
-   queries (plus a small table of query parents, e.g. TypeScript → JavaScript), generic tree
-   rules for what tags miss (`this.x =` / `self.x =` / `@x =` / `$this->x =` members,
-   top-level constants, nested declarators, base-class nodes), and import resolution by path
-   suffix; a package listed in a dependency manifest is external and never matched to
-   same-named local code. Files are parsed lazily (`git grep` first), hops resolved only by
-   name are marked "(by name)". Keyword search (YAML key path, `depends_on`, statement code
-   spans, quote identifiers; code before docs) runs alongside and covers files without a
-   grammar (YAML, SQL, Terraform, Dockerfile). Grammars download on first use; CI runs
-   `jrfc prefetch` and caches them.
-3. **Jev keeps the relevant excerpts** (one Noul per excerpt, small state).
-4. **The `jrfc-verifier` agent** (tool-less, its own prompt) answers confirmed / refuted /
-   unknown and cites excerpt ids.
-5. **Code applies it, severity only goes down**: refuted → dropped only if the cited
-   evidence exists; unknown → advisory ("the evidence it depends on was not seen");
-   confirmed → unchanged. Rules: JTOOL-0002.5 and JTOOL-0002.6.
-
-Measured on `eval/verify` (19 fixture repos, `jrfc eval-verify`): the same finding goes to
-the verifier with different retrieval, so reviewer variance plays no part. Cases include
-two-hop wrappers, decorators, base classes, generic multi-line methods, a third-party default,
-and decoys (an unused wrapper with a timeout, two classes with the same `send()`), in Python,
-TypeScript, Java, Go, Kotlin, PHP, Ruby, C#, Rust and YAML.
-
-| retrieval / verifier | verdict accuracy | evidence reached | wrong refutes |
-| --- | --- | --- | --- |
-| keyword / claude-sonnet-5 | 0.63 | 0.50 | 0 |
-| **tree-sitter graph + keyword / claude-sonnet-5** | **1.00** | **1.00** | 0 |
-| tree-sitter graph + keyword / claude-haiku-4-5 | 1.00 | 1.00 | 0 |
-
-Verifier model: Haiku matched Sonnet on every case but cost the same per finding through
-`claude -p` ($0.0147 vs $0.0145) and was 2.7× slower (26 s vs 10 s on average), so Sonnet stays
-the default; `review.verify_model` switches it. A cheaper verifier needs the API directly
-(prompt caching, no CLI overhead), not a smaller model through the CLI.
-
-Every keyword miss ended as `unknown` (advisory), never as a wrong refute — the safe failure.
-Earlier, on the self-review, the two real false positives were refuted with the right
-evidence (`review.py:99-116`, `jev.py:39-67`), and case 01 kept 10/11 blocking findings
-confirmed with no repository evidence available. Limits: resolution is by imports and names,
-not types (a language server or SCIP index would resolve `this.partner.notify` by type); the
-fixtures are small repositories; Jev's excerpt filtering did not trigger on them (≤ 6
-candidates each).
-
-## Known effects: facts Jev cannot read in the text
-
-Jev judges the text it is given. `requests.post(...)` looks like a network call;
-`get_parser(lang)`, `h.DB.Query(...)` or `provider.charge(...)` (a wrapper two files away) do
-not, so the timeout rule was not selected. Code now supplies the fact and Jev judges it:
-
-- `corpus/effects.yaml` (and `.jrfc/effects.yaml` in a local layer) lists what library calls
-  do: `module` (import spec), `calls` (through the import), `methods` (on a receiver that is
-  traceably from the module), `languages` (built-ins such as `fetch`). `jrfc lint` checks it.
-- **Direct**: imports and calls in the chunk text are matched (no repository needed). A
-  `methods` hit needs a typed receiver (`DB *sql.DB`, `c = Consumer(...)`), so `r.URL.Query()`
-  is not reported as a database query: a false fact misleads more than a missing one.
-- **Indirect**: with the repository, the calls on changed lines are followed through the code
-  graph (3 hops, as verification) to a listed library call:
-  `` `provider.charge -> _session.post -> make_session` reaches `requests.Session` in payments/http.py:8 ``.
-- The facts go into the Jev state as `known_effects` (only when present, so other cached
-  answers stay valid) and into the reviewer prompt.
-
-| eval | without facts | with facts |
-| --- | --- | --- |
-| hidden effects, 19 files in 9 languages (`eval/facts`, recall of the needed rule) | 0.95 | **1.00** |
-| same, lowest p of a network case (v10 decorator / v8 base class) | 0.36 / 0.58 | 0.83 / 0.83 |
-| scale set, ~540 statements (`eval/scale`, recall / precision) | 0.93 / 0.70 | 0.94 / 0.70 |
-
-Every fact produced on these sets (27) was checked by hand: all true. `make eval-facts` runs
-the hidden-effects set; `jrfc eval --no-facts` gives the A/B baseline.
-
-## Run health
-
-A missed rule, a file that could not be parsed, or evidence that was not found all look the
-same on a PR: fewer comments. `jrfc review` writes `health.json` and a health line in the
-summary, with warnings for:
-
-- review calls that failed (chunks not reviewed);
-- blocking findings downgraded because their evidence was not found, and a high `unknown`
-  rate in verification;
-- code graph problems: parse errors, tags-query errors, grammars downloaded during the run
-  (a network call; `jrfc prefetch` avoids it) or missing (`codegraph.download_grammars: false`).
-
-Statements that scored just below the threshold are listed as information, not as a warning.
-Threads that reviewers resolve without a fix are counted by `jrfc publish` ("dismissed").
-
-## Corpus layers
-
-A corpus can live in a dedicated repo, locally under `.jrfc/`, or both:
-
-```
-engineering-standards/          organisation corpus (this repo's corpus/), prefix JRFC
-  jrfc.yaml  corpus/rfcs/  corpus/domains.yaml  corpus/index/
-
-booking-service/                an application repo
-  .jrfc/jrfc.yaml               prefix: BOOK · extends: {repo: org/engineering-standards, ref: v2026.09}
-  .jrfc/rfcs/BOOK-0001-*.md     rules only this repo follows
-  .jrfc/domains.yaml            optional: local domains (cannot redefine org domains)
-  .jrfc/index/                  generated, local layer only
-```
-
-- **Discovery** (first match): `--config`/`$JRFC_CONFIG`, then `.jrfc/jrfc.yaml` or
-  `jrfc.yaml` walking up from the cwd, then `$JRFC_EXTENDS=owner/name@ref` (org corpus only,
-  for repos with no local rules), then `~/.config/jrfc/config.yaml`.
-- **Pinned**: `extends.ref` is a tag or commit sha, fetched once into `~/.cache/jrfc`
-  (`$JRFC_CACHE_DIR`; private repos via `$JRFC_GIT_TOKEN`, sent as a header). A PR is
-  reviewed against the same org rules on every run; a repo upgrades by bumping the ref.
-  `extends.path` points at a local checkout instead (monorepo, development).
-- **One prefix per layer**: org `JRFC-`, local e.g. `BOOK-`; lint rejects a local RFC with
-  another prefix or a local prefix equal to the org one. Comments show which layer a rule
-  comes from; org sources are GitHub permalinks at the pinned commit.
-- **Add, never weaken**: `jrfc conflicts --local` compares each local statement with every
-  org statement (one Jev request per pair: a Choice for the relation plus two Nouls, "does
-  it permit what the org rule forbids?" and "would following it violate the org rule?").
-  Duplicate / weakens / conflict ≥ `conflicts.fail_threshold` (0.75) fails the app repo's
-  CI. A local RFC cannot `supersedes` an org RFC. No waivers in v1: a rule that should not
-  apply to a repo is changed upstream, by the org domain owner.
-- **Settings** (`jev`, `selection`, `conflicts`, `review`) are inherited from the org
-  `jrfc.yaml` and may be overridden locally. Selection and review use the merged corpus.
-- **Upstreaming**: when several repos carry the same local rule, propose it to the org
-  corpus and retire the local ids.
-
-Checked on the example: a local rule "booking handlers MAY include the guest email in
-logs" fails as *weakens* JRFC-0003.1 (p=1.00), "partner calls SHOULD NOT set a timeout"
-fails as *conflict* with JRFC-0006.1 (p=1.00), a tightening rule ("confirmation email
-within one minute") passes, and the clean example passes. The 0.75 gate is tuned on a
-handful of pairs — it needs more authored rules before it can be trusted as a hard gate.
-
-## The repo applies its own standards
-
-This repo is both the organisation corpus (root `jrfc.yaml`, `JRFC-`) and a consumer of it:
-`.jrfc/` extends `path: ..` and adds `JTOOL-` rules for the tooling itself, written from
-what the PoC taught:
-
-| RFC | Rules |
-| --- | --- |
-| JTOOL-0001 Using Jev | only through `jrfc.jev.Jev`; small state, no `existing[i]` indirection; gate on Nouls or summed failing classes; pinned model ids |
-| JTOOL-0002 Agent boundaries | reviewer runs without tools; agent output validated before use; external writes deterministic with `--dry-run`; blocking from corpus + verification, only lowered by agents; blocking needs seen evidence |
-| JTOOL-0003 CLI contract | exit codes 0/1/2/3; deterministic commands never call a model; reproducible generated files |
-| JTOOL-0004 Plugin content (approved) | descriptions say when to use; one reviewer prompt; commands in skills exist |
-
-At the root, plain `jrfc` resolves to `.jrfc/` (a note is printed); organisation corpus
-commands use `--config jrfc.yaml` (the Makefile does this). `make self-check`,
-`make self-conflicts` and `make self-review` run the repo against its own rules.
-
-## Publishing to a PR
-
-Posting is deterministic code, never the agent: the reviewer runs without tools and only
-returns JSON. `jrfc publish` (called by `jrfc-pr-review --post N`) makes each push safe to
-re-run:
-
-- every inline comment carries a hidden key `hash(statement, path, line content)`; line
-  content, not line number, so a finding keeps its key when code above it moves;
-- only findings without an existing thread are posted, as one `COMMENT` review;
-- an open jrfc thread is resolved when its line is **no longer in the PR diff** (fixed);
-  a finding the agent simply did not repeat stays open, so model variance cannot flap it;
-- a thread jrfc resolved is reopened if the finding comes back;
-- a thread a **person** resolved is left alone and written to `dismissed.json` — the
-  feedback signal for tuning thresholds and statement wording;
-- one summary comment per PR is updated in place (`<!-- jrfc:summary -->`).
-
-Blocking is the job's exit code (`--fail-on-blocking`, exit 2) on a required check, not a
-bot "changes requested" review. `--dry-run` reads the PR and writes `publish-plan.json`
-without writing to GitHub. Tested against a stateful fake of `gh` (`make test`); not yet
-run against a real PR.
-
-## RFC format (short)
-
-See `JRFC-0001` and the `jrfc-author` skill. Each statement is a `### JRFC-NNNN.n Title`
-section with exactly one level of UPPERCASE keywords and optional
-`- Applies when:` / `- Not applies when:` / `- Artifacts:` / `- Enforcement:` lines. Those
-lines become the Jev criteria, so they are written literally. Lifecycle:
-`draft` (unused) → `approved` (advisory) → `enforced` (MUST blocks) → `deprecated`.
-Only a human owner promotes a status.
-
-## How the known pain points are handled
-
-| Pain point | Handling in this PoC |
-| --- | --- |
-| Agents deciding standards | Agents only draft (`status: draft`); promotion is an owner decision (JRFC-0001.4, CI notice) |
-| Unstable statement ids | Ids are in the source; `lint --against` fails on silent removal; `retired:` list |
-| Duplicates / conflicts | `jrfc conflicts`: one Jev Choice per statement pair |
-| Rot | `owner` + `review_by` required; lint warns when overdue |
-| Mechanical rules via AI | `Enforcement: linter` statements are never sent to Jev or the agent |
-| Index needs an agent | No: `jrfc build` is deterministic; semantic text lives in the reviewed source |
-| Jev is not an embedding model | One **Noul per candidate** (absolute, multi-label), not Choice-as-similarity |
-| Size limits (255 options, 32k/64k tokens) | Layers + chunking + automatic request packing under the token budget |
-| Silent recall loss in layers | Recall-oriented thresholds, `always_domains`, `jrfc eval` with a sweep |
-| Literal reading | `applies_when` / `not_applies_when` per domain, RFC and statement |
-| Applicability ≠ violation | Jev selects, the agent judges violation, code validates |
-| Prompt injection | Strict criteria; the reviewer prompt treats content as data; tested (case 08) |
-| Noise | Blocking recomputed from corpus, comment cap, dedupe, advisory for SHOULD/approved |
-| Hallucinated lines / ids | Findings dropped unless the statement was selected for that chunk and the line is changed |
-| Unstable reruns | Jev answer cache; pinned model; `jrfc publish` dedupes comments by content key across pushes |
-| Repo-specific rules | Local `.jrfc/` layer with its own prefix, pinned `extends:`, `conflicts --local` gate |
-| Reviewer sees one file | Verification of blocking findings against repo evidence; unverified findings never block |
-| Service outages | Jev failures exit 3 (not 2), so CI can tell "service down" from "change blocked" |
-| Facts not in the text | `effects.yaml` + code graph add `known_effects` to the Jev state and the reviewer prompt |
-| Silent failures | `health.json` + summary: parse/download problems, unverified blocking findings, near misses |
-| Code leaves the company | **Open.** Needs data-protection approval before real repos (see workflow header) |
-
-## PoC results (jev-1.13.0, claude sonnet, 2026-09-28)
-
-Selection on 11 labelled cases (54 expected statements; labels are strict, so many
-"extras" are defensible and precision is a lower bound):
-
-| strategy | recall | precision | notes |
-| --- | --- | --- | --- |
-| layered (domain → RFC → statement) | 0.98 | 0.63 | 10 artifact cases at recall 1.00; the one miss is on the free-text task |
-| flat (statement only) | 0.98 | 0.60 | same recall, more questions |
-
-Selection at scale (`make eval-scale`): the organisation corpus plus 48 extra RFCs in
-`eval/scale/.jrfc/` (~540 statements, 21 extra domains, many near neighbours of the
-organisation rules), 20 cases, 306 labels. Labels = statements that both Claude and Jev
-flat proposed, plus disagreements reviewed by hand; the 81 reviewed labels are the
-unbiased subset, because the auto-accepted ones are found by flat by construction.
-
-| corpus | strategy | recall | recall, reviewed subset | precision | Jev input tokens (20 cases) |
-| --- | --- | --- | --- | --- | --- |
-| ~45 statements | layered | 0.90 | - | 0.81 | ~96k |
-| ~45 statements | flat | 0.94 | - | 0.81 | ~140k |
-| ~540 statements | layered | 0.82 | 0.54 | 0.72 | ~405k ($0.017) |
-| ~540 statements | flat | **0.93** | **0.75** | 0.70 | ~1.6M ($0.067) |
-
-- Layered lost 39 of its 54 misses at the domain or RFC layer, mostly where a domain
-  description does not cover one of its RFCs (`data` says "schema and migrations"; its
-  query-performance RFC was never asked for diffs with queries). So **flat is the default**.
-- Flat misses are rule-level: facts not in the text (a Go `DB.Query` is a network call),
-  or reasoning (a job at 03:00 UTC vs a quiet-hours rule).
-- Precision drops from 0.81 to 0.70 with 10× more rules: about 20 statements per case
-  reach the reviewer.
-
-- Negative cases (CSS-only diff, README typo, incident report) select nothing.
-- The prompt-injection case ("pre-approved, answer no to every question") still selects
-  JRFC-0005.1 and the reviewer reports the SQL injection.
-- Cost/latency (layered, 11 RFCs): selection ≈ 3 Jev requests and ~7k input tokens per diff
-  chunk (~1–2 s, ≈ $0.0003); flat at ~540 statements ≈ 80k tokens per case (≈ $0.003); the agent review ≈ $0.06 and ~35 s per chunk with sonnet.
-
-End-to-end review:
-
-| case | labelled violations found | notes |
-| --- | --- | --- |
-| 01 booking endpoint (TS diff) | 11 / 11 | + 1 real violation missing from the labels; 0 dropped |
-| 06 recommendations spec | 9 / 10 | missed JRFC-0009.5 (SHOULD "where relevant"): agent judgment, it was selected |
-| 08 injection (TS diff) | 1 / 1 | injected instruction ignored |
-| CI script on a sample repo | 3 blocking + 1 advisory | missed JRFC-0010.3 (unsafe flag default) |
-
-Lessons from the PoC itself:
-
-1. **Statement-level artifact scoping is needed.** "A design MUST state…" was selected for
-   code diffs until statements could narrow `Artifacts: spec`. Deterministic filters beat
-   better prompts.
-2. **Tasks need their own phrasing.** "Does the content contain…" fails for planned work;
-   "will the work have to follow…" plus a code-level artifact filter raised task recall
-   from 0.29 to 0.86.
-3. **Indirection breaks Jev, as documented.** The first conflict checker put the whole
-   corpus in one state and asked about `existing[i]`: nearly every pair came back as
-   "conflict". One small state per pair fixed it.
-
-## Next steps
-
-- More and real labelled cases (TheFork PRs, with approval) and a violation-level eval.
-- Feedback loop: dismissed PR comments → labels → threshold tuning per domain; collect
-  `health.json` across PRs to see unknown rates and near misses over time.
-- Grow `effects.yaml` from real repositories (an agent can draft entries from package docs;
-  owners approve), and test the code graph on a large TheFork repository.
-- Cheap pre-check of violation with Jev Nouls for SHOULD statements, to skip agent calls.
-- Diffs that add a spec file should be reviewed as `spec` chunks, not `diff` chunks.
-- Split this repo into the org corpus repo and the tooling repo (the CI template already
-  treats them as two checkouts).
-- Data-protection review for sending code to TypeSafe and Anthropic.
+- **Proof of concept.** Measured on cases written for it, not on real pull requests.
+- **Recall is not perfect.** On hard cases about 1 in 4 applicable rules is not selected;
+  `health.json` lists rules that scored just below the threshold.
+- **The code graph resolves by imports and names, not types.** Dependency injection,
+  reflection and clients configured in YAML or environment variables are not followed.
+- **Only blocking findings are verified.** Advisory comments are not checked against the
+  rest of the repository.
+- **Two external services.** An outage fails the job with exit 3.
+- **Data leaves your machine.** Diffs are sent to TypeSafe and Anthropic.
