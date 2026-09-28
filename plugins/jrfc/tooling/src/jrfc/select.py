@@ -4,8 +4,11 @@ Code prunes what it can decide exactly (status, artifact kind, language, linter 
 Jev answers only semantic questions, one Noul per candidate, so each answer is an
 absolute "does this apply" and several candidates can apply at once.
 
-layered: domain Nouls -> RFC Nouls -> statement Nouls (scales to large corpora)
-flat:    statement Nouls only (small corpora; also the recall baseline for eval)
+flat:    statement Nouls only (default). Questions are packed into as many requests as the
+         token budget needs, so cost grows linearly: ~$0.003 per case at ~540 statements.
+layered: domain Nouls -> RFC Nouls -> statement Nouls. Fewer tokens, but a domain or RFC
+         whose description does not cover all of its rules silently drops them; at ~540
+         statements it lost 11 points of recall (eval/scale).
 """
 
 from __future__ import annotations

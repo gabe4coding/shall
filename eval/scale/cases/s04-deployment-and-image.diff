@@ -1,0 +1,36 @@
+diff --git a/deploy/reviews-api/deployment.yaml b/deploy/reviews-api/deployment.yaml
+new file mode 100644
+index 0000000..1a2b3c4
+--- /dev/null
++++ b/deploy/reviews-api/deployment.yaml
+@@ -0,0 +1,19 @@
++apiVersion: apps/v1
++kind: Deployment
++metadata:
++  name: reviews-api
++spec:
++  replicas: 1
++  selector:
++    matchLabels:
++      app: reviews-api
++  template:
++    metadata:
++      labels:
++        app: reviews-api
++    spec:
++      containers:
++        - name: api
++          image: registry.internal/reviews-api:latest
++          ports:
++            - containerPort: 8080
+diff --git a/services/reviews-api/Dockerfile b/services/reviews-api/Dockerfile
+new file mode 100644
+index 0000000..1a2b3c4
+--- /dev/null
++++ b/services/reviews-api/Dockerfile
+@@ -0,0 +1,5 @@
++FROM python:latest
++COPY . /app
++RUN pip install -r /app/requirements.txt
++ENV DB_PASSWORD=reviews-prod-2024
++CMD ["python", "/app/main.py"]

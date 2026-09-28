@@ -1,0 +1,27 @@
+diff --git a/reviews/consumer.py b/reviews/consumer.py
+new file mode 100644
+index 0000000..1a2b3c4
+--- /dev/null
++++ b/reviews/consumer.py
+@@ -0,0 +1,21 @@
++import json
++
++from confluent_kafka import Consumer
++
++from reviews.store import save_review
++
++consumer = Consumer({
++    "bootstrap.servers": "kafka:9092",
++    "group.id": "reviews-indexer",
++    "enable.auto.commit": True,
++})
++consumer.subscribe(["restaurant.reviews.v1"])
++
++
++def run():
++    while True:
++        msg = consumer.poll(1.0)
++        if msg is None:
++            continue
++        review = json.loads(msg.value())
++        save_review(review["restaurant_id"], review["rating"], review["text"])

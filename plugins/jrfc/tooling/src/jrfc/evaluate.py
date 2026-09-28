@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 
 import yaml
@@ -39,8 +40,26 @@ async def _run_case(cfg: Config, corpus: Corpus, jev: Jev, base: Path, case: dic
     return {
         "case": case["file"], "kind": kind, "expected": sorted(expected), "selected": sorted(got),
         "missed": sorted(expected - got), "extra": sorted(got - expected),
+        "lost_at": {sid: _lost_at(corpus, results, sid) for sid in sorted(expected - got)},
         "recall": recall, "precision": precision, "p_max": p_max,
     }
+
+
+LAYERS = ("prefilter", "domain", "rfc", "statement")
+
+
+def _lost_at(corpus: Corpus, results, sid: str) -> str:
+    """The layer that dropped a missed statement: the deepest layer it reached in any chunk."""
+    rfc, _ = corpus.statement(sid)
+    reached = "prefilter"
+    for r in results:
+        if sid in r.statements:
+            return "statement"
+        if rfc.id in r.rfcs:
+            reached = "rfc"
+        elif rfc.domain in r.domains and reached == "prefilter":
+            reached = "domain"
+    return reached
 
 
 async def run_eval(cfg: Config, corpus: Corpus, jev: Jev, labels_path: Path, strategies: list[str]) -> dict:
@@ -48,7 +67,11 @@ async def run_eval(cfg: Config, corpus: Corpus, jev: Jev, labels_path: Path, str
     base = labels_path.parent
     report = {}
     for strategy in strategies:
+        before, started = dict(jev.usage), time.perf_counter()
         cases = await asyncio.gather(*(_run_case(cfg, corpus, jev, base, c, strategy) for c in labels["cases"]))
+        usage = {k: jev.usage[k] - before.get(k, 0) for k in jev.usage}
+        usage["calls"] = usage["requests"] + usage["cached"]
+        usage["seconds"] = round(time.perf_counter() - started, 1)
         exp = sum(len(c["expected"]) for c in cases)
         hit = sum(len(set(c["expected"]) & set(c["selected"])) for c in cases)
         sel = sum(len(c["selected"]) for c in cases)
@@ -65,7 +88,9 @@ async def run_eval(cfg: Config, corpus: Corpus, jev: Jev, labels_path: Path, str
             "micro_recall": hit / exp if exp else 1.0,
             "micro_precision": hit / sel if sel else 1.0,
             "expected": exp, "selected": sel,
-            "cases": cases, "sweep": sweep,
+            "cases": cases, "sweep": sweep, "usage": usage,
+            "lost_at": {layer: sum(1 for c in cases for v in c["lost_at"].values() if v == layer)
+                        for layer in LAYERS},
         }
     report["usage"] = dict(jev.usage)
     return report
@@ -77,14 +102,19 @@ def render_eval(report: dict) -> str:
         if strategy == "usage":
             continue
         out.append(f"## strategy: {strategy}")
+        u = r["usage"]
         out.append(f"micro recall {r['micro_recall']:.2f} · micro precision {r['micro_precision']:.2f} "
                    f"· {r['selected']} selected / {r['expected']} expected")
+        out.append(f"cost: {u['calls']} Jev calls ({u['cached']} cached) · ~{u['est_input_tokens']:,} input tokens "
+                   f"(~${u['est_input_tokens'] * 0.042 / 1e6:.4f}) · {u['seconds']}s")
+        out.append("missed statements lost at: " + ", ".join(f"{k} {v}" for k, v in r["lost_at"].items()))
         out.append("")
         out.append("| case | kind | recall | precision | missed | extra |")
         out.append("|---|---|---|---|---|---|")
         for c in r["cases"]:
+            missed = ", ".join(f"{m} ({c['lost_at'][m]})" for m in c["missed"])
             out.append(f"| {c['case']} | {c['kind']} | {c['recall']:.2f} | {c['precision']:.2f} | "
-                       f"{', '.join(c['missed']) or '-'} | {', '.join(c['extra']) or '-'} |")
+                       f"{missed or '-'} | {', '.join(c['extra']) or '-'} |")
         out.append("")
         out.append("statement-threshold sweep: " + " · ".join(
             f"t={s['threshold']:.1f} R={s['recall']:.2f} P={s['precision']:.2f}" for s in r["sweep"]))

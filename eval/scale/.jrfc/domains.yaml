@@ -1,0 +1,149 @@
+# Extra domains for the scale evaluation. SCALE RFCs also reuse the organisation domains
+# (api, security, observability, reliability, data, typescript, python, delivery, specs).
+domains:
+  caching:
+    title: Caching
+    description: Application-level caches (in-memory, Redis, CDN, HTTP caching headers), their keys, expiry and invalidation.
+    owner: platform
+    applies_when: The content reads from, writes to or configures a cache, sets HTTP cache headers, or describes a caching layer.
+    not_applies_when: No cache is read, written, configured or described.
+
+  kubernetes:
+    title: Kubernetes workloads
+    description: Kubernetes manifests and Helm charts for services and jobs.
+    owner: sre
+    applies_when: The content adds or changes a Kubernetes manifest, Helm chart or values file (Deployment, Service, Job, CronJob, Ingress, HPA).
+    not_applies_when: No Kubernetes manifest, Helm chart or values file is added, changed or described.
+
+  infrastructure:
+    title: Cloud infrastructure as code
+    description: Terraform and other infrastructure-as-code definitions of cloud resources (networks, buckets, databases, IAM).
+    owner: sre
+    applies_when: The content adds or changes Terraform, CloudFormation or other infrastructure-as-code, or describes cloud resources to create.
+    not_applies_when: No infrastructure-as-code or cloud resource definition is added, changed or described.
+
+  ci:
+    title: CI/CD pipelines
+    description: Build, test and deployment pipeline definitions (GitHub Actions, GitLab CI, Jenkins).
+    owner: platform
+    applies_when: The content adds or changes a CI/CD pipeline or workflow file, or a build or deploy script run by CI.
+    not_applies_when: No pipeline, workflow or CI build/deploy script is added, changed or described.
+
+  containers:
+    title: Container images
+    description: Dockerfiles and container image build and publishing.
+    owner: platform
+    applies_when: The content adds or changes a Dockerfile, a container image build, or a base image.
+    not_applies_when: No Dockerfile or container image build is added, changed or described.
+
+  messaging:
+    title: Messaging and event streaming
+    description: Producers and consumers of Kafka topics, queues and other asynchronous messages between services.
+    owner: platform
+    applies_when: The content produces, consumes or configures messages on Kafka, SQS, RabbitMQ, Pub/Sub or another broker, or defines an event schema.
+    not_applies_when: No message is produced or consumed and no broker or event schema is configured or described.
+
+  pipelines:
+    title: Batch and data pipelines
+    description: Scheduled batch jobs, ETL and ELT pipelines, data warehouse transformations and orchestration (Airflow, dbt, Spark).
+    owner: data-platform
+    applies_when: The content adds or changes a batch job, ETL/ELT step, Airflow DAG, dbt model, Spark job or warehouse transformation.
+    not_applies_when: No batch job, data pipeline or warehouse transformation is added, changed or described.
+
+  accessibility:
+    title: Accessibility
+    description: Accessibility of web and mobile user interfaces for people using assistive technology.
+    owner: frontend
+    applies_when: The content adds or changes user interface markup, components, screens, images, forms, colors or keyboard interaction.
+    not_applies_when: No user interface is added, changed or described.
+
+  i18n:
+    title: Internationalisation and localisation
+    description: Translatable text, locales, number/date/currency formatting and right-to-left support in user-facing products.
+    owner: frontend
+    applies_when: The content adds or changes text shown to users, or formats dates, numbers, currencies or addresses for display.
+    not_applies_when: No user-facing text or display formatting is added, changed or described.
+
+  frontend:
+    title: Web frontend engineering
+    description: React components, client-side state, bundles and web performance for web applications.
+    owner: frontend
+    applies_when: The content adds or changes web frontend code (React components, hooks, client-side state, bundling) or web page performance.
+    not_applies_when: No web frontend code or web page is added, changed or described.
+
+  styling:
+    title: Styling and design system
+    description: CSS, design tokens and use of the shared design system components.
+    owner: design-system
+    applies_when: The content adds or changes CSS, SCSS, styled components, design tokens, colors, spacing or typography.
+    not_applies_when: No styles, design tokens or visual design values are added, changed or described.
+
+  android:
+    title: Android apps
+    description: Kotlin code, Gradle configuration and resources of the Android apps.
+    owner: mobile
+    applies_when: The content adds or changes Android app code, resources, manifests or Gradle build files.
+    not_applies_when: No Android app code, resource, manifest or Gradle file is added, changed or described.
+
+  ios:
+    title: iOS apps
+    description: Swift code, project configuration and resources of the iOS apps.
+    owner: mobile
+    applies_when: The content adds or changes iOS app code (Swift, SwiftUI, UIKit), resources or project configuration.
+    not_applies_when: No iOS app code, resource or project configuration is added, changed or described.
+
+  notifications:
+    title: User notifications
+    description: Emails, push notifications and SMS sent to diners and restaurants.
+    owner: crm
+    applies_when: The content sends, schedules, templates or configures an email, push notification or SMS to users.
+    not_applies_when: No email, push notification or SMS is sent, scheduled, templated or configured.
+
+  privacy:
+    title: Privacy and personal data processing
+    description: Lawful processing, consent, retention and deletion of personal data (GDPR).
+    owner: dpo
+    applies_when: The content collects, stores, shares, exports, retains or deletes personal data, or tracks users.
+    not_applies_when: No personal data is collected, stored, shared, exported, retained or deleted and no user tracking is added.
+
+  testing:
+    title: Automated testing
+    description: Unit, integration and end-to-end tests, test data and test reliability.
+    owner: sdet
+    applies_when: The content adds or changes tests, test fixtures or test configuration, or adds production code whose behavior needs tests.
+    not_applies_when: The content only changes documentation, comments or configuration with no testable behavior.
+
+  documentation:
+    title: Engineering documentation
+    description: READMEs, runbooks, code comments and API reference docs for engineers.
+    owner: architecture
+    applies_when: The content adds or changes a README, runbook, engineering guide, code comment or docstring.
+    not_applies_when: No README, runbook, guide, code comment or docstring is added, changed or described.
+
+  incidents:
+    title: Incident management
+    description: Incident response, incident reports and postmortems for production incidents.
+    owner: sre
+    applies_when: The content is an incident report, a postmortem, an incident timeline, or describes incident response.
+    not_applies_when: The content is not about a production incident or incident response.
+
+  ml:
+    title: Machine learning models
+    description: Training, evaluation, serving and monitoring of machine learning models.
+    owner: data-science
+    applies_when: The content trains, evaluates, serves, deploys or monitors a machine learning model, or describes one.
+    not_applies_when: No machine learning model is trained, evaluated, served or described.
+
+  jvm:
+    title: Java and Kotlin backend services
+    description: Conventions for Java and Kotlin server-side code (Spring Boot services).
+    owner: platform
+    applies_when: The content is or changes Java or Kotlin backend source code.
+    not_applies_when: The content is not Java or Kotlin backend source code.
+
+  go:
+    title: Go services
+    description: Conventions for Go source code in services and command-line tools.
+    owner: platform
+    applies_when: The content is or changes Go source code (.go files).
+    not_applies_when: The content is not Go source code.

@@ -4,7 +4,7 @@ JRFC := plugins/jrfc/bin/jrfc
 # the root resolves to .jrfc/; organisation targets pass --config explicitly.
 ORG := $(JRFC) --config jrfc.yaml
 
-.PHONY: check lint build test eval review-example self-check self-conflicts self-review
+.PHONY: check lint build test eval eval-scale review-example self-check self-conflicts self-review
 
 check: lint          ## organisation corpus: deterministic CI checks (no model calls)
 	$(ORG) build --check
@@ -20,6 +20,9 @@ test:                ## tooling unit tests (no network)
 
 eval:                ## selection recall/precision on eval/cases (needs TYPESAFE_API_KEY)
 	$(ORG) eval --out .jrfc-out/eval.json
+
+eval-scale:          ## selection at scale: ~540 statements (eval/scale), layered vs flat (needs TYPESAFE_API_KEY)
+	$(JRFC) --config eval/scale/.jrfc/jrfc.yaml eval --labels eval/scale/labels.yaml --out .jrfc-out/eval-scale.json
 
 review-example:      ## full pipeline on one case (needs TYPESAFE_API_KEY and claude)
 	$(ORG) review eval/cases/01-booking-endpoint.diff --out-dir .jrfc-out/example --format github
