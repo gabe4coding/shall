@@ -1,0 +1,25 @@
+diff --git a/android/app/src/main/java/com/thefork/reservations/ReservationsActivity.kt b/android/app/src/main/java/com/thefork/reservations/ReservationsActivity.kt
+new file mode 100644
+index 0000000..1a2b3c4
+--- /dev/null
++++ b/android/app/src/main/java/com/thefork/reservations/ReservationsActivity.kt
+@@ -0,0 +1,19 @@
++package com.thefork.reservations
++
++import android.os.Bundle
++import androidx.appcompat.app.AppCompatActivity
++import kotlinx.coroutines.GlobalScope
++import kotlinx.coroutines.launch
++import java.net.URL
++
++class ReservationsActivity : AppCompatActivity() {
++    override fun onCreate(savedInstanceState: Bundle?) {
++        super.onCreate(savedInstanceState)
++        setContentView(R.layout.activity_reservations)
++        val body = URL("https://api.thefork.example/v1/me/reservations").readText()
++        render(body)
++        GlobalScope.launch {
++            refreshBadge()
++        }
++    }
++}

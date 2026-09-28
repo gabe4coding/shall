@@ -1,0 +1,28 @@
+diff --git a/web/src/booking/GuestForm.tsx b/web/src/booking/GuestForm.tsx
+new file mode 100644
+index 0000000..1a2b3c4
+--- /dev/null
++++ b/web/src/booking/GuestForm.tsx
+@@ -0,0 +1,22 @@
++import { useEffect, useState } from "react";
++
++export function GuestForm({ restaurantId }: { restaurantId: string }) {
++  const [slots, setSlots] = useState<string[]>([]);
++  const [name, setName] = useState("");
++
++  useEffect(() => {
++    const timer = setInterval(async () => {
++      const res = await fetch(`/api/restaurants/${restaurantId}/slots`);
++      setSlots(await res.json());
++    }, 5000);
++  }, [restaurantId]);
++
++  return (
++    <form style={{ padding: "13px", color: "#e4002b" }}>
++      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
++      <div onClick={() => submit(name)}>Book now</div>
++      {slots.map((s) => <span>{s}</span>)}
++      <img src="/img/restaurant.jpg" />
++    </form>
++  );
++}

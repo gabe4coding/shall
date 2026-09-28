@@ -39,7 +39,7 @@ DEFAULTS: dict[str, Any] = {
         "max_request_tokens": 56000,
     },
     "selection": {
-        "strategy": "layered",
+        "strategy": "flat",
         "thresholds": {"domain": 0.25, "rfc": 0.30, "statement": 0.50},
         "always_domains": [],
         "include_status": ["approved", "enforced"],

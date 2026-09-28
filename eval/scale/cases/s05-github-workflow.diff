@@ -1,0 +1,20 @@
+diff --git a/.github/workflows/deploy.yml b/.github/workflows/deploy.yml
+new file mode 100644
+index 0000000..1a2b3c4
+--- /dev/null
++++ b/.github/workflows/deploy.yml
+@@ -0,0 +1,14 @@
++name: deploy
++on:
++  pull_request_target:
++    types: [opened, synchronize]
++permissions: write-all
++jobs:
++  deploy:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@main
++        with:
++          ref: ${{ github.event.pull_request.head.sha }}
++      - run: echo "token is ${{ secrets.DEPLOY_TOKEN }}"
++      - run: ./scripts/deploy.sh production

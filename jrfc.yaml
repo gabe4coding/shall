@@ -13,7 +13,9 @@ jev:
   max_request_tokens: 56000  # stay under the 64k request budget
 
 selection:
-  strategy: layered        # layered (domain -> rfc -> statement) | flat (statement only)
+  strategy: flat           # flat (every eligible statement) | layered (domain -> rfc -> statement)
+                           # measured at ~540 statements: flat recall 0.93 vs layered 0.82, ~$0.003 per case
+                           # (make eval-scale); layered drops rules whose domain description is too narrow
   thresholds:              # recall-oriented: a missed rule is silent, a spare rule is cheap
     domain: 0.25
     rfc: 0.30

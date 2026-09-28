@@ -1,0 +1,29 @@
+diff --git a/infra/exports/main.tf b/infra/exports/main.tf
+new file mode 100644
+index 0000000..1a2b3c4
+--- /dev/null
++++ b/infra/exports/main.tf
+@@ -0,0 +1,23 @@
++resource "aws_s3_bucket" "partner_exports" {
++  bucket = "thefork-partner-exports"
++}
++
++resource "aws_s3_bucket_public_access_block" "partner_exports" {
++  bucket                  = aws_s3_bucket.partner_exports.id
++  block_public_acls       = false
++  block_public_policy     = false
++  ignore_public_acls      = false
++  restrict_public_buckets = false
++}
++
++resource "aws_iam_policy" "exporter" {
++  name = "partner-exporter"
++  policy = jsonencode({
++    Version = "2012-10-17"
++    Statement = [{
++      Effect   = "Allow"
++      Action   = "s3:*"
++      Resource = "*"
++    }]
++  })
++}

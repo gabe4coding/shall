@@ -41,7 +41,8 @@ class Jev:
         self.cache: dict = {}
         if use_cache and self.cache_path.is_file():
             self.cache = json.loads(self.cache_path.read_text(encoding="utf-8"))
-        self.usage = {"requests": 0, "cached": 0, "input_tokens": 0}
+        # est_input_tokens counts cached calls too: a cache-independent cost measure for evals
+        self.usage = {"requests": 0, "cached": 0, "input_tokens": 0, "est_input_tokens": 0}
         self._client: AsyncTypeSafeClient | None = None
 
     async def __aenter__(self) -> "Jev":
@@ -90,6 +91,8 @@ class Jev:
 
     async def _ask_one(self, state, questions: dict) -> dict:
         key = self._key(state, questions)
+        self.usage["est_input_tokens"] += est_tokens(state) + sum(
+            est_tokens(q.model_dump(mode="json", exclude_none=True)) for q in questions.values())
         if key in self.cache:
             self.usage["cached"] += 1
             return self.cache[key]
