@@ -32,8 +32,9 @@ FINDINGS_SCHEMA = {
                     "quote": {"type": "string"},
                     "message": {"type": "string"},
                     "suggestion": {"type": "string"},
+                    "depends_on": {"type": "array", "items": {"type": "string"}},
                 },
-                "required": ["statement_id", "line", "quote", "message"],
+                "required": ["statement_id", "line", "quote", "message", "depends_on"],
             },
         }
     },
@@ -48,12 +49,16 @@ def plugin_root() -> Path:
     return Path(__file__).resolve().parents[3]  # tooling/src/jrfc/review.py -> plugins/jrfc
 
 
-def reviewer_prompt() -> str:
-    """The body of agents/jrfc-reviewer.md: one prompt for interactive and CI use."""
-    text = (plugin_root() / "agents" / "jrfc-reviewer.md").read_text(encoding="utf-8")
+def agent_prompt(name: str) -> str:
+    """The body of agents/<name>.md: one prompt for interactive and CI use (JTOOL-0004.2)."""
+    text = (plugin_root() / "agents" / f"{name}.md").read_text(encoding="utf-8")
     if text.startswith("---"):
         text = text.split("---", 2)[2]
     return text.strip()
+
+
+def reviewer_prompt() -> str:
+    return agent_prompt("jrfc-reviewer")
 
 
 def render_statements(corpus: Corpus, ids: list[str]) -> str:
@@ -101,12 +106,14 @@ def write_bundle(corpus: Corpus, artifact: Artifact, selection: dict, out: Path)
     return out
 
 
-async def _run_agent(cfg: Config, prompt: str, sem: asyncio.Semaphore) -> tuple[list[dict], dict]:
+async def run_claude(cfg: Config, prompt: str, system: str, schema: dict,
+                     sem: asyncio.Semaphore) -> tuple[dict | None, dict]:
+    """One tool-less Claude call with a JSON schema (JTOOL-0002.1). Returns (output, meta)."""
     cmd = list(cfg.get("review.command")) + [
         "--model", cfg.get("review.model"),
         "--output-format", "json",
-        "--json-schema", json.dumps(FINDINGS_SCHEMA),
-        "--system-prompt", reviewer_prompt(),
+        "--json-schema", json.dumps(schema),
+        "--system-prompt", system,
         "--tools", "",
         "--no-session-persistence",
         "--strict-mcp-config",
@@ -122,15 +129,20 @@ async def _run_agent(cfg: Config, prompt: str, sem: asyncio.Semaphore) -> tuple[
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()
-            return [], {"error": f"review agent timed out after {cfg.get('review.timeout')}s"}
+            return None, {"error": f"agent timed out after {cfg.get('review.timeout')}s"}
     if proc.returncode != 0:
-        return [], {"error": err.decode()[-2000:] or out.decode()[-2000:]}
+        return None, {"error": err.decode()[-2000:] or out.decode()[-2000:]}
     data = json.loads(out.decode())
-    findings = (data.get("structured_output") or {}).get("findings")
-    if findings is None:  # fall back to parsing the text result
+    result = data.get("structured_output")
+    if result is None:  # fall back to parsing the text result
         m = re.search(r"\{.*\}", data.get("result", ""), re.S)
-        findings = json.loads(m.group(0)).get("findings", []) if m else []
-    return findings, {"cost_usd": data.get("total_cost_usd", 0.0)}
+        result = json.loads(m.group(0)) if m else None
+    return result, {"cost_usd": data.get("total_cost_usd", 0.0)}
+
+
+async def _run_agent(cfg: Config, prompt: str, sem: asyncio.Semaphore) -> tuple[list[dict], dict]:
+    result, meta = await run_claude(cfg, prompt, reviewer_prompt(), FINDINGS_SCHEMA, sem)
+    return (result or {}).get("findings", []), meta
 
 
 async def run_agents(cfg: Config, corpus: Corpus, artifact: Artifact, selection: dict,
@@ -211,7 +223,8 @@ def validate_findings(corpus: Corpus, artifact: Artifact, selection: dict, raw: 
             "blocking": rfc.statement_blocking(st),  # recomputed, never trusted from the model
             "path": chunk.path, "line": line, "quote": f.get("quote", ""),
             "message": f.get("message", ""), "suggestion": f.get("suggestion", ""),
-            "statement_text": st.text,
+            "depends_on": [str(d) for d in f.get("depends_on") or []][:8],
+            "chunk": cid, "statement_text": st.text,
             "source": corpus.source(rfc, st.line),
         })
     kept.sort(key=lambda k: (not k["blocking"], k["path"], k["line"] or 0, k["statement_id"]))
@@ -229,7 +242,7 @@ def render_markdown(artifact: Artifact, selection: dict, findings: list[dict], d
         "",
         f"**{len(findings)} finding(s)**, {blocking} blocking · "
         f"{len(selection['applicable'])} applicable statement(s) selected by `{selection['model']}` "
-        f"({selection['strategy']}) · {len(dropped)} finding(s) dropped by validation",
+        f"({selection['strategy']}) · {len(dropped)} finding(s) dropped by validation or verification",
         "",
     ]
     if selection["applicable"]:
@@ -244,6 +257,8 @@ def render_markdown(artifact: Artifact, selection: dict, findings: list[dict], d
         out.append(f"  {f['message']}")
         if f.get("suggestion"):
             out.append(f"  _Suggestion:_ {f['suggestion']}")
+        if f.get("verification"):
+            out.append(f"  {verification_line(f)}")
     return "\n".join(out).rstrip() + "\n"
 
 
@@ -260,11 +275,22 @@ MARKER_RE = re.compile(r"<!-- jrfc:finding key=([0-9a-f]+) line=([0-9a-f]+) -->"
 SUMMARY_MARKER = "<!-- jrfc:summary -->"
 
 
+def verification_line(f: dict) -> str:
+    v = f["verification"]
+    where = f" ({', '.join(v['evidence'])})" if v.get("evidence") else ""
+    if v["verdict"] == "confirmed":
+        return f"_Verified{where}:_ {v['reason']}"
+    note = "not blocking: the evidence it depends on was not seen" if f.get("downgraded") else "could not be verified"
+    return f"_Unverified — {note}:_ {v['reason']}"
+
+
 def comment_body(f: dict, key: str | None = None, lhash: str | None = None) -> str:
     tag = "🚫 **blocking**" if f["blocking"] else "💬 advisory"
     body = f"{tag} · **{f['statement_id']}** {f['title']} ({f['level']})\n\n{f['message']}"
     if f.get("suggestion"):
         body += f"\n\n**Suggestion:** {f['suggestion']}"
+    if f.get("verification"):
+        body += f"\n\n{verification_line(f)}"
     body += f"\n\n> {f['statement_text']}\n\n<sub>Standard: `{f['source']}`</sub>"
     if key:
         body += f"\n\n<!-- jrfc:finding key={key} line={lhash} -->"

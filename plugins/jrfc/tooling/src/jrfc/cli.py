@@ -309,33 +309,66 @@ def cmd_validate(args, cfg) -> int:
 def cmd_review(args, cfg) -> int:
     from .jev import Jev
     from .review import run_agents, validate_findings
+    from .verify import verify_findings
     corpus = load_corpus(cfg)
     out_dir = Path(args.out_dir)
+    verify = cfg.get("review.verify") and not args.no_verify
 
     async def run():
         async with Jev(cfg, use_cache=not args.no_cache) as jev:
             artifact, selection = await _select(args, cfg, corpus, jev)
-        _dump(selection, str(out_dir / "selection.json"))
-        print(_selection_summary(selection), file=sys.stderr)
-        if args.dry_run:
-            return artifact, selection, [], {"agent_calls": 0}
-        raw, stats = await run_agents(cfg, corpus, artifact, selection, out_dir / "prompts")
-        return artifact, selection, raw, stats
+            _dump(selection, str(out_dir / "selection.json"))
+            print(_selection_summary(selection), file=sys.stderr)
+            if args.dry_run:
+                return artifact, selection, [], [], {"agent_calls": 0}
+            raw, stats = await run_agents(cfg, corpus, artifact, selection, out_dir / "prompts")
+            _dump({"findings": raw, "stats": stats}, str(out_dir / "findings.raw.json"))
+            findings, dropped = validate_findings(corpus, artifact, selection, raw,
+                                                  int(cfg.get("review.max_comments")))
+            if verify and findings:
+                findings, refuted, vstats = await verify_findings(
+                    cfg, corpus, artifact, jev, findings, Path(args.search_root) if args.search_root else None)
+                dropped += refuted
+                stats["verification"] = vstats
+                stats["cost_usd"] = round(stats["cost_usd"] + vstats["cost_usd"], 6)
+            return artifact, selection, findings, dropped, stats
 
-    artifact, selection, raw, stats = asyncio.run(run())
+    artifact, selection, findings, dropped, stats = asyncio.run(run())
     if args.dry_run:
         from .review import write_bundle
         print(write_bundle(corpus, artifact, selection, out_dir / "bundle.md"))
         return EXIT_OK
-    _dump({"findings": raw, "stats": stats}, str(out_dir / "findings.raw.json"))
     for err in stats.get("errors", []):
         print(f"jrfc review: agent error on {err['chunk']}: {err['error'][:300]}", file=sys.stderr)
-    findings, dropped = validate_findings(corpus, artifact, selection, raw, int(cfg.get("review.max_comments")))
     blocking = _write_outputs(cfg, out_dir, artifact, selection, findings, dropped, args.format)
-    print(f"jrfc review: {stats['agent_calls']} agent call(s), ${stats.get('cost_usd', 0):.4f}, "
+    v = stats.get("verification")
+    vtext = (f", verified {v['verified']} ({v['confirmed']} confirmed, {v['refuted']} refuted, "
+             f"{v['unknown']} unknown)") if v else ""
+    print(f"jrfc review: {stats['agent_calls']} review call(s){vtext}, ${stats.get('cost_usd', 0):.4f}, "
           f"outputs in {out_dir}", file=sys.stderr)
     if stats.get("errors"):
         return EXIT_ERROR
+    return EXIT_BLOCKING if (blocking and args.fail_on_blocking) else EXIT_OK
+
+
+def cmd_verify(args, cfg) -> int:
+    """Verify already-validated findings (in-session flow: bundle -> agent -> validate -> verify)."""
+    from .jev import Jev
+    from .verify import verify_findings
+    corpus = load_corpus(cfg)
+    selection = json.loads(Path(args.selection).read_text(encoding="utf-8"))
+    artifact = _load_selection_artifact(args, cfg, selection)
+    data = json.loads(Path(args.findings).read_text(encoding="utf-8"))
+
+    async def run():
+        async with Jev(cfg) as jev:
+            return await verify_findings(cfg, corpus, artifact, jev, data["findings"],
+                                         Path(args.search_root) if args.search_root else None)
+
+    findings, refuted, stats = asyncio.run(run())
+    blocking = _write_outputs(cfg, Path(args.out_dir), artifact, selection, findings,
+                              data.get("dropped", []) + refuted, args.format)
+    print(f"jrfc verify: {stats}", file=sys.stderr)
     return EXIT_BLOCKING if (blocking and args.fail_on_blocking) else EXIT_OK
 
 
@@ -475,7 +508,19 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--format", choices=["markdown", "github"], default="markdown")
     s.add_argument("--fail-on-blocking", action="store_true", help=f"exit {EXIT_BLOCKING} on blocking findings")
     s.add_argument("--dry-run", action="store_true", help="select only and write bundle.md, no agent call")
+    s.add_argument("--no-verify", action="store_true", help="skip verification of blocking findings")
+    s.add_argument("--search-root", help="where verification searches for evidence (default: git toplevel)")
     s.set_defaults(fn=cmd_review)
+
+    s = sub.add_parser("verify", help="verify validated findings against repository evidence (Jev + agent)")
+    s.add_argument("findings", help="findings.json written by `jrfc validate`")
+    s.add_argument("path")
+    s.add_argument("--selection", required=True)
+    s.add_argument("--out-dir", default=".jrfc-out")
+    s.add_argument("--format", choices=["markdown", "github"], default="markdown")
+    s.add_argument("--search-root")
+    s.add_argument("--fail-on-blocking", action="store_true")
+    s.set_defaults(fn=cmd_verify)
 
     s = sub.add_parser("bundle", help="write the review bundle for an in-session agent")
     s.add_argument("path")
