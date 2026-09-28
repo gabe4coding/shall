@@ -91,11 +91,13 @@ class ChunkSelection:
     rfcs: dict[str, float] = field(default_factory=dict)
     statements: dict[str, float] = field(default_factory=dict)
     selected: list[str] = field(default_factory=list)
+    eligible: int = 0                                   # statements left after the code prefilter
+    facts: list[str] = field(default_factory=list)      # known_effects given to Jev (effects.py)
 
 
 class Selector:
     def __init__(self, cfg: Config, corpus: Corpus, jev: Jev, strategy: str | None = None,
-                 include_status: list[str] | None = None):
+                 include_status: list[str] | None = None, facts: dict[str, list[str]] | None = None):
         self.cfg = cfg
         self.corpus = corpus
         self.jev = jev
@@ -103,6 +105,7 @@ class Selector:
         self.th = cfg.get("selection.thresholds")
         self.always = set(cfg.get("selection.always_domains") or [])
         self.status = set(include_status or cfg.get("selection.include_status"))
+        self.facts = facts or {}
 
     def eligible(self, chunk: Chunk) -> list[tuple[Rfc, Statement]]:
         """Deterministic prefilter: everything code can decide exactly."""
@@ -123,11 +126,14 @@ class Selector:
         return out
 
     async def select_chunk(self, chunk: Chunk) -> ChunkSelection:
-        sel = ChunkSelection(chunk=chunk)
+        sel = ChunkSelection(chunk=chunk, facts=self.facts.get(chunk.id, []))
         cands = self.eligible(chunk)
+        sel.eligible = len(cands)
         if not cands:
             return sel
         state = chunk.state()
+        if sel.facts:  # only when present: the state of chunks without facts stays unchanged
+            state["known_effects"] = sel.facts
         if self.strategy == "layered":
             domain_ids = sorted({r.domain for r, _ in cands})
             ans = await self.jev.ask(state, {d: domain_question(self.corpus.domains[d], chunk.kind) for d in domain_ids})
@@ -173,6 +179,7 @@ def selection_to_json(artifact: Artifact, results: list[ChunkSelection], corpus:
         "applicable": sorted(applicable.values(), key=lambda e: e["id"]),
         "chunks": [
             {"id": r.chunk.id, "path": r.chunk.path, "kind": r.chunk.kind, "language": r.chunk.language,
+             "eligible": r.eligible, "known_effects": r.facts,
              "domains": r.domains, "rfcs": r.rfcs, "statements": r.statements, "selected": r.selected}
             for r in results
         ],

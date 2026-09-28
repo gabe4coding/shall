@@ -71,7 +71,7 @@ def render_statements(corpus: Corpus, ids: list[str]) -> str:
     return "\n".join(lines)
 
 
-def chunk_prompt(corpus: Corpus, chunk: Chunk, ids: list[str]) -> str:
+def chunk_prompt(corpus: Corpus, chunk: Chunk, ids: list[str], facts: list[str] | None = None) -> str:
     anchor = (
         "Only lines marked '+' (added) can carry a finding; use their line number."
         if chunk.kind == "diff" else
@@ -80,7 +80,10 @@ def chunk_prompt(corpus: Corpus, chunk: Chunk, ids: list[str]) -> str:
     return (
         f"<chunk kind=\"{chunk.kind}\" file=\"{chunk.path}\" language=\"{chunk.language}\">\n"
         f"{chunk.rendered}\n</chunk>\n\n"
-        f"<standards>\n{render_statements(corpus, ids)}\n</standards>\n\n"
+        + (f"<known_effects>\nFacts found by code (effects registry and code graph) about what the "
+           f"code in the chunk calls:\n" + "\n".join(f"- {x}" for x in facts) + "\n</known_effects>\n\n"
+           if facts else "")
+        + f"<standards>\n{render_statements(corpus, ids)}\n</standards>\n\n"
         f"{anchor}\nReturn only violations of the standards listed above. "
         "Return an empty findings list when the chunk complies."
     )
@@ -101,7 +104,7 @@ def write_bundle(corpus: Corpus, artifact: Artifact, selection: dict, out: Path)
     for c in selection["chunks"]:
         if not c["selected"]:
             continue
-        parts += [f"## Chunk {c['id']} — {c['path']}", "", chunk_prompt(corpus, chunks[c["id"]], c["selected"]), ""]
+        parts += [f"## Chunk {c['id']} — {c['path']}", "", chunk_prompt(corpus, chunks[c["id"]], c["selected"], c.get("known_effects")), ""]
     out.write_text("\n".join(parts), encoding="utf-8")
     return out
 
@@ -153,7 +156,7 @@ async def run_agents(cfg: Config, corpus: Corpus, artifact: Artifact, selection:
     for c in selection["chunks"]:
         if not c["selected"]:
             continue
-        prompt = chunk_prompt(corpus, chunks[c["id"]], c["selected"])
+        prompt = chunk_prompt(corpus, chunks[c["id"]], c["selected"], c.get("known_effects"))
         if prompts_dir:
             prompts_dir.mkdir(parents=True, exist_ok=True)
             (prompts_dir / f"{c['id']}.md").write_text(prompt, encoding="utf-8")
@@ -235,7 +238,8 @@ def validate_findings(corpus: Corpus, artifact: Artifact, selection: dict, raw: 
     return kept, dropped
 
 
-def render_markdown(artifact: Artifact, selection: dict, findings: list[dict], dropped: list[dict]) -> str:
+def render_markdown(artifact: Artifact, selection: dict, findings: list[dict], dropped: list[dict],
+                    health: dict | None = None) -> str:
     blocking = sum(1 for f in findings if f["blocking"])
     out = [
         f"## jrfc review — `{artifact.source}`",
@@ -245,6 +249,9 @@ def render_markdown(artifact: Artifact, selection: dict, findings: list[dict], d
         f"({selection['strategy']}) · {len(dropped)} finding(s) dropped by validation or verification",
         "",
     ]
+    if health is not None:
+        from .health import render_health
+        out += render_health(health)
     if selection["applicable"]:
         out += ["<details><summary>Applicable standards</summary>", ""]
         for a in selection["applicable"]:
@@ -297,7 +304,8 @@ def comment_body(f: dict, key: str | None = None, lhash: str | None = None) -> s
     return body
 
 
-def render_github(artifact: Artifact, selection: dict, findings: list[dict], dropped: list[dict]) -> dict:
+def render_github(artifact: Artifact, selection: dict, findings: list[dict], dropped: list[dict],
+                  health: dict | None = None) -> dict:
     """Review payload plus the state `jrfc publish` needs to dedupe across pushes.
 
     Each inline comment carries a hidden key = hash(statement, path, line content). The
@@ -324,7 +332,7 @@ def render_github(artifact: Artifact, selection: dict, findings: list[dict], dro
         "body": render_markdown(artifact, selection, general, dropped),
         "comments": comments,
         "jrfc": {
-            "summary": render_markdown(artifact, selection, findings, dropped),
+            "summary": render_markdown(artifact, selection, findings, dropped, health),
             "blocking": sum(1 for f in findings if f["blocking"]),
             "added_line_hashes": {p: sorted(h) for p, h in sorted(added.items())},
         },

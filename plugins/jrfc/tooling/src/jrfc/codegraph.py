@@ -144,11 +144,17 @@ def names_in(text: str) -> list[str]:
 class RepoIndex:
     """Lazy, per-file index over the repository at `root`."""
 
-    def __init__(self, root: Path, excluded: set[str] | None = None):
+    def __init__(self, root: Path, excluded: set[str] | None = None, download_grammars: bool = True):
         self.root = root
         self.excluded = excluded or set()
         self.files: dict[str, FileInfo] = {}
         self.enabled = treesitter_available()
+        self.download_grammars = download_grammars
+        # what went wrong or happened on the network, for health.json: a failure here means
+        # less evidence, which is silent unless it is recorded
+        self.events: list[dict] = []
+        self._event_keys: set[tuple] = set()
+        self._cached_grammars: set[str] | None = None
         self._grep_cache: dict[str, list[str]] = {}
         self._all_files: list[str] | None = None
         self._manifest_text: str | None = None
@@ -218,6 +224,29 @@ class RepoIndex:
 
     # ------------------------------------------------------------ parsing
 
+    def _event(self, kind: str, **detail) -> None:
+        key = (kind, detail.get("lang"), detail.get("path"))
+        if key not in self._event_keys:
+            self._event_keys.add(key)
+            self.events.append({"kind": kind, **detail})
+
+    def _grammar_ready(self, lang: str) -> bool:
+        """True when the grammar is cached, or may be downloaded (recorded: a network call)."""
+        if self._cached_grammars is None:
+            try:
+                from tree_sitter_language_pack import downloaded_languages
+                self._cached_grammars = set(downloaded_languages())
+            except Exception:  # noqa: BLE001 - older pack: cannot tell, assume present
+                self._cached_grammars = {"*"}
+        if lang in self._cached_grammars or "*" in self._cached_grammars:
+            return True
+        if not self.download_grammars:
+            self._event("grammar_missing", lang=lang)
+            return False
+        self._event("grammar_download", lang=lang)
+        self._cached_grammars.add(lang)
+        return True
+
     def _tags_queries(self, lang: str) -> list:
         """The language's tags query plus its parents'; each compiled on its own so one
         pattern that does not fit the grammar cannot disable the rest."""
@@ -230,7 +259,8 @@ class RepoIndex:
                     source = get_tags_query(source_lang)
                     if source:
                         compiled.append(Query(get_language(lang), source))
-                except Exception:  # noqa: BLE001 - a broken or missing query only disables tags
+                except Exception as err:  # noqa: BLE001 - a broken or missing query only disables tags
+                    self._event("tags_query_error", lang=source_lang, error=f"{type(err).__name__}: {err}"[:200])
                     continue
             self._queries[lang] = compiled
         return self._queries[lang]
@@ -248,11 +278,12 @@ class RepoIndex:
                 return info
             from tree_sitter_language_pack import detect_language_from_path, get_parser
             lang = detect_language_from_path(rel)
-            if not lang:
+            if not lang or not self._grammar_ready(lang):
                 return info
             src = path.read_bytes()
             tree = get_parser(lang).parse(src)
-        except Exception:  # noqa: BLE001 - unknown grammar, download failure, parse error
+        except Exception as err:  # noqa: BLE001 - unknown grammar, download failure, parse error
+            self._event("parse_error", path=rel, error=f"{type(err).__name__}: {err}"[:200])
             return info
         info.lang = lang
         _Extractor(self, rel, lang, src, tree, info).run()

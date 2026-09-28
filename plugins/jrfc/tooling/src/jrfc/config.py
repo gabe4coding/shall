@@ -9,8 +9,9 @@ Discovery, first match wins:
   3. $JRFC_EXTENDS ("owner/name@ref" or a path): org corpus only, no local layer
   4. ~/.config/jrfc/config.yaml (user default, usually just an `extends:`)
 
-Layer paths default to `rfcs/`, `domains.yaml`, `index/` inside a `.jrfc/` folder and to
-`corpus/rfcs`, `corpus/domains.yaml`, `corpus/index` for a root-level jrfc.yaml.
+Layer paths default to `rfcs/`, `domains.yaml`, `index/`, `effects.yaml` inside a `.jrfc/`
+folder and to `corpus/rfcs`, `corpus/domains.yaml`, `corpus/index`, `corpus/effects.yaml` for a
+root-level jrfc.yaml.
 Settings (`jev`, `selection`, `review`) are inherited from the parent and overridden locally.
 """
 
@@ -28,7 +29,7 @@ from .fetch import Parent, resolve_parent
 
 CONFIG_NAME = "jrfc.yaml"
 DOT_DIR = ".jrfc"
-SETTINGS = ("jev", "selection", "review", "conflicts")
+SETTINGS = ("jev", "selection", "review", "conflicts", "codegraph")
 
 DEFAULTS: dict[str, Any] = {
     "jev": {
@@ -43,6 +44,14 @@ DEFAULTS: dict[str, Any] = {
         "thresholds": {"domain": 0.25, "rfc": 0.30, "statement": 0.50},
         "always_domains": [],
         "include_status": ["approved", "enforced"],
+        "facts": True,      # known_effects from effects.yaml in the Jev state (effects.py)
+        "facts_depth": 3,   # call hops followed through the repository (as verification)
+        "near_margin": 0.15,  # health: statements this far below the threshold are reported
+    },
+    "codegraph": {
+        # false: never download a tree-sitter grammar during a run (run `jrfc prefetch` first);
+        # a missing grammar is then reported in health.json instead of a hidden network call
+        "download_grammars": True,
     },
     "conflicts": {
         "fail_threshold": 0.75,   # duplicate / weakens / conflict at or above this fails
@@ -79,18 +88,21 @@ class Layer:
     rfcs_dir: Path
     domains_file: Path
     index_dir: Path
+    effects_file: Path | None = None   # optional: known side effects of library calls (effects.py)
     parent: Parent | None = None
 
 
 def _layer(name: str, local: bool, root: Path, raw: dict, in_dot: bool, default_prefix: str | None,
            parent: Parent | None = None) -> Layer:
-    d = ("rfcs", "domains.yaml", "index") if in_dot else ("corpus/rfcs", "corpus/domains.yaml", "corpus/index")
+    d = (("rfcs", "domains.yaml", "index", "effects.yaml") if in_dot else
+         ("corpus/rfcs", "corpus/domains.yaml", "corpus/index", "corpus/effects.yaml"))
     return Layer(
         name=name, local=local, root=root,
         prefix=raw.get("prefix", default_prefix),
         rfcs_dir=(root / raw.get("corpus", d[0])).resolve(),
         domains_file=(root / raw.get("domains", d[1])).resolve(),
         index_dir=(root / raw.get("index", d[2])).resolve(),
+        effects_file=(root / raw.get("effects", d[3])).resolve(),
         parent=parent,
     )
 

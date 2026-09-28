@@ -1,0 +1,119 @@
+# Hidden effects: files whose relevant behavior (a network call, a SQL helper, a logger) is in
+# another file of the repository. Built from the verification fixtures (eval/verify). Only the
+# statement of the fixture's finding is labelled, so read recall only; precision is meaningless.
+# `repo:` gives the eval a repository, so indirect facts (effects.py) can be found.
+cases:
+- file: ../verify/v1-wrapper-two-hops/repo/src/bookings/confirm.ts
+  repo: ../verify/v1-wrapper-two-hops/repo
+  path: src/bookings/confirm.ts
+  kind: code
+  expected:
+  - JRFC-0006.1
+- file: ../verify/v10-python-decorator/repo/jobs/partner_sync.py
+  repo: ../verify/v10-python-decorator/repo
+  path: jobs/partner_sync.py
+  kind: code
+  expected:
+  - JRFC-0006.1
+- file: ../verify/v11-java-helper/repo/src/main/java/com/tf/partners/PartnerSync.java
+  repo: ../verify/v11-java-helper/repo
+  path: src/main/java/com/tf/partners/PartnerSync.java
+  kind: code
+  expected:
+  - JRFC-0006.1
+- file: ../verify/v12-same-name-decoy/repo/src/partners/push.ts
+  repo: ../verify/v12-same-name-decoy/repo
+  path: src/partners/push.ts
+  kind: code
+  expected:
+  - JRFC-0006.1
+- file: ../verify/v13-go-package-var/repo/cmd/sync/main.go
+  repo: ../verify/v13-go-package-var/repo
+  path: cmd/sync/main.go
+  kind: code
+  expected:
+  - JRFC-0006.1
+- file: ../verify/v14-kotlin-object/repo/src/main/kotlin/com/tf/partners/PartnerGateway.kt
+  repo: ../verify/v14-kotlin-object/repo
+  path: src/main/kotlin/com/tf/partners/PartnerGateway.kt
+  kind: code
+  expected:
+  - JRFC-0006.1
+- file: ../verify/v15-php-psr4/repo/src/Partners/PartnerSync.php
+  repo: ../verify/v15-php-psr4/repo
+  path: src/Partners/PartnerSync.php
+  kind: code
+  expected:
+  - JRFC-0006.1
+- file: ../verify/v16-ruby-memoized/repo/lib/partners/sync.rb
+  repo: ../verify/v16-ruby-memoized/repo
+  path: lib/partners/sync.rb
+  kind: code
+  expected:
+  - JRFC-0006.1
+- file: ../verify/v17-csharp-field/repo/src/Partners/PartnerSync.cs
+  repo: ../verify/v17-csharp-field/repo
+  path: src/Partners/PartnerSync.cs
+  kind: code
+  expected:
+  - JRFC-0006.1
+- file: ../verify/v18-rust-module/repo/src/partners/sync.rs
+  repo: ../verify/v18-rust-module/repo
+  path: src/partners/sync.rs
+  kind: code
+  expected:
+  - JRFC-0006.1
+- file: ../verify/v19-go-default-client-decoy/repo/internal/partners/partner.go
+  repo: ../verify/v19-go-default-client-decoy/repo
+  path: internal/partners/partner.go
+  kind: code
+  expected:
+  - JRFC-0006.1
+- file: ../verify/v2-logger-mixin/repo/src/bookings/cancel.ts
+  repo: ../verify/v2-logger-mixin/repo
+  path: src/bookings/cancel.ts
+  kind: code
+  expected:
+  - JRFC-0003.3
+- file: ../verify/v3-python-session-factory/repo/jobs/settle.py
+  repo: ../verify/v3-python-session-factory/repo
+  path: jobs/settle.py
+  kind: code
+  expected:
+  - JRFC-0006.1
+- file: ../verify/v4-yaml-nested-read/repo/config/app.yaml
+  repo: ../verify/v4-yaml-nested-read/repo
+  path: config/app.yaml
+  kind: code
+  expected:
+  - JRFC-0006.2
+- file: ../verify/v5-third-party-default/repo/jobs/sync.py
+  repo: ../verify/v5-third-party-default/repo
+  path: jobs/sync.py
+  kind: code
+  expected:
+  - JRFC-0006.2
+- file: ../verify/v6-unused-wrapper-decoy/repo/src/partners/sync.ts
+  repo: ../verify/v6-unused-wrapper-decoy/repo
+  path: src/partners/sync.ts
+  kind: code
+  expected:
+  - JRFC-0006.1
+- file: ../verify/v7-sql-helper-decoy/repo/src/reports/search.ts
+  repo: ../verify/v7-sql-helper-decoy/repo
+  path: src/reports/search.ts
+  kind: code
+  expected:
+  - JRFC-0005.1
+- file: ../verify/v8-base-class/repo/src/bookings/notify.ts
+  repo: ../verify/v8-base-class/repo
+  path: src/bookings/notify.ts
+  kind: code
+  expected:
+  - JRFC-0006.1
+- file: ../verify/v9-ts-generic-method-field/repo/src/reviews/widget.ts
+  repo: ../verify/v9-ts-generic-method-field/repo
+  path: src/reviews/widget.ts
+  kind: code
+  expected:
+  - JRFC-0006.1

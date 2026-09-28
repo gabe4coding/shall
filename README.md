@@ -12,6 +12,8 @@ reach the reviewing LLM.
 artifact (diff | spec | doc | code | task)
    │
    ├─ code   prefilter: RFC status, artifact kind, language, Enforcement: linter
+   ├─ code   known effects: library calls in the chunk, or reached from it through the
+   │         repository, matched against corpus/effects.yaml → `known_effects` facts
    ├─ Jev    statement Nouls, packed per token budget               (jrfc select)
    │         (optional: domain ──► RFC ──► statement, `strategy: layered`)
    │         one absolute "does this govern the content?" per candidate
@@ -20,7 +22,7 @@ artifact (diff | spec | doc | code | task)
    │         (quote relocates), dedupe, blocking recomputed from the corpus, comment cap
    ├─ verify every blocking finding (+ those with depends_on): code greps the repo for
    │         evidence, Jev keeps relevant excerpts, jrfc-verifier → confirmed | refuted | unknown
-   └─ out    review.md · findings.json · github-review.json · exit 2 on blocking
+   └─ out    review.md · findings.json · github-review.json · health.json · exit 2 on blocking
 ```
 
 ## Layout
@@ -29,6 +31,7 @@ artifact (diff | spec | doc | code | task)
 | --- | --- |
 | `corpus/rfcs/` | The standards (`JRFC-NNNN-*.md`, front matter + `### JRFC-NNNN.n` statements) |
 | `corpus/domains.yaml` | Domain layer: title, description, owner, literal applicability criteria |
+| `corpus/effects.yaml` | Known side effects of library calls (network, database, processes), reviewed like RFCs |
 | `corpus/index/` | **Generated** by `jrfc build`: `index.json` (tools) and `catalog.md` (agents) |
 | `plugins/jrfc/` | Claude Code plugin — everything delivered to an agent |
 | `plugins/jrfc/skills/` | `jrfc-author`, `jrfc-index`, `jrfc-review`, `jrfc-standards` (consumption) |
@@ -36,7 +39,7 @@ artifact (diff | spec | doc | code | task)
 | `plugins/jrfc/bin/` | `jrfc` CLI (on PATH when the plugin is enabled), `jrfc-pr-review` CI script |
 | `plugins/jrfc/tooling/` | Python package behind the CLI (uv project) |
 | `ci/github/` | Workflow templates: `jrfc-corpus.yml` (corpus repo), `jrfc-review.yml` (app repos) |
-| `eval/` | Labelled cases for selection recall/precision |
+| `eval/` | Labelled cases: selection (`cases/`, `scale/`, `facts/`) and verification (`verify/`) |
 | `jrfc.yaml` | Workspace config: paths, pinned Jev model, thresholds, review settings |
 | `examples/booking-service/.jrfc/` | An app repo's local layer: `BOOK-` rules on top of the org corpus |
 | `.jrfc/` | **This repo's own rules** (`JTOOL-`): the tooling is reviewed against org + own rules |
@@ -141,6 +144,48 @@ confirmed with no repository evidence available. Limits: resolution is by import
 not types (a language server or SCIP index would resolve `this.partner.notify` by type); the
 fixtures are small repositories; Jev's excerpt filtering did not trigger on them (≤ 6
 candidates each).
+
+## Known effects: facts Jev cannot read in the text
+
+Jev judges the text it is given. `requests.post(...)` looks like a network call;
+`get_parser(lang)`, `h.DB.Query(...)` or `provider.charge(...)` (a wrapper two files away) do
+not, so the timeout rule was not selected. Code now supplies the fact and Jev judges it:
+
+- `corpus/effects.yaml` (and `.jrfc/effects.yaml` in a local layer) lists what library calls
+  do: `module` (import spec), `calls` (through the import), `methods` (on a receiver that is
+  traceably from the module), `languages` (built-ins such as `fetch`). `jrfc lint` checks it.
+- **Direct**: imports and calls in the chunk text are matched (no repository needed). A
+  `methods` hit needs a typed receiver (`DB *sql.DB`, `c = Consumer(...)`), so `r.URL.Query()`
+  is not reported as a database query: a false fact misleads more than a missing one.
+- **Indirect**: with the repository, the calls on changed lines are followed through the code
+  graph (3 hops, as verification) to a listed library call:
+  `` `provider.charge -> _session.post -> make_session` reaches `requests.Session` in payments/http.py:8 ``.
+- The facts go into the Jev state as `known_effects` (only when present, so other cached
+  answers stay valid) and into the reviewer prompt.
+
+| eval | without facts | with facts |
+| --- | --- | --- |
+| hidden effects, 19 files in 9 languages (`eval/facts`, recall of the needed rule) | 0.95 | **1.00** |
+| same, lowest p of a network case (v10 decorator / v8 base class) | 0.36 / 0.58 | 0.83 / 0.83 |
+| scale set, ~540 statements (`eval/scale`, recall / precision) | 0.93 / 0.70 | 0.94 / 0.70 |
+
+Every fact produced on these sets (27) was checked by hand: all true. `make eval-facts` runs
+the hidden-effects set; `jrfc eval --no-facts` gives the A/B baseline.
+
+## Run health
+
+A missed rule, a file that could not be parsed, or evidence that was not found all look the
+same on a PR: fewer comments. `jrfc review` writes `health.json` and a health line in the
+summary, with warnings for:
+
+- review calls that failed (chunks not reviewed);
+- blocking findings downgraded because their evidence was not found, and a high `unknown`
+  rate in verification;
+- code graph problems: parse errors, tags-query errors, grammars downloaded during the run
+  (a network call; `jrfc prefetch` avoids it) or missing (`codegraph.download_grammars: false`).
+
+Statements that scored just below the threshold are listed as information, not as a warning.
+Threads that reviewers resolve without a fix are counted by `jrfc publish` ("dismissed").
 
 ## Corpus layers
 
@@ -253,6 +298,8 @@ Only a human owner promotes a status.
 | Repo-specific rules | Local `.jrfc/` layer with its own prefix, pinned `extends:`, `conflicts --local` gate |
 | Reviewer sees one file | Verification of blocking findings against repo evidence; unverified findings never block |
 | Service outages | Jev failures exit 3 (not 2), so CI can tell "service down" from "change blocked" |
+| Facts not in the text | `effects.yaml` + code graph add `known_effects` to the Jev state and the reviewer prompt |
+| Silent failures | `health.json` + summary: parse/download problems, unverified blocking findings, near misses |
 | Code leaves the company | **Open.** Needs data-protection approval before real repos (see workflow header) |
 
 ## PoC results (jev-1.13.0, claude sonnet, 2026-09-28)
@@ -316,7 +363,10 @@ Lessons from the PoC itself:
 ## Next steps
 
 - More and real labelled cases (TheFork PRs, with approval) and a violation-level eval.
-- Feedback loop: dismissed PR comments → labels → threshold tuning per domain.
+- Feedback loop: dismissed PR comments → labels → threshold tuning per domain; collect
+  `health.json` across PRs to see unknown rates and near misses over time.
+- Grow `effects.yaml` from real repositories (an agent can draft entries from package docs;
+  owners approve), and test the code graph on a large TheFork repository.
 - Cheap pre-check of violation with Jev Nouls for SHOULD statements, to skip agent calls.
 - Diffs that add a spec file should be reviewed as `spec` chunks, not `diff` chunks.
 - Split this repo into the org corpus repo and the tooling repo (the CI template already
