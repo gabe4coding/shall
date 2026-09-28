@@ -1,0 +1,8 @@
+# jrfc workspace: repository-specific standards on top of the organisation corpus.
+# Local rules may add or tighten requirements; they must not weaken organisation rules
+# (`jrfc conflicts --local` fails CI when one does).
+prefix: JTOOL
+extends:
+  path: ..
+# settings (jev, selection, review) are inherited from the organisation corpus;
+# override them here only when this repository needs it.

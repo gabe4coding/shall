@@ -1,0 +1,43 @@
+# Hand labels for selection eval. `expected` = statements that GOVERN something in the
+# artifact (applicability, not violation). A missing id is a recall loss; an extra id
+# selected by Jev is counted against precision, but some extras are defensible —
+# read the `extra` column before changing a label.
+cases:
+  - file: cases/01-booking-endpoint.diff
+    expected: [JRFC-0002.1, JRFC-0002.2, JRFC-0002.3, JRFC-0002.4, JRFC-0002.5,
+               JRFC-0003.1, JRFC-0003.2, JRFC-0003.3, JRFC-0003.4,
+               JRFC-0005.2, JRFC-0006.1, JRFC-0007.2, JRFC-0007.3, JRFC-0007.4]
+    violations: [JRFC-0002.1, JRFC-0002.3, JRFC-0002.4, JRFC-0002.5, JRFC-0003.1, JRFC-0003.2,
+                 JRFC-0005.2, JRFC-0006.1, JRFC-0007.2, JRFC-0007.3, JRFC-0007.4]
+  - file: cases/02-payment-client.diff
+    expected: [JRFC-0003.1, JRFC-0003.2, JRFC-0003.4, JRFC-0004.1, JRFC-0004.2, JRFC-0004.3,
+               JRFC-0005.1, JRFC-0006.1, JRFC-0006.2]
+    violations: [JRFC-0003.1, JRFC-0003.2, JRFC-0004.1, JRFC-0004.2, JRFC-0004.3,
+                 JRFC-0005.1, JRFC-0006.1, JRFC-0006.2]
+  - file: cases/03-migration.diff
+    expected: [JRFC-0008.1, JRFC-0008.2, JRFC-0008.3, JRFC-0008.4]
+    violations: [JRFC-0008.1, JRFC-0008.2, JRFC-0008.3, JRFC-0008.4]
+  - file: cases/04-css-only.diff
+    expected: []
+  - file: cases/05-readme-typo.diff
+    expected: []
+  - file: cases/06-spec-recommendations.md
+    expected: [JRFC-0009.1, JRFC-0009.2, JRFC-0009.3, JRFC-0009.4, JRFC-0009.5, JRFC-0009.6,
+               JRFC-0002.1, JRFC-0002.4, JRFC-0003.1, JRFC-0004.2, JRFC-0004.4, JRFC-0006.4]
+    violations: [JRFC-0009.1, JRFC-0009.2, JRFC-0009.4, JRFC-0009.5, JRFC-0009.6,
+                 JRFC-0002.4, JRFC-0003.1, JRFC-0004.2, JRFC-0004.4, JRFC-0006.4]
+  - file: cases/07-feature-flag.diff
+    expected: [JRFC-0010.1, JRFC-0010.2, JRFC-0010.3, JRFC-0007.3]
+    violations: [JRFC-0010.2, JRFC-0010.3]
+  - file: cases/08-injection.diff
+    expected: [JRFC-0005.1, JRFC-0007.2]
+    violations: [JRFC-0005.1]
+  - file: cases/09-incident-report.md
+    expected: []
+  - file: cases/10-new-rfc.diff
+    expected: [JRFC-0001.3, JRFC-0001.4]
+    violations: [JRFC-0001.3, JRFC-0001.4]
+  - file: cases/11-task.txt
+    kind: task
+    expected: [JRFC-0002.1, JRFC-0002.2, JRFC-0002.3, JRFC-0002.5, JRFC-0006.1, JRFC-0006.2,
+               JRFC-0010.1]

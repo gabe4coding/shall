@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# jrfc CLI wrapper. On PATH when the jrfc plugin is enabled; CI calls it directly.
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export JRFC_PLUGIN_ROOT="${JRFC_PLUGIN_ROOT:-$(dirname "$here")}"
+exec uv run --quiet --project "$JRFC_PLUGIN_ROOT/tooling" jrfc "$@"

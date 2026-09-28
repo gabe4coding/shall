@@ -1,0 +1,48 @@
+diff --git a/src/bookings/routes.ts b/src/bookings/routes.ts
+index 3f2a1c0..8b7d9e4 100644
+--- a/src/bookings/routes.ts
++++ b/src/bookings/routes.ts
+@@ -1,12 +1,48 @@
+ import { Router } from "express";
+ import { logger } from "../observability/logger";
+ import { db } from "../db";
++import { paymentsBaseUrl } from "../config";
+ 
+ export const router = Router();
+ 
+ router.get("/restaurants/:id/slots", async (req, res) => {
+   const slots = await db.slots.findMany({ where: { restaurantId: req.params.id } });
+   res.json(slots);
+ });
++
++router.post("/createBooking", async (req: any, res: any) => {
++  const { restaurantId, guest, partySize, slotId } = req.body;
++  logger.info("creating booking for " + guest.email + " party of " + partySize);
++
++  try {
++    const booking = await db.bookings.create({
++      data: { restaurantId, slotId, partySize, guestId: guest.id },
++    });
++
++    const payment = await fetch(`${paymentsBaseUrl}/holds`, {
++      method: "POST",
++      body: JSON.stringify({ bookingId: booking.id, amount: 20 }),
++    });
++
++    notifyRestaurant(booking.id);
++
++    res.status(201).json({ ...booking, holdId: (await payment.json()).id });
++  } catch (err: any) {
++    logger.error("booking failed", { error: err.message });
++    res.status(500).send(err.stack);
++  }
++});
++
++router.get("/bookings", async (req, res) => {
++  const all = await db.bookings.findMany({ where: { guestId: req.query.guestId as string } });
++  res.json(all);
++});
++
++export async function notifyRestaurant(bookingId: any): Promise<void> {
++  await fetch(`https://notifications.internal/restaurants/bookings/${bookingId}`, { method: "POST" });
++}

@@ -1,0 +1,22 @@
+diff --git a/src/flags/definitions.ts b/src/flags/definitions.ts
+index 77aa1b2..88bb2c3 100644
+--- a/src/flags/definitions.ts
++++ b/src/flags/definitions.ts
+@@ -10,4 +10,9 @@ export const flags = {
+   searchNewRanking: { owner: "search", expires: "2026-12-01", default: false },
+   loyaltyBanner: { owner: "loyalty", expires: "2026-11-15", default: false },
++  instantConfirmation: { default: true },
+ };
+diff --git a/src/bookings/confirm.ts b/src/bookings/confirm.ts
+index 1234567..89abcde 100644
+--- a/src/bookings/confirm.ts
++++ b/src/bookings/confirm.ts
+@@ -20,6 +20,14 @@ export async function confirmBooking(booking: Booking): Promise<Confirmation> {
+   const restaurant = await restaurants.get(booking.restaurantId);
++  const instant = (await flagClient.isEnabled("instantConfirmation")) ?? true;
++  if (instant) {
++    // skip the restaurant approval step and confirm the booking right away
++    return confirmations.create({ bookingId: booking.id, status: "confirmed" });
++  }
+   return confirmations.create({ bookingId: booking.id, status: "pending_restaurant" });
+ }

@@ -1,0 +1,133 @@
+{
+  "corpus_hash": "947842f087e47f0b",
+  "counts": {
+    "domains": 1,
+    "rfcs": 1,
+    "statements": 3
+  },
+  "domains": [
+    {
+      "applies_when": "The content changes the status of a booking, publishes a booking event, or consumes one.",
+      "description": "Events that booking-service publishes when a booking changes, and the code that consumes them.",
+      "id": "booking-events",
+      "layer": "local",
+      "not_applies_when": "The content does not change booking status and does not publish or consume booking events.",
+      "owner": "bookings",
+      "rfcs": [
+        "BOOK-0001"
+      ],
+      "title": "Booking domain events"
+    }
+  ],
+  "extends": [
+    {
+      "name": "jrfc",
+      "prefix": "JRFC",
+      "ref": null,
+      "repo": null
+    }
+  ],
+  "rfcs": [
+    {
+      "applies_when": "The content changes the status of a booking, publishes a booking event, or consumes one.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "domain": "booking-events",
+      "id": "BOOK-0001",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "not_applies_when": "The content does not touch booking status or booking events.",
+      "owner": "bookings",
+      "path": ".jrfc/rfcs/BOOK-0001-booking-lifecycle-events.md",
+      "retired": [],
+      "review_by": "2027-03-31",
+      "statements": [
+        "BOOK-0001.1",
+        "BOOK-0001.2",
+        "BOOK-0001.3"
+      ],
+      "status": "enforced",
+      "summary": "booking-service publishes an event for every booking status change, through the transactional outbox, with no personal data.",
+      "superseded_by": null,
+      "supersedes": [],
+      "title": "Booking lifecycle events"
+    }
+  ],
+  "schema": 2,
+  "statements": [
+    {
+      "applies_when": "the content sets or updates the status of a booking or confirmation.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "booking-events",
+      "enforcement": "agent",
+      "id": "BOOK-0001.1",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content does not touch booking status or booking events.",
+      "rfc": "BOOK-0001",
+      "source": ".jrfc/rfcs/BOOK-0001-booking-lifecycle-events.md#L29",
+      "status": "enforced",
+      "text": "Code that changes the status of a booking MUST enqueue a `booking.<new-status>` event with `outbox.enqueue` inside the same database transaction as the status change.",
+      "title": "Every status change publishes an event"
+    },
+    {
+      "applies_when": "the content builds the payload of a booking event.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "booking-events",
+      "enforcement": "agent",
+      "id": "BOOK-0001.2",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content does not touch booking status or booking events.",
+      "rfc": "BOOK-0001",
+      "source": ".jrfc/rfcs/BOOK-0001-booking-lifecycle-events.md#L36",
+      "status": "enforced",
+      "text": "Booking events MUST contain only the booking id, restaurant id, new status and timestamp, and MUST NOT contain guest names, emails or phone numbers.",
+      "title": "Events carry identifiers only"
+    },
+    {
+      "applies_when": "the content consumes booking events.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": false,
+      "domain": "booking-events",
+      "enforcement": "agent",
+      "id": "BOOK-0001.3",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "SHOULD",
+      "not_applies_when": "The content does not touch booking status or booking events.",
+      "rfc": "BOOK-0001",
+      "source": ".jrfc/rfcs/BOOK-0001-booking-lifecycle-events.md#L43",
+      "status": "enforced",
+      "text": "Consumers of booking events SHOULD process each event id at most once.",
+      "title": "Idempotent consumers"
+    }
+  ]
+}

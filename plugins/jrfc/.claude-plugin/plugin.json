@@ -1,0 +1,7 @@
+{
+  "name": "jrfc",
+  "version": "0.1.0",
+  "description": "jrfc engineering standards: author and maintain RFC-2119 standards, build the deterministic index, find which statements apply to a diff/spec/doc/task with Jev, and review against them.",
+  "author": { "name": "gpavanello" },
+  "keywords": ["standards", "rfc", "review", "governance", "jev", "typesafe"]
+}

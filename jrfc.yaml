@@ -1,0 +1,35 @@
+# jrfc workspace config. The CLI finds this file by walking up from the cwd
+# (or via --config / JRFC_CONFIG). This is the organisation corpus: it extends nothing.
+prefix: JRFC
+corpus: corpus/rfcs
+domains: corpus/domains.yaml
+index: corpus/index
+
+jev:
+  model: jev-1.13.0        # pinned: thresholds below were tuned against this version
+  cache: .jrfc-cache/jev.json
+  concurrency: 4            # higher bursts triggered 503s from the API during the PoC
+  max_chunk_chars: 40000   # ~10k tokens; smaller chunks = less context rot
+  max_request_tokens: 56000  # stay under the 64k request budget
+
+selection:
+  strategy: layered        # layered (domain -> rfc -> statement) | flat (statement only)
+  thresholds:              # recall-oriented: a missed rule is silent, a spare rule is cheap
+    domain: 0.25
+    rfc: 0.30
+    statement: 0.50
+  always_domains: [security]   # cross-cutting: never pruned at the domain layer
+  include_status: [approved, enforced]
+
+conflicts:
+  fail_threshold: 0.75       # tuned on a handful of pairs; revisit with more authored rules
+  report_threshold: 0.60
+  exclude_domains: [governance]  # rules about RFC files are not compared with engineering rules
+
+review:
+  # jrfc always appends --tools "" (no tools), a JSON schema and a fixed system prompt (JTOOL-0002.1)
+  command: [claude, -p]
+  model: claude-sonnet-5   # pinned id, not the `sonnet` alias (JTOOL-0001.4)
+  timeout: 300             # seconds per agent call
+  concurrency: 4
+  max_comments: 25

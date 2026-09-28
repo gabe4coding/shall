@@ -1,0 +1,36 @@
+JRFC := plugins/jrfc/bin/jrfc
+# This repo holds two workspaces: the organisation corpus (jrfc.yaml, prefix JRFC) and the
+# repo's own rules (.jrfc/, prefix JTOOL, extends the organisation corpus). Plain `jrfc` at
+# the root resolves to .jrfc/; organisation targets pass --config explicitly.
+ORG := $(JRFC) --config jrfc.yaml
+
+.PHONY: check lint build test eval review-example self-check self-conflicts self-review
+
+check: lint          ## organisation corpus: deterministic CI checks (no model calls)
+	$(ORG) build --check
+
+lint:
+	$(ORG) lint
+
+build:
+	$(ORG) build
+
+test:                ## tooling unit tests (no network)
+	uv run --quiet --project plugins/jrfc/tooling pytest -q plugins/jrfc/tooling/tests
+
+eval:                ## selection recall/precision on eval/cases (needs TYPESAFE_API_KEY)
+	$(ORG) eval --out .jrfc-out/eval.json
+
+review-example:      ## full pipeline on one case (needs TYPESAFE_API_KEY and claude)
+	$(ORG) review eval/cases/01-booking-endpoint.diff --out-dir .jrfc-out/example --format github
+
+self-check:          ## this repo's own rules (.jrfc/): lint + index, no model calls
+	$(JRFC) lint
+	$(JRFC) build --check
+
+self-conflicts:      ## own rules must not duplicate/weaken/conflict with org rules (needs TYPESAFE_API_KEY)
+	$(JRFC) conflicts --local
+
+self-review:         ## review this repo's working-tree changes against org + own rules
+	git diff --no-color HEAD > .jrfc-out/self.diff 2>/dev/null || git diff --no-color > .jrfc-out/self.diff
+	$(JRFC) review .jrfc-out/self.diff --out-dir .jrfc-out/self

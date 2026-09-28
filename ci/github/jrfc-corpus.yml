@@ -1,0 +1,39 @@
+# Copy to .github/workflows/ in the jrfc corpus repository.
+# Deterministic checks only: no model calls, no secrets.
+name: jrfc corpus
+
+on:
+  pull_request:
+    paths: ["corpus/**", "jrfc.yaml", "plugins/jrfc/tooling/**", ".jrfc/**"]
+
+jobs:
+  corpus:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Tooling tests
+        run: make test
+
+      - name: Lint RFCs
+        run: make lint
+
+      - name: Index is committed and up to date
+        run: make check
+
+      - name: Published statement ids are stable
+        run: |
+          if git show "origin/${{ github.base_ref }}:corpus/index/index.json" > /tmp/base-index.json 2>/dev/null; then
+            plugins/jrfc/bin/jrfc --config jrfc.yaml lint --quiet --against /tmp/base-index.json
+          fi
+
+      - name: This repo's own rules (.jrfc/, prefix JTOOL)
+        run: make self-check
+
+      - name: Status promotions need the domain owner
+        # JRFC-0001.4: surface status changes so CODEOWNERS (one owner per domain) must approve.
+        run: |
+          git diff "origin/${{ github.base_ref }}...HEAD" -- corpus/rfcs | grep -E '^\+status: (approved|enforced)' \
+            && echo "::notice::This PR promotes an RFC status; the domain owner must approve." || true

@@ -1,0 +1,9 @@
+# Local domains: only for areas the organisation corpus does not cover.
+# Reuse organisation domains (api, security, observability, ...) whenever they fit.
+domains:
+  booking-events:
+    title: Booking domain events
+    description: Events that booking-service publishes when a booking changes, and the code that consumes them.
+    owner: bookings
+    applies_when: The content changes the status of a booking, publishes a booking event, or consumes one.
+    not_applies_when: The content does not change booking status and does not publish or consume booking events.

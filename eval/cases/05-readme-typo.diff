@@ -1,0 +1,14 @@
+diff --git a/README.md b/README.md
+index 9a8b7c6..6d5e4f3 100644
+--- a/README.md
++++ b/README.md
+@@ -1,8 +1,8 @@
+ # booking-service
+ 
+-Service that manages restaurant reservatons and slot availability.
++Service that manages restaurant reservations and slot availability.
+ 
+ ## Local development
+ 
+-Run `make dev` and open http://localhost:3000.
++Run `make dev` and open http://localhost:3000 in your browser.
