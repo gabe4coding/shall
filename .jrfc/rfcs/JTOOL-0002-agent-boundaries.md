@@ -8,6 +8,7 @@ languages: [any]
 owner: ai-governance
 review_by: 2027-03-31
 supersedes: []
+retired: [JTOOL-0002.3]   # replaced by JTOOL-0002.5: verification may now lower severity
 summary: >
   What an LLM agent may do in the jrfc pipeline: gather and propose. Deterministic code
   validates, decides severity, and performs every write to an external system.
@@ -36,17 +37,26 @@ chunk, line or quote present in the artifact) before they reach a report or a co
 - Applies when: the content reads, transforms or publishes findings produced by an agent.
 - Enforcement: agent
 
-### JTOOL-0002.3 Severity comes from the corpus
-Whether a finding is blocking MUST be computed from the corpus (RFC status and statement
-level) and MUST NOT be taken from agent output.
-
-- Applies when: the content sets or reads the blocking flag or severity of a finding.
-- Enforcement: agent
-
 ### JTOOL-0002.4 External writes are deterministic and previewable
 Writes to external systems (GitHub reviews, comments, thread resolution) MUST be performed
 by deterministic code, never by an agent, and the command that performs them MUST offer a
 `--dry-run` that performs no write.
 
 - Applies when: the content posts, patches or resolves anything on GitHub or another external system.
+- Enforcement: agent
+
+### JTOOL-0002.5 Severity comes from the corpus and verification
+Whether a finding is blocking MUST be computed by code from the corpus (RFC status and
+statement level) and the verification verdict; agent output MUST only lower a finding's
+severity, never raise it.
+
+- Applies when: the content sets or reads the blocking flag or severity of a finding.
+- Enforcement: agent
+
+### JTOOL-0002.6 Blocking needs seen evidence
+A finding MUST NOT block a merge unless the verifier confirmed it from code or configuration
+it was shown, and a finding MUST only be dropped as refuted when the verdict cites evidence
+that exists.
+
+- Applies when: the content decides which findings are verified, or applies a verification verdict.
 - Enforcement: agent

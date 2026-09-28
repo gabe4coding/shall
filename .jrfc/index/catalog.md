@@ -25,8 +25,9 @@ How the jrfc tooling calls Jev (TypeSafe) and Claude, and what model output may 
 ### JTOOL-0002 Agent boundaries (enforced) — `.jrfc/rfcs/JTOOL-0002-agent-boundaries.md`
 - `JTOOL-0002.1` [MUST, blocking, agent] Agents run without tools in the pipeline
 - `JTOOL-0002.2` [MUST, blocking, agent] Agent output is validated before use
-- `JTOOL-0002.3` [MUST, blocking, agent] Severity comes from the corpus
 - `JTOOL-0002.4` [MUST, blocking, agent] External writes are deterministic and previewable
+- `JTOOL-0002.5` [MUST, blocking, agent] Severity comes from the corpus and verification
+- `JTOOL-0002.6` [MUST, blocking, agent] Blocking needs seen evidence
 
 ## python — Python code
 

@@ -1,11 +1,11 @@
 ---
 name: jrfc-review
-description: Use when asked to review a diff, pull request, branch, design spec, doc or code file against the jrfc engineering standards ("check this PR against our standards", "does this spec follow the RFCs", "run the standards review"). Runs Jev selection of applicable statements, then an agent review limited to those statements, then deterministic validation of every finding.
+description: Use when asked to review a diff, pull request, branch, design spec, doc or code file against the jrfc engineering standards ("check this PR against our standards", "does this spec follow the RFCs", "run the standards review"). Runs Jev selection of applicable statements, an agent review limited to those statements, deterministic validation, and verification of blocking findings against repository evidence.
 ---
 
 # jrfc review
 
-Three stages, each with one owner:
+Four stages, each with one owner:
 
 1. **Select (Jev, `jrfc select`)** — code prefilters by status, artifact kind, language and
    `Enforcement: linter`; Jev answers one yes/no question per domain, then per RFC, then
@@ -17,6 +17,12 @@ Three stages, each with one owner:
 3. **Validate (code, `jrfc validate`)** — drops findings whose statement was not selected
    for that chunk, whose line is not a changed line (quotes are used to relocate), or
    that duplicate another; recomputes blocking from the corpus; caps the comment count.
+4. **Verify (code + Jev + `jrfc-verifier` agent, `jrfc verify`)** — the reviewer sees one
+   chunk, so a finding can be wrong because of code elsewhere. Code picks what is verified
+   (every blocking finding, plus findings with `depends_on`), searches the repository for
+   evidence, Jev keeps the relevant excerpts, and a tool-less verifier answers confirmed,
+   refuted or unknown. Refuted findings are dropped only with cited evidence; unknown ones
+   stay as advisory. **A finding blocks only if its evidence was seen.**
 
 ## Get the artifact
 
@@ -44,8 +50,11 @@ Use this when the user wants to discuss findings or when `claude -p` is not avai
 3. For each chunk in the bundle, dispatch the `jrfc-reviewer` agent with that chunk's
    section (chunks are independent — dispatch them in parallel). Collect the findings
    into `.jrfc-out/pr/findings.agent.json` as `{"findings": [{"chunk": "c0", ...}]}`.
-4. `jrfc validate .jrfc-out/pr/findings.agent.json /tmp/pr.diff --selection .jrfc-out/pr/selection.json --out-dir .jrfc-out/pr`
-5. Present `review.md`. Mention dropped findings only if the user asks.
+4. `jrfc validate .jrfc-out/pr/findings.agent.json /tmp/pr.diff --selection .jrfc-out/pr/selection.json --out-dir .jrfc-out/pr/validated`
+5. `jrfc verify .jrfc-out/pr/validated/findings.json /tmp/pr.diff --selection .jrfc-out/pr/selection.json --out-dir .jrfc-out/pr`
+   (run it from the repository root: that is where evidence is searched).
+6. Present `review.md`. Mention dropped findings only if the user asks; refuted ones carry
+   the evidence that refuted them in `findings.json`.
 
 ## Rules for you
 

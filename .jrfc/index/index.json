@@ -1,9 +1,9 @@
 {
-  "corpus_hash": "b8cf2c573ea17e83",
+  "corpus_hash": "d1ce206f6d012062",
   "counts": {
     "domains": 3,
     "rfcs": 4,
-    "statements": 14
+    "statements": 15
   },
   "domains": [
     {
@@ -99,13 +99,16 @@
       "not_applies_when": "No agent runs, no agent output is used, and nothing is written to an external system.",
       "owner": "ai-governance",
       "path": ".jrfc/rfcs/JTOOL-0002-agent-boundaries.md",
-      "retired": [],
+      "retired": [
+        "JTOOL-0002.3"
+      ],
       "review_by": "2027-03-31",
       "statements": [
         "JTOOL-0002.1",
         "JTOOL-0002.2",
-        "JTOOL-0002.3",
-        "JTOOL-0002.4"
+        "JTOOL-0002.4",
+        "JTOOL-0002.5",
+        "JTOOL-0002.6"
       ],
       "status": "enforced",
       "summary": "What an LLM agent may do in the jrfc pipeline: gather and propose. Deterministic code validates, decides severity, and performs every write to an external system.",
@@ -283,7 +286,7 @@
       "level": "MUST",
       "not_applies_when": "No agent runs, no agent output is used, and nothing is written to an external system.",
       "rfc": "JTOOL-0002",
-      "source": ".jrfc/rfcs/JTOOL-0002-agent-boundaries.md#L25",
+      "source": ".jrfc/rfcs/JTOOL-0002-agent-boundaries.md#L26",
       "status": "enforced",
       "text": "The review agent invoked by the pipeline MUST run with no tools (`--tools \"\"`), so that it can only return text.",
       "title": "Agents run without tools in the pipeline"
@@ -306,33 +309,10 @@
       "level": "MUST",
       "not_applies_when": "No agent runs, no agent output is used, and nothing is written to an external system.",
       "rfc": "JTOOL-0002",
-      "source": ".jrfc/rfcs/JTOOL-0002-agent-boundaries.md#L32",
+      "source": ".jrfc/rfcs/JTOOL-0002-agent-boundaries.md#L33",
       "status": "enforced",
       "text": "Findings returned by an agent MUST pass `validate_findings` (statement selected for the chunk, line or quote present in the artifact) before they reach a report or a comment.",
       "title": "Agent output is validated before use"
-    },
-    {
-      "applies_when": "the content sets or reads the blocking flag or severity of a finding.",
-      "artifacts": [
-        "diff",
-        "code",
-        "spec"
-      ],
-      "blocking": true,
-      "domain": "model-calls",
-      "enforcement": "agent",
-      "id": "JTOOL-0002.3",
-      "languages": [
-        "any"
-      ],
-      "layer": "local",
-      "level": "MUST",
-      "not_applies_when": "No agent runs, no agent output is used, and nothing is written to an external system.",
-      "rfc": "JTOOL-0002",
-      "source": ".jrfc/rfcs/JTOOL-0002-agent-boundaries.md#L39",
-      "status": "enforced",
-      "text": "Whether a finding is blocking MUST be computed from the corpus (RFC status and statement level) and MUST NOT be taken from agent output.",
-      "title": "Severity comes from the corpus"
     },
     {
       "applies_when": "the content posts, patches or resolves anything on GitHub or another external system.",
@@ -352,10 +332,56 @@
       "level": "MUST",
       "not_applies_when": "No agent runs, no agent output is used, and nothing is written to an external system.",
       "rfc": "JTOOL-0002",
-      "source": ".jrfc/rfcs/JTOOL-0002-agent-boundaries.md#L46",
+      "source": ".jrfc/rfcs/JTOOL-0002-agent-boundaries.md#L40",
       "status": "enforced",
       "text": "Writes to external systems (GitHub reviews, comments, thread resolution) MUST be performed by deterministic code, never by an agent, and the command that performs them MUST offer a `--dry-run` that performs no write.",
       "title": "External writes are deterministic and previewable"
+    },
+    {
+      "applies_when": "the content sets or reads the blocking flag or severity of a finding.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "model-calls",
+      "enforcement": "agent",
+      "id": "JTOOL-0002.5",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No agent runs, no agent output is used, and nothing is written to an external system.",
+      "rfc": "JTOOL-0002",
+      "source": ".jrfc/rfcs/JTOOL-0002-agent-boundaries.md#L48",
+      "status": "enforced",
+      "text": "Whether a finding is blocking MUST be computed by code from the corpus (RFC status and statement level) and the verification verdict; agent output MUST only lower a finding's severity, never raise it.",
+      "title": "Severity comes from the corpus and verification"
+    },
+    {
+      "applies_when": "the content decides which findings are verified, or applies a verification verdict.",
+      "artifacts": [
+        "diff",
+        "code",
+        "spec"
+      ],
+      "blocking": true,
+      "domain": "model-calls",
+      "enforcement": "agent",
+      "id": "JTOOL-0002.6",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "No agent runs, no agent output is used, and nothing is written to an external system.",
+      "rfc": "JTOOL-0002",
+      "source": ".jrfc/rfcs/JTOOL-0002-agent-boundaries.md#L56",
+      "status": "enforced",
+      "text": "A finding MUST NOT block a merge unless the verifier confirmed it from code or configuration it was shown, and a finding MUST only be dropped as refuted when the verdict cites evidence that exists.",
+      "title": "Blocking needs seen evidence"
     },
     {
       "applies_when": "the content adds or changes a `sys.exit`, a returned exit code, or an `exit` in a script.",

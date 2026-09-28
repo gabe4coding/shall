@@ -55,6 +55,7 @@ DEFAULTS: dict[str, Any] = {
         "concurrency": 4,
         "max_comments": 25,
         "timeout": 300,  # seconds per agent call
+        "verify": True,  # verify blocking findings (and those with depends_on) before they block
     },
 }
 

@@ -31,5 +31,6 @@ review:
   command: [claude, -p]
   model: claude-sonnet-5   # pinned id, not the `sonnet` alias (JTOOL-0001.4)
   timeout: 300             # seconds per agent call
+  verify: true             # a finding blocks only if the verifier saw its evidence
   concurrency: 4
   max_comments: 25

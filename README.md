@@ -17,6 +17,8 @@ artifact (diff | spec | doc | code | task)
    ├─ agent  jrfc-reviewer sees one chunk + only its selected statements (claude -p)
    ├─ code   validate: statement was selected for the chunk, line is a changed line
    │         (quote relocates), dedupe, blocking recomputed from the corpus, comment cap
+   ├─ verify every blocking finding (+ those with depends_on): code greps the repo for
+   │         evidence, Jev keeps relevant excerpts, jrfc-verifier → confirmed | refuted | unknown
    └─ out    review.md · findings.json · github-review.json · exit 2 on blocking
 ```
 
@@ -74,10 +76,43 @@ with `uv`.
 | `jrfc select PATH\|--text T` | Jev | applicable statements per chunk, with probabilities |
 | `jrfc review PATH` | Jev + Claude | select → agent → validate → reports; `--fail-on-blocking` exits 2 |
 | `jrfc bundle` / `jrfc validate` | no | split review for an in-session agent (see `jrfc-review` skill) |
+| `jrfc verify FINDINGS PATH --selection S` | Jev + Claude | verify validated findings against repository evidence |
 | `jrfc publish --pr N [--dry-run]` | no | post to a GitHub PR idempotently via `gh` (see below) |
 | `jrfc conflicts FILE` | Jev | duplicate / weakens / conflict / overlap of a draft against the corpus |
 | `jrfc conflicts --local` | Jev | every local rule against every org rule; fails on duplicate / weakens / conflict |
 | `jrfc eval` | Jev | recall/precision per case, strategy comparison, threshold sweep |
+
+## Verification: a finding blocks only if its evidence was seen
+
+The reviewer sees one chunk, so a finding can be wrong because of code elsewhere (a wrapper
+adds the missing flag) or a library default. Tools for the reviewer were rejected: every
+chunk would pay for exploration, the evidence would not be recorded, reruns would read
+different files (flapping comments), and CI would expose more of the runner to PR code.
+
+Instead, after validation:
+
+1. **Code picks what is verified**: every blocking finding, plus advisory findings where
+   the reviewer filled `depends_on`. Not trusting the reviewer to flag its own blind spot is
+   the point: the false positive that motivated this came from a reviewer that ignored
+   "don't assume unseen code is wrong".
+2. **Code gathers evidence**: search terms are the YAML key path of the line
+   (`review.command`), `depends_on`, the statement's code spans (`--tools`) and identifiers
+   of the quote; `git grep` in the repo; code before docs; the standards' own text excluded.
+3. **Jev keeps the relevant excerpts** (one Noul per excerpt, small state).
+4. **The `jrfc-verifier` agent** (tool-less, its own prompt) answers confirmed / refuted /
+   unknown and cites excerpt ids.
+5. **Code applies it, severity only goes down**: refuted → dropped only if the cited
+   evidence exists; unknown → advisory ("the evidence it depends on was not seen");
+   confirmed → unchanged. Rules: JTOOL-0002.5 and JTOOL-0002.6.
+
+Regression (2026-09-28): the two false positives of the self-review are handled — "claude runs
+with tools" is **refuted** with `review.py:99-116` (where `--tools ""` is appended), "Jev has
+no timeout" is **refuted** with `jev.py:39-67`, and "no retry jitter" (an SDK default outside
+the repo) is **unknown → advisory**. On true positives with no repository evidence available,
+case 01 keeps 10 of 11 blocking findings confirmed (the 11th, "correlation id", becomes
+advisory because a logger middleware could add it) and case 08's SQL injection is confirmed.
+Cost: one verifier call per verified finding (case 01: +$0.12). Retrieval is keyword-based;
+a code index would find wrappers that share no identifier with the quote.
 
 ## Corpus layers
 
@@ -130,7 +165,7 @@ what the PoC taught:
 | RFC | Rules |
 | --- | --- |
 | JTOOL-0001 Using Jev | only through `jrfc.jev.Jev`; small state, no `existing[i]` indirection; gate on Nouls or summed failing classes; pinned model ids |
-| JTOOL-0002 Agent boundaries | reviewer runs without tools; agent output validated before use; blocking computed from the corpus; external writes deterministic with `--dry-run` |
+| JTOOL-0002 Agent boundaries | reviewer runs without tools; agent output validated before use; external writes deterministic with `--dry-run`; blocking from corpus + verification, only lowered by agents; blocking needs seen evidence |
 | JTOOL-0003 CLI contract | exit codes 0/1/2/3; deterministic commands never call a model; reproducible generated files |
 | JTOOL-0004 Plugin content (approved) | descriptions say when to use; one reviewer prompt; commands in skills exist |
 
@@ -188,6 +223,7 @@ Only a human owner promotes a status.
 | Hallucinated lines / ids | Findings dropped unless the statement was selected for that chunk and the line is changed |
 | Unstable reruns | Jev answer cache; pinned model; `jrfc publish` dedupes comments by content key across pushes |
 | Repo-specific rules | Local `.jrfc/` layer with its own prefix, pinned `extends:`, `conflicts --local` gate |
+| Reviewer sees one file | Verification of blocking findings against repo evidence; unverified findings never block |
 | Service outages | Jev failures exit 3 (not 2), so CI can tell "service down" from "change blocked" |
 | Code leaves the company | **Open.** Needs data-protection approval before real repos (see workflow header) |
 
