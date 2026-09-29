@@ -71,3 +71,10 @@ domains:
     owner: platform
     applies_when: The content adds, reads, changes or removes a feature flag, or changes user-visible behavior of a production service.
     not_applies_when: No feature flag is involved and no user-visible production behavior changes.
+
+  agents:
+    title: Agent tool use
+    description: What coding agents may do through their tools (shell commands, file writes, MCP calls) while they work in a repository.
+    owner: ai-governance
+    applies_when: The content is a tool call made by a coding agent, such as a shell command, a file write or an MCP call.
+    not_applies_when: The content is not a tool call made by an agent.

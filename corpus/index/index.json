@@ -1,11 +1,23 @@
 {
-  "corpus_hash": "73800c4f93bc87e7",
+  "corpus_hash": "f2f8f9338411bae8",
   "counts": {
-    "domains": 10,
-    "rfcs": 11,
-    "statements": 44
+    "domains": 11,
+    "rfcs": 12,
+    "statements": 52
   },
   "domains": [
+    {
+      "applies_when": "The content is a tool call made by a coding agent, such as a shell command, a file write or an MCP call.",
+      "description": "What coding agents may do through their tools (shell commands, file writes, MCP calls) while they work in a repository.",
+      "id": "agents",
+      "layer": "local",
+      "not_applies_when": "The content is not a tool call made by an agent.",
+      "owner": "ai-governance",
+      "rfcs": [
+        "JRFC-0012"
+      ],
+      "title": "Agent tool use"
+    },
     {
       "applies_when": "The content adds, changes or describes an HTTP endpoint, route, controller, request or response payload, or an API contract (OpenAPI).",
       "description": "Design of HTTP/REST endpoints exposed by services, including paths, methods, status codes, errors, pagination and versioning.",
@@ -453,6 +465,38 @@
       "superseded_by": null,
       "supersedes": [],
       "title": "Python type hints"
+    },
+    {
+      "applies_when": "The content is a tool call made by a coding agent: a shell command, a file write or an MCP call.",
+      "artifacts": [
+        "tool"
+      ],
+      "domain": "agents",
+      "id": "JRFC-0012",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "not_applies_when": "The content is not a tool call made by an agent.",
+      "owner": "ai-governance",
+      "path": "corpus/rfcs/JRFC-0012-agent-tool-use.md",
+      "retired": [],
+      "review_by": "2027-03-31",
+      "statements": [
+        "JRFC-0012.1",
+        "JRFC-0012.2",
+        "JRFC-0012.3",
+        "JRFC-0012.4",
+        "JRFC-0012.5",
+        "JRFC-0012.6",
+        "JRFC-0012.7",
+        "JRFC-0012.8"
+      ],
+      "status": "draft",
+      "summary": "Limits on the shell commands and tool calls a coding agent runs in a repository: git history and branches, checks, credentials, remote scripts and production systems.",
+      "superseded_by": null,
+      "supersedes": [],
+      "title": "Agent tool use"
     }
   ],
   "schema": 2,
@@ -1439,6 +1483,189 @@
       "status": "draft",
       "text": "Public functions and methods in Python modules SHOULD have type hints for all parameters and the return value.",
       "title": "Typed public functions"
+    },
+    {
+      "applies_when": "the tool call runs `git push` or another command that updates a remote branch.",
+      "artifacts": [
+        "tool"
+      ],
+      "blocking": false,
+      "domain": "agents",
+      "enforcement": "agent",
+      "id": "JRFC-0012.1",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content is not a tool call made by an agent.",
+      "rfc": "JRFC-0012",
+      "source": "corpus/rfcs/JRFC-0012-agent-tool-use.md#L33",
+      "status": "draft",
+      "text": "Agents MUST NOT push commits directly to the `main` or `master` branch of a remote; changes reach it through a pull request.",
+      "title": "No direct push to the main branch",
+      "tools": "Bash",
+      "violated_when": "the command pushes to main or master: it names main or master as the target, or it runs a plain `git push` while the current branch is main or master."
+    },
+    {
+      "applies_when": "the tool call runs `git push`.",
+      "artifacts": [
+        "tool"
+      ],
+      "blocking": false,
+      "domain": "agents",
+      "enforcement": "agent",
+      "id": "JRFC-0012.2",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content is not a tool call made by an agent.",
+      "rfc": "JRFC-0012",
+      "source": "corpus/rfcs/JRFC-0012-agent-tool-use.md#L42",
+      "status": "draft",
+      "text": "Agents MUST NOT force-push (`--force`, `-f`, `--force-with-lease`, a `+` refspec) to any remote branch.",
+      "title": "No force push",
+      "tools": "Bash",
+      "violated_when": "the command force-pushes with --force, -f, --force-with-lease or a refspec that starts with +."
+    },
+    {
+      "applies_when": "the tool call commits, pushes or changes git hooks or CI configuration.",
+      "artifacts": [
+        "tool"
+      ],
+      "blocking": false,
+      "domain": "agents",
+      "enforcement": "agent",
+      "id": "JRFC-0012.3",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content is not a tool call made by an agent.",
+      "rfc": "JRFC-0012",
+      "source": "corpus/rfcs/JRFC-0012-agent-tool-use.md#L51",
+      "status": "draft",
+      "text": "Agents MUST NOT skip git hooks or checks, for example with `--no-verify`, `-n` on commit, `HUSKY=0` or by disabling a required CI job.",
+      "title": "Checks are not skipped",
+      "tools": "Bash",
+      "violated_when": "the command skips or disables git hooks or checks, for example git commit --no-verify, git push --no-verify, HUSKY=0 or SKIP= environment variables."
+    },
+    {
+      "applies_when": "the tool call input contains a string that is or looks like a credential.",
+      "artifacts": [
+        "tool"
+      ],
+      "blocking": false,
+      "domain": "agents",
+      "enforcement": "linter",
+      "id": "JRFC-0012.4",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content is not a tool call made by an agent.",
+      "rfc": "JRFC-0012",
+      "source": "corpus/rfcs/JRFC-0012-agent-tool-use.md#L60",
+      "status": "draft",
+      "text": "Tool calls MUST NOT contain a real credential (password, token, API key, private key) as a literal; they reference it through an environment variable or the secret manager.",
+      "title": "No credential literals in tool calls",
+      "tools": ".*"
+    },
+    {
+      "applies_when": "the tool call downloads content from the network.",
+      "artifacts": [
+        "tool"
+      ],
+      "blocking": false,
+      "domain": "agents",
+      "enforcement": "agent",
+      "id": "JRFC-0012.5",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "SHOULD",
+      "not_applies_when": "The content is not a tool call made by an agent.",
+      "rfc": "JRFC-0012",
+      "source": "corpus/rfcs/JRFC-0012-agent-tool-use.md#L68",
+      "status": "draft",
+      "text": "Agents SHOULD NOT download a script and run it in the same command (`curl … | sh`, `wget -O- … | bash`, `iex (iwr …)`).",
+      "title": "No remote scripts piped into a shell",
+      "tools": "Bash",
+      "violated_when": "the command downloads a script and pipes it into sh, bash, zsh, python or another interpreter, or evaluates downloaded content."
+    },
+    {
+      "applies_when": "the tool call deletes, moves, overwrites or changes permissions of files.",
+      "artifacts": [
+        "tool"
+      ],
+      "blocking": false,
+      "domain": "agents",
+      "enforcement": "agent",
+      "id": "JRFC-0012.6",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content is not a tool call made by an agent.",
+      "rfc": "JRFC-0012",
+      "source": "corpus/rfcs/JRFC-0012-agent-tool-use.md#L77",
+      "status": "draft",
+      "text": "Agents MUST NOT delete, overwrite or change the permissions of files outside the working directory of the session, except in temporary directories.",
+      "title": "No destructive commands outside the workspace",
+      "tools": "Bash",
+      "violated_when": "the command deletes, overwrites or changes permissions of paths outside the working directory (`cwd`), such as the home directory, / or system folders; paths under /tmp or the working directory are allowed."
+    },
+    {
+      "applies_when": "the tool call connects to a database, cloud account, cluster or deployment tool.",
+      "artifacts": [
+        "tool"
+      ],
+      "blocking": false,
+      "domain": "agents",
+      "enforcement": "agent",
+      "id": "JRFC-0012.7",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "MUST",
+      "not_applies_when": "The content is not a tool call made by an agent.",
+      "rfc": "JRFC-0012",
+      "source": "corpus/rfcs/JRFC-0012-agent-tool-use.md#L86",
+      "status": "draft",
+      "text": "Agents MUST NOT change data or schema in a production database, queue or cloud resource (migrations, write queries, deletes, deploys to production).",
+      "title": "No writes to production systems",
+      "tools": "Bash|mcp__.*",
+      "violated_when": "the tool call writes, deletes or migrates data or schema, or deploys, on a system whose name, host, profile, context or environment says production or prod."
+    },
+    {
+      "applies_when": "the tool call makes a network request.",
+      "artifacts": [
+        "tool"
+      ],
+      "blocking": false,
+      "domain": "agents",
+      "enforcement": "agent",
+      "id": "JRFC-0012.8",
+      "languages": [
+        "any"
+      ],
+      "layer": "local",
+      "level": "SHOULD",
+      "not_applies_when": "The content is not a tool call made by an agent.",
+      "rfc": "JRFC-0012",
+      "source": "corpus/rfcs/JRFC-0012-agent-tool-use.md#L95",
+      "status": "draft",
+      "text": "Agents SHOULD NOT disable TLS certificate verification in commands (`curl -k`, `--insecure`, `GIT_SSL_NO_VERIFY`, `verify=False`).",
+      "title": "TLS verification stays on",
+      "tools": "Bash",
+      "violated_when": "the command disables TLS certificate verification, for example curl -k or --insecure, wget --no-check-certificate, GIT_SSL_NO_VERIFY=1 or NODE_TLS_REJECT_UNAUTHORIZED=0."
     }
   ]
 }

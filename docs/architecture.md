@@ -228,6 +228,57 @@ it: `.jrfc/` extends `path: ..` and adds `JTOOL-` rules for the tooling itself.
 At the root, plain `jrfc` resolves to `.jrfc/` (a note is printed); organisation corpus
 commands use `--config jrfc.yaml` (the Makefile does this).
 
+## Hooks: standards on an agent's tool calls
+
+`hooks.py` applies the corpus to Claude Code hook events while an agent works. In a review,
+Jev only selects and Claude judges; a hook has no time for Claude, so **Jev is the judge**
+and Claude only runs at the end of the turn.
+
+```
+PreToolUse   (Bash | Write | Edit | … | mcp__.*)
+   ├─ code   secret scanner on the text the call writes (not `old_string`): a hit breaks
+   │         the rule `hooks.secrets` maps to the tool (JRFC-0004.1 for writes, JRFC-0012.4 else)
+   ├─ code   candidates: `tool` statements whose `Tools:` regex matches the tool name,
+   │         `Enforcement: agent`, RFC status with an action table
+   ├─ Jev    one request: per candidate "does the call break it?" (criterion: `Violated when:`)
+   │         and "is the call about it?"; p = min(both). State: tool, redacted input, cwd,
+   │         git branch (a plain `git push` pushes the current branch)
+   └─ code   action = hooks.actions[status][level] at p → deny | ask | warn (additionalContext) | log
+PostToolUse  (Write | Edit | MultiEdit)
+   ├─ code   the written lines, found in the file on disk, as a synthetic diff with 15 lines
+   │         of context → the same chunk and prefilter (`Selector.eligible`) as a review
+   ├─ Jev    one request per chunk: "do the added lines break it?" and "does it apply?"
+   └─ code   warn at p ≥ hooks.code_warn, never deny: the lines are not evidence (JTOOL-0002.6)
+Stop
+   └─ jrfc review of the working tree (tracked diff + untracked files), once per distinct
+      change and session; `decision: block` only for verified blocking findings, at most
+      `stop.max_blocks` times per session
+```
+
+Why these choices:
+
+- **Violation, not relevance.** The selection question ("is this relevant?") is right for
+  choosing what the reviewer reads, but a hook must decide alone. Asking both questions in
+  the same request costs no latency (one round trip whatever the number of questions) and
+  keeps off-topic rules quiet: on 25 code writes, false positives at 0.5 fell from 40 to 12.
+- **The level and the status decide, not the model.** Jev only gives a probability; the
+  action comes from the corpus, as `blocking` does in a review (JTOOL-0002.5). The band
+  0.5–0.9 of an enforced MUST asks the user instead of denying.
+- **Writes only warn.** On an `Edit` of `self.session.get(path)`, Jev said 0.91 that the
+  timeout rule was broken; the timeout was set on the session 30 lines above. The agent has
+  that context, so it gets the warning; the Stop review, which gathers evidence, can block.
+- **Fail-open.** Jev gets `hooks.timeout` (3 s); past it or on an error the call runs and
+  the decision log records `jev: timeout | error`. The answer still lands in the cache.
+  `jrfc hook` exits 3 on a Jev error (JTOOL-0003.1), which Claude Code treats as a
+  non-blocking error.
+- **Redaction first.** The scanner replaces secrets with `[REDACTED:kind]` (line breaks kept)
+  in everything sent to Jev or written to the log; Jev still sees that a credential was there.
+- **Warm connection.** A new process per call costs ~0.5 s (Python start, TLS handshake);
+  `jrfc hookd` keeps one `Jev` (and its HTTP connection) for its lifetime: ~0.3 s per call,
+  ~20 ms on a cache hit. It binds 127.0.0.1, answers only `application/json` POSTs (a
+  browser cannot send one cross-origin without a preflight) and, with `JRFC_HOOK_TOKEN`,
+  requires a bearer token.
+
 ## Known pain points and how they are handled
 
 | Pain point | Handling |

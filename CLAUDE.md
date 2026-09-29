@@ -20,6 +20,7 @@ make check                    # org corpus: lint + index up to date (no model ca
 make build                    # regenerate corpus/index/ after editing corpus/ (the index is committed)
 make self-check               # this repo's own rules (.jrfc/, JTOOL-) lint + index
 make eval / eval-scale / eval-facts   # selection evals (need TYPESAFE_API_KEY)
+make eval-hooks               # hook judge on eval/hooks/cases.yaml (--no-cache to measure latency)
 make eval-triage              # triage of AI review comments (needs TYPESAFE_API_KEY and claude)
 plugins/jrfc/bin/jrfc --config jrfc.yaml eval-verify --retrieval treesitter   # verification eval (needs claude)
 ```
@@ -67,6 +68,11 @@ comments with the same selection and verification evidence (`verify.gather_evide
   agent, `apply_verdict`. One `RepoIndex` per run is shared by facts and verification;
   it records parse/download problems in `index.events`.
 - **health.py**: `health.json` + summary warnings for silent failures.
+- **hooks.py**: Claude Code hooks (`jrfc hook` command transport, `jrfc hookd` localhost HTTP
+  server, `jrfc hook-config`). Jev judges tool calls against `tool` statements (`Tools:`,
+  `Violated when:`) and written lines against code statements, p = min(applies, violates);
+  `hooks.actions[status][level]` maps p to deny/ask/warn/log; writes only warn; Stop runs
+  `jrfc review`. Secret scanner redacts before Jev. Fail-open on Jev timeout/error.
 - **evaluate.py**: selection eval (per-strategy cost, layer that dropped each miss,
   `--no-facts` A/B, optional `repo:` fixture per case) and verification eval.
 

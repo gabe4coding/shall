@@ -33,6 +33,12 @@ conflicts:
 codegraph:
   download_grammars: true  # false: never download a grammar during a run (CI runs `jrfc prefetch`)
 
+hooks:
+  # a secret-scanner hit (code, not Jev) breaks this statement for the matching tool
+  secrets:
+    - ["Write|Edit|MultiEdit|NotebookEdit", JRFC-0004.1]
+    - [".*", JRFC-0012.4]
+
 review:
   # jrfc always appends --tools "" (no tools), a JSON schema and a fixed system prompt (JTOOL-0002.1)
   command: [claude, -p]

@@ -1,0 +1,232 @@
+"""Claude Code hooks: secret scanner, actions, written lines, outputs, fail-open (no network)."""
+
+import asyncio
+import copy
+from pathlib import Path
+
+import pytest
+
+from jrfc.artifact import parse_diff
+from jrfc.config import load_config
+from jrfc.corpus import load_corpus
+from jrfc.hooks import (Hooks, action_for, changed_ranges, code_action, hook_settings, redact,
+                        scan_secrets, synthetic_diff, valid_event, written_text)
+
+REPO = Path(__file__).resolve().parents[4]
+ENFORCED = {"MUST": [[0.9, "deny"], [0.5, "ask"]], "SHOULD": [[0.7, "warn"]], "MAY": [[0.7, "log"]]}
+
+
+@pytest.fixture(scope="module")
+def org():
+    mp = pytest.MonkeyPatch()
+    mp.setenv("JRFC_CONFIG", str(REPO / "jrfc.yaml"))  # restored after the module
+    cfg = load_config(str(REPO / "jrfc.yaml"))
+    corpus = load_corpus(cfg)
+    yield cfg, corpus
+    mp.undo()
+
+
+class FakeJev:
+    """Answers p per question id from a table; `#applies` questions answer 0.95 by default."""
+
+    def __init__(self, table=None, fail=None, delay=0.0):
+        self.table, self.fail, self.delay = table or {}, fail, delay
+        self.usage = {"requests": 0, "cached": 0}
+        self.states = []
+
+    async def ask(self, state, questions):
+        await asyncio.sleep(self.delay)
+        if self.fail:
+            raise self.fail
+        self.usage["requests"] += 1
+        self.states.append(state)
+        return {q: {"p": self.table.get(q, 0.95 if q.endswith("#applies") else 0.02)} for q in questions}
+
+
+def hooks_for(org, jev, draft_as_enforced=True, **kw):
+    cfg, corpus = org
+    cfg = copy.copy(cfg)
+    cfg.data = copy.deepcopy(cfg.data)
+    if draft_as_enforced:
+        cfg.data["hooks"]["actions"]["draft"] = ENFORCED
+    return Hooks(cfg, corpus, jev, log=False, **kw)
+
+
+def pre(hooks, tool, tool_input, cwd="/repo"):
+    event = {"hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": tool_input, "cwd": cwd}
+    hooks.git_branch = lambda cwd: "feat/x"
+    return asyncio.run(hooks.handle(event))
+
+
+# ---------------------------------------------------------------- scanner
+
+
+@pytest.mark.parametrize("text,kind", [
+    ("export GITHUB_TOKEN=ghp_8fK2mQ9xLpR4tV7wZ1aB3cD5eF6gH0iJ2kL4", "github-token"),
+    ("aws_key = 'AKIAIOSFODNN7EXAMPL3'", "aws-access-key"),
+    ("DB = 'postgres://admin:S3cr3tPw9@db:5432/app'", "url-password"),
+    ('api_key = "q8Zr2mXv7Lp0tYw3"', "assigned-secret"),
+    ("DB_PASSWORD=hunter2hunter2 ./run.sh", "shell-secret"),
+    ("-----BEGIN RSA PRIVATE KEY-----\nMIIEow\nIBAAK\n-----END RSA PRIVATE KEY-----", "private-key"),
+])
+def test_scanner_finds_real_looking_secrets(text, kind):
+    assert kind in [s.kind for s in scan_secrets(text)]
+
+
+@pytest.mark.parametrize("text", [
+    "export GITHUB_TOKEN=$(op read op://dev/gh/token)",
+    "export API_TOKEN=${API_TOKEN}",
+    "password = os.environ['DB_PASSWORD']",
+    'api_key = "changeme-please"',
+    'token: "{{ secrets.TOKEN }}"',
+    'password = "test-password-123"',
+    "curl -H \"Authorization: Bearer $TOKEN\" https://api.example.com",
+    "git push origin main",
+])
+def test_scanner_ignores_references_and_placeholders(text):
+    assert scan_secrets(text) == []
+
+
+def test_redact_keeps_line_numbers_and_names():
+    text = "a = 1\nKEY = '''-----BEGIN PRIVATE KEY-----\nabc\ndef\n-----END PRIVATE KEY-----'''\nb = 2\n"
+    out, kinds = redact(text)
+    assert kinds == ["private-key"] and "abc" not in out
+    assert out.count("\n") == text.count("\n") and out.splitlines()[-1] == "b = 2"
+    out, _ = redact("DB_PASSWORD=hunter2hunter2 ./run.sh")
+    assert out == "DB_PASSWORD=[REDACTED:shell-secret] ./run.sh"
+
+
+def test_written_text_skips_the_text_an_edit_removes():
+    text = written_text({"file_path": "a.py", "old_string": "KEY='ghp_x'", "new_string": "KEY=os.environ['K']"})
+    assert "ghp_x" not in text and "os.environ" in text
+    assert "new" in written_text({"edits": [{"old_string": "old", "new_string": "new"}]})
+
+
+# ---------------------------------------------------------------- actions
+
+
+def test_action_tables(org):
+    _, corpus = org
+    actions = {"enforced": ENFORCED, "approved": {"MUST": [[0.5, "warn"]]}}
+    rfc, st = corpus.statement("JRFC-0004.1")  # enforced MUST
+    assert [action_for(actions, rfc, st, p) for p in (0.95, 0.6, 0.3)] == ["deny", "ask", None]
+    # after a write: at most a warning, and only above code_warn
+    assert [code_action(actions, 0.7, rfc, st, p) for p in (0.95, 0.6, 0.3)] == ["warn", "log", None]
+    rfc, st = corpus.statement("JRFC-0012.1")  # draft: no table, not checked
+    assert action_for(actions, rfc, st, 0.99) is None
+
+
+# ---------------------------------------------------------------- PreToolUse
+
+
+def test_tool_candidates_follow_tools_status_and_enforcement(org):
+    hooks = hooks_for(org, FakeJev())
+    bash = {st.id for _, st in hooks.tool_candidates("Bash")}
+    assert "JRFC-0012.1" in bash and "JRFC-0012.7" in bash
+    assert "JRFC-0012.4" not in bash  # Enforcement: linter -> the secret scanner owns it
+    mcp = {st.id for _, st in hooks.tool_candidates("mcp__db__query")}
+    assert mcp == {"JRFC-0012.7"}
+    assert not hooks_for(org, FakeJev(), draft_as_enforced=False).tool_candidates("Bash")
+
+
+def test_pre_denies_asks_warns_by_level_and_score(org):
+    out = pre(hooks_for(org, FakeJev({"JRFC-0012.1": 0.97})), "Bash", {"command": "git push origin main"})
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "JRFC-0012.1" in out["hookSpecificOutput"]["permissionDecisionReason"]
+    out = pre(hooks_for(org, FakeJev({"JRFC-0012.1": 0.7})), "Bash", {"command": "git push"})
+    assert out["hookSpecificOutput"]["permissionDecision"] == "ask"
+    out = pre(hooks_for(org, FakeJev({"JRFC-0012.5": 0.99})), "Bash", {"command": "curl x | sh"})
+    assert "permissionDecision" not in out["hookSpecificOutput"]  # SHOULD: a warning, not a decision
+    assert "JRFC-0012.5" in out["hookSpecificOutput"]["additionalContext"]
+    assert pre(hooks_for(org, FakeJev()), "Bash", {"command": "ls"}) == {}  # no opinion: normal permissions
+
+
+def test_pre_off_topic_rule_stays_quiet(org):
+    # violation question high, applicability low: min() keeps it below every threshold
+    jev = FakeJev({"JRFC-0012.6": 0.8, "JRFC-0012.6#applies": 0.1})
+    assert pre(hooks_for(org, jev), "Bash", {"command": "curl x | sh"}) == {}
+
+
+def test_pre_redacts_before_jev_and_scanner_denies(org):
+    jev = FakeJev()
+    out = pre(hooks_for(org, jev), "Bash", {"command": "export GITHUB_TOKEN=ghp_8fK2mQ9xLpR4tV7wZ1aB3cD5eF6gH0iJ2kL4"})
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"  # JRFC-0012.4 via the scanner
+    assert "ghp_" not in str(jev.states) and "[REDACTED:github-token]" in str(jev.states)
+    assert jev.states[0]["git_branch"] == "feat/x"
+    # a Write with a secret: JRFC-0004.1 (enforced) even without trial settings
+    out = pre(hooks_for(org, FakeJev(), draft_as_enforced=False), "Write",
+              {"file_path": "c.py", "content": "DB = 'postgres://u:S3cr3tPw9@h/db'"})
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "JRFC-0004.1" in out["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_pre_fails_open(org):
+    hooks = hooks_for(org, FakeJev(fail=RuntimeError("503")))
+    assert pre(hooks, "Bash", {"command": "git push origin main"}) == {} and hooks.jev_failed
+    hooks = hooks_for(org, FakeJev({"JRFC-0012.1": 0.99}, delay=0.5), timeout=0.05)
+    assert pre(hooks, "Bash", {"command": "git push origin main"}) == {} and not hooks.jev_failed
+
+
+def test_pre_ignores_tools_outside_the_matcher(org):
+    jev = FakeJev({"JRFC-0012.1": 0.99})
+    assert pre(hooks_for(org, jev), "Read", {"file_path": "x"}) == {} and not jev.states
+
+
+# ---------------------------------------------------------------- PostToolUse
+
+
+def test_changed_ranges_and_synthetic_diff():
+    text = "".join(f"line {i}\n" for i in range(1, 41))
+    assert changed_ranges("Write", {}, text) == [(1, 40)]
+    assert changed_ranges("Edit", {"new_string": "line 20\nline 21"}, text) == [(20, 21)]
+    multi = {"edits": [{"new_string": "line 5"}, {"new_string": "line 30\n"}, {"new_string": ""}]}
+    assert changed_ranges("MultiEdit", multi, text) == [(5, 5), (30, 30)]
+    assert changed_ranges("NotebookEdit", {}, text) is None
+    chunk = parse_diff(synthetic_diff("a.py", text, [(20, 21)], 3), 40000)[0]
+    assert chunk.path == "a.py" and chunk.language == "python" and chunk.anchor_lines == {20, 21}
+    assert "   17   line 17" in chunk.rendered and "   24   line 24" in chunk.rendered
+    assert "line 16" not in chunk.rendered and "line 25" not in chunk.rendered
+
+
+def test_post_warns_never_blocks(org, tmp_path):
+    f = tmp_path / "svc" / "client.py"
+    f.parent.mkdir()
+    f.write_text("import requests\n\ndef fetch(url: str) -> dict:\n    return requests.get(url).json()\n")
+    jev = FakeJev({"JRFC-0006.1": 0.99})
+    event = {"hook_event_name": "PostToolUse", "tool_name": "Edit", "cwd": str(tmp_path),
+             "tool_input": {"file_path": str(f), "old_string": "x", "new_string": "    return requests.get(url).json()"}}
+    out = asyncio.run(hooks_for(org, jev).handle(event))
+    ctx = out["hookSpecificOutput"]
+    assert ctx["hookEventName"] == "PostToolUse" and "JRFC-0006.1" in ctx["additionalContext"]
+    assert "(lines 4)" in ctx["additionalContext"] and "decision" not in out
+    assert jev.states[0]["file"] == "svc/client.py" and "    4 + " in jev.states[0]["content"]
+    assert asyncio.run(hooks_for(org, FakeJev()).handle(event)) == {}
+
+
+# ---------------------------------------------------------------- settings
+
+
+def test_hook_settings_shape(org):
+    cfg, _ = org
+    http = hook_settings(cfg, "http", 8765, "jrfc", stop=True)["hooks"]
+    assert http["PreToolUse"][0]["hooks"][0] == {"type": "http", "url": "http://127.0.0.1:8765/hook", "timeout": 6}
+    assert http["PostToolUse"][0]["matcher"] == "Write|Edit|MultiEdit|NotebookEdit"
+    assert http["Stop"][0]["hooks"][0]["timeout"] == 600
+    cmd = hook_settings(cfg, "command", 8765, "/p/bin/jrfc", stop=False)["hooks"]
+    assert cmd["PreToolUse"][0]["hooks"][0]["command"] == "/p/bin/jrfc hook" and "Stop" not in cmd
+
+
+def test_valid_event_rejects_malformed_bodies():
+    assert valid_event(b'{"hook_event_name": "PreToolUse", "tool_input": {"command": "ls"}}')["tool_input"]
+    for body in (b"", b"[1]", b"not json", b'{"tool_name": "Bash"}',
+                 b'{"hook_event_name": "PreToolUse", "tool_input": "ls"}', b'{"hook_event_name": 3}'):
+        assert valid_event(body) is None, body
+
+
+def test_errors_in_the_log_are_redacted(org):
+    hooks = hooks_for(org, FakeJev(fail=RuntimeError("401 for token ghp_8fK2mQ9xLpR4tV7wZ1aB3cD5eF6gH0iJ2kL4")))
+    record = {}
+    event = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "git push"}, "cwd": "/r"}
+    hooks.git_branch = lambda cwd: ""
+    asyncio.run(hooks.pre(event, record))
+    assert "ghp_" not in record["jev"] and "[REDACTED:github-token]" in record["jev"]
