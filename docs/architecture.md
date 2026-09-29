@@ -273,6 +273,14 @@ Why these choices:
   non-blocking error.
 - **Redaction first.** The scanner replaces secrets with `[REDACTED:kind]` (line breaks kept)
   in everything sent to Jev or written to the log; Jev still sees that a credential was there.
+- **Plugin wiring.** The plugin's `hooks/hooks.json` runs `bin/jrfc-hook`, a shell script
+  that exits in a few milliseconds where no jrfc workspace exists, forwards to `jrfc hookd`
+  when it serves the repository, and otherwise runs `jrfc hook`. `hooks.enabled: false`
+  turns everything off in a workspace.
+- **No hook loops.** The Stop review runs `claude -p` agents; were they to load the plugin,
+  their own Stop would start another review. Agents run with `--setting-sources ""` and
+  `JRFC_HOOKS_DISABLED=1` (the hooks answer nothing when it is set), and a lock per change
+  (`stop-running-<sha>`) skips a second review of the same change from another session.
 - **Warm connection.** A new process per call costs ~0.5 s (Python start, TLS handshake);
   `jrfc hookd` keeps one `Jev` (and its HTTP connection) for its lifetime: ~0.3 s per call,
   ~20 ms on a cache hit. It binds 127.0.0.1, answers only `application/json` POSTs (a

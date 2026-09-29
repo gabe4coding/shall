@@ -92,8 +92,9 @@ repository; without it, `jrfc` uses this repository's own rules in `.jrfc/`.
 
 ## Install the Claude Code plugin
 
-The plugin gives Claude Code the `jrfc` command, the reviewer and verifier agents, and four
-skills:
+The plugin gives Claude Code the `jrfc` command, the reviewer and verifier agents, the
+[hooks](#d-while-an-agent-works-claude-code-hooks) that check an agent's tool calls in
+repositories with a jrfc workspace, and four skills:
 
 | Skill | Claude uses it when you… |
 | --- | --- |
@@ -176,17 +177,32 @@ it can check, and only the Stop review can block. Every input is redacted by the
 scanner before it reaches Jev. If Jev is slow (`hooks.timeout`, 3 s) or down, the call
 runs: the hooks fail open. Each decision is appended to `.jrfc-cache/hooks/decisions.jsonl`.
 
+**With the plugin** the hooks are on: `hooks/hooks.json` calls `bin/jrfc-hook` for every
+event. Outside a jrfc workspace (no `.jrfc/jrfc.yaml` or `jrfc.yaml` up the tree, no
+`JRFC_CONFIG`, `JRFC_EXTENDS` or `~/.config/jrfc/config.yaml`) it exits in a few
+milliseconds. Inside one it sends the event to `jrfc hookd` when one runs for that
+repository (~0.3 s per call), and otherwise runs `jrfc hook` (~0.5 s per call):
+
 ```bash
-jrfc hookd &                                   # localhost server, keeps the Jev connection warm
-jrfc hook-config > /tmp/jrfc-hooks.json        # the hooks block for .claude/settings.json
-jrfc hook-config --transport command           # no server: one process per call (~0.5 s)
-jrfc hook-config --no-stop                     # without the end-of-turn review
+jrfc hookd &                  # optional: keeps the Jev connection warm (port: hooks.port, 8765)
 ```
 
-Merge the printed `hooks` block into `.claude/settings.json` (project) or
-`~/.claude/settings.json`. `jrfc hookd` checks only events whose working directory is
-inside its repository; run one per repository (`--port`), or use the command transport.
-Set `JRFC_HOOK_TOKEN` before `hookd` and `hook-config` to require a bearer token.
+Turn the hooks off in a workspace with `hooks: {enabled: false}`, or only the end-of-turn
+review with `hooks: {stop: {enabled: false}}` (it runs `jrfc review`, with Claude, when the
+change is new). Without `TYPESAFE_API_KEY` only the secret scanner runs.
+
+**Without the plugin**, print a settings block and merge it into `.claude/settings.json`
+(project) or `~/.claude/settings.json`. Do not use both, or every hook runs twice.
+
+```bash
+jrfc hook-config                      # http hooks to `jrfc hookd` (start it yourself)
+jrfc hook-config --transport command  # no server: one process per call
+jrfc hook-config --no-stop            # without the end-of-turn review
+```
+
+`jrfc hookd` checks only events whose working directory is inside its repository (others
+get 421); run one per repository with `--port` (`JRFC_HOOKD_PORT` for the plugin). Set
+`JRFC_HOOK_TOKEN` before `hookd` and the hooks to require a bearer token.
 
 The tool rules in JRFC-0012 are `draft`, so the defaults do not act on them. To try them
 before the owner approves them, add a `draft` action table in your workspace:
@@ -394,6 +410,7 @@ Settings live in `jrfc.yaml` (organisation) and can be overridden in `.jrfc/jrfc
 | `triage.authors` | Copilot, CodeRabbit, `*[bot]`… | logins whose comments `jrfc triage` sorts (`*` is the only wildcard); GitHub Apps always count |
 | `triage.thresholds` | `actionable 0.5, statement 0.5, duplicate 0.7` | a comment below `actionable` is noise; `duplicate` marks a repeated concern |
 | `triage.verify` | `true` | check each actionable comment against repository evidence (`--no-verify` skips it) |
+| `hooks.enabled` | `true` | `false`: the hooks (also the plugin's) do nothing in this workspace |
 | `hooks.actions` | see [hooks](#d-while-an-agent-works-claude-code-hooks) | status → level → `[[min p, action]]`; a status without a table is not checked |
 | `hooks.code_warn` | `0.7` | after a write, warn at or above this (never deny) |
 | `hooks.timeout` | `3.0` | seconds for Jev in a hook; past it the call runs (fail-open) |
@@ -401,7 +418,8 @@ Settings live in `jrfc.yaml` (organisation) and can be overridden in `.jrfc/jrfc
 | `hooks.stop` | `enabled, max_blocks 2` | end-of-turn review; blocks at most twice per session |
 
 Environment variables: `TYPESAFE_API_KEY`, `ANTHROPIC_API_KEY` (CI), `JRFC_CONFIG`,
-`JRFC_EXTENDS`, `JRFC_GIT_TOKEN`, `JRFC_CACHE_DIR`.
+`JRFC_EXTENDS`, `JRFC_GIT_TOKEN`, `JRFC_CACHE_DIR`; for hooks `JRFC_HOOKD_PORT`,
+`JRFC_HOOK_TOKEN` and `JRFC_HOOKS_DISABLED` (set by jrfc for the agents it runs).
 
 ## Commands
 
@@ -475,7 +493,7 @@ numbers and what they mean: [docs/results.md](docs/results.md).
 | --- | --- |
 | `corpus/` | example organisation corpus: `rfcs/`, `domains.yaml`, `effects.yaml`, generated `index/` |
 | `jrfc.yaml` | configuration of the example organisation corpus |
-| `plugins/jrfc/` | the Claude Code plugin: skills, agents, `bin/jrfc`, `bin/jrfc-pr-review` |
+| `plugins/jrfc/` | the Claude Code plugin: skills, agents, `hooks/hooks.json`, `bin/jrfc`, `bin/jrfc-hook`, `bin/jrfc-pr-review` |
 | `plugins/jrfc/tooling/` | the Python package behind the CLI (`uv` project, tests) |
 | `ci/github/` | workflow templates for the corpus repository and for application repositories |
 | `examples/booking-service/.jrfc/` | an application repository's local rules (`BOOK-`) |

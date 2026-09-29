@@ -2,6 +2,10 @@
 
 import asyncio
 import copy
+import json
+import os
+import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -33,6 +37,9 @@ class FakeJev:
         self.table, self.fail, self.delay = table or {}, fail, delay
         self.usage = {"requests": 0, "cached": 0}
         self.states = []
+
+    def available(self):
+        return True
 
     async def ask(self, state, questions):
         await asyncio.sleep(self.delay)
@@ -209,7 +216,7 @@ def test_post_warns_never_blocks(org, tmp_path):
 def test_hook_settings_shape(org):
     cfg, _ = org
     http = hook_settings(cfg, "http", 8765, "jrfc", stop=True)["hooks"]
-    assert http["PreToolUse"][0]["hooks"][0] == {"type": "http", "url": "http://127.0.0.1:8765/hook", "timeout": 6}
+    assert http["PreToolUse"][0]["hooks"][0] == {"type": "http", "url": "http://127.0.0.1:8765/hook-events", "timeout": 6}
     assert http["PostToolUse"][0]["matcher"] == "Write|Edit|MultiEdit|NotebookEdit"
     assert http["Stop"][0]["hooks"][0]["timeout"] == 600
     cmd = hook_settings(cfg, "command", 8765, "/p/bin/jrfc", stop=False)["hooks"]
@@ -230,3 +237,61 @@ def test_errors_in_the_log_are_redacted(org):
     hooks.git_branch = lambda cwd: ""
     asyncio.run(hooks.pre(event, record))
     assert "ghp_" not in record["jev"] and "[REDACTED:github-token]" in record["jev"]
+
+
+# ---------------------------------------------------------------- plugin wiring
+
+PLUGIN = REPO / "plugins" / "jrfc"
+
+
+def test_plugin_hooks_call_the_entry_script(org):
+    cfg, _ = org
+    hooks = json.loads((PLUGIN / "hooks" / "hooks.json").read_text())["hooks"]
+    assert set(hooks) == {"PreToolUse", "PostToolUse", "Stop"}
+    assert hooks["PreToolUse"][0]["matcher"] == cfg.get("hooks.pre_matcher")
+    for groups in hooks.values():
+        for h in groups[0]["hooks"]:
+            assert h["type"] == "command" and h["command"] == '"${CLAUDE_PLUGIN_ROOT}/bin/jrfc-hook"'
+    assert os.access(PLUGIN / "bin" / "jrfc-hook", os.X_OK)
+
+
+def _entry(cwd, env_extra=None):
+    env = {"PATH": os.environ["PATH"], "HOME": str(cwd), **(env_extra or {})}
+    event = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash",
+                        "tool_input": {"command": "git push origin main"}})
+    t0 = time.perf_counter()
+    r = subprocess.run(["bash", str(PLUGIN / "bin" / "jrfc-hook")], input=event, cwd=cwd, env=env,
+                       capture_output=True, text=True, timeout=20)
+    return r, time.perf_counter() - t0
+
+
+def test_entry_script_is_a_quick_no_op_outside_workspaces(tmp_path):
+    r, seconds = _entry(tmp_path)
+    assert (r.returncode, r.stdout) == (0, "") and seconds < 1.0
+    (tmp_path / "jrfc.yaml").write_text("prefix: X\n")
+    r, _ = _entry(tmp_path, {"JRFC_HOOKS_DISABLED": "1"})  # agents run by jrfc itself
+    assert (r.returncode, r.stdout) == (0, "")
+
+
+def test_disabled_flag_and_stop_lock(org, tmp_path, monkeypatch):
+    monkeypatch.setenv("JRFC_HOOKS_DISABLED", "1")
+    jev = FakeJev({"JRFC-0012.1": 0.99})
+    assert pre(hooks_for(org, jev), "Bash", {"command": "git push origin main"}) == {} and not jev.states
+    monkeypatch.delenv("JRFC_HOOKS_DISABLED")
+    off = hooks_for(org, jev)
+    off.cfg.data["hooks"]["enabled"] = False  # a workspace turns the plugin hooks off
+    assert pre(off, "Bash", {"command": "git push origin main"}) == {} and not jev.states
+    # a second Stop on a change that is being reviewed (nested session, other window) is skipped
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    (tmp_path / "a.py").write_text("x = 1\n")
+    hooks = hooks_for(org, FakeJev())
+    hooks.cfg.root = tmp_path
+    from jrfc.hooks import working_diff
+    import hashlib
+    sha = hashlib.sha256(working_diff(tmp_path).encode()).hexdigest()[:16]
+    lock = tmp_path / ".jrfc-cache" / "hooks" / f"stop-running-{sha}"
+    lock.parent.mkdir(parents=True)
+    lock.write_text("other")
+    record = {}
+    out = asyncio.run(hooks.stop({"hook_event_name": "Stop", "session_id": "s", "cwd": str(tmp_path)}, record))
+    assert out == {} and record["skip"] == "same change is being reviewed"

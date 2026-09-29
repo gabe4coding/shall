@@ -320,6 +320,8 @@ class Hooks:
 
     # -- entry point shared by `jrfc hook` and `jrfc hookd`
     async def handle(self, event: dict) -> dict:
+        if os.environ.get("JRFC_HOOKS_DISABLED") or not self.cfg.get("hooks.enabled", True):
+            return {}  # env: set for the agents jrfc itself runs (review.run_claude)
         name = event.get("hook_event_name")
         t0 = time.perf_counter()
         record: dict = {"event": name, "session": event.get("session_id")}
@@ -370,6 +372,9 @@ class Hooks:
 
     async def _ask(self, state, questions: dict, record: dict) -> dict | None:
         """Jev answers, or None when Jev is slow or down: the call then runs unchecked."""
+        if not self.jev.available():
+            record["jev"] = "no TYPESAFE_API_KEY"  # the secret scanner still runs
+            return None
         requests_before = self.jev.usage["requests"]
         task = asyncio.ensure_future(self.jev.ask(state, questions))
         try:
@@ -522,6 +527,21 @@ class Hooks:
             record["skip"] = "change too large"
             return {"systemMessage": f"jrfc: the change is too large for the stop review ({len(diff)} chars); "
                                      "run `jrfc review` on it"}
+        # one review per change at a time, whatever the session: a nested agent session (or a
+        # second window) that stops on the same change must not start a second review
+        lock = self.cfg.root / ".jrfc-cache" / "hooks" / f"stop-running-{sha}"
+        if lock.is_file() and time.time() - lock.stat().st_mtime < 900:
+            record["skip"] = "same change is being reviewed"
+            return {}
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        lock.write_text(session, encoding="utf-8")
+        try:
+            return await self._stop_review(diff, sha, session, root, state, state_path, record)
+        finally:
+            lock.unlink(missing_ok=True)
+
+    async def _stop_review(self, diff: str, sha: str, session: str, root: Path, state: dict,
+                           state_path: Path, record: dict) -> dict:
         out_dir = self.cfg.root / ".jrfc-out" / "hooks" / f"stop-{session}"
         out_dir.mkdir(parents=True, exist_ok=True)
         diff_path = out_dir / "change.diff"
@@ -529,13 +549,14 @@ class Hooks:
         cmd = [sys.executable, "-m", "jrfc.cli", *(["--config", str(self.cfg.path)] if self.cfg.path else []),
                "review", str(diff_path), "--out-dir", str(out_dir), "--search-root", str(root)]
         proc = await asyncio.create_subprocess_exec(*cmd, cwd=str(root), stdout=asyncio.subprocess.DEVNULL,
-                                                    stderr=asyncio.subprocess.PIPE)
+                                                    stderr=asyncio.subprocess.PIPE,
+                                                    env={**os.environ, "JRFC_HOOKS_DISABLED": "1"})
         _, err = await proc.communicate()
         record["review_exit"] = proc.returncode
         findings_path = out_dir / "findings.json"
         if proc.returncode not in (0, 2) or not findings_path.is_file():
             return {"systemMessage": f"jrfc: stop review failed (exit {proc.returncode}): "
-                                     f"{err.decode(errors='replace').strip()[-300:]}"}
+                                     f"{redact(err.decode(errors='replace').strip()[-300:])[0]}"}
         findings = json.loads(findings_path.read_text(encoding="utf-8"))["findings"]
         blocking = [f for f in findings if f.get("blocking")]
         state["reviewed"] = sha
@@ -563,7 +584,7 @@ def hook_settings(cfg: Config, transport: str, port: int, command: str, stop: bo
     """The `hooks` block for .claude/settings.json (deterministic, no model call)."""
     def handler(timeout: int) -> dict:
         if transport == "http":
-            h = {"type": "http", "url": f"http://127.0.0.1:{port}/hook", "timeout": timeout}
+            h = {"type": "http", "url": f"http://127.0.0.1:{port}/hook-events", "timeout": timeout}
             if os.environ.get("JRFC_HOOK_TOKEN"):
                 h |= {"headers": {"Authorization": "Bearer $JRFC_HOOK_TOKEN"}, "allowedEnvVars": ["JRFC_HOOK_TOKEN"]}
             return h
@@ -593,11 +614,12 @@ def valid_event(body: bytes) -> dict | None:
 
 
 async def serve(hooks: Hooks, host: str, port: int, root: Path) -> None:
-    """Minimal HTTP/1.1 server for Claude Code `type: http` hooks: POST /hook, GET /health.
+    """Minimal HTTP/1.1 server for Claude Code `type: http` hooks: POST /hook-events, GET /health.
 
     Localhost only. Browsers cannot send a cross-origin `application/json` POST without a
     preflight (answered 404), and JRFC_HOOK_TOKEN, when set, is required as a bearer token.
-    Events whose `cwd` is outside this repository are allowed unchecked.
+    Events whose `cwd` is outside this repository get 421: Claude Code lets the call run, and
+    the plugin's `jrfc-hook` falls back to `jrfc hook` for that repository.
     """
     token = os.environ.get("JRFC_HOOK_TOKEN")
 
@@ -619,7 +641,7 @@ async def serve(hooks: Hooks, host: str, port: int, root: Path) -> None:
             body = await reader.readexactly(int(headers.get("content-length") or 0))
             if method == "GET" and target == "/health":
                 await respond(writer, "200 OK", {"ok": True, "root": str(root), "usage": hooks.jev.usage})
-            elif method != "POST" or target != "/hook" or "json" not in headers.get("content-type", ""):
+            elif method != "POST" or target != "/hook-events" or "json" not in headers.get("content-type", ""):
                 await respond(writer, "404 Not Found")
             elif token and headers.get("authorization") != f"Bearer {token}":
                 await respond(writer, "401 Unauthorized")
@@ -627,8 +649,10 @@ async def serve(hooks: Hooks, host: str, port: int, root: Path) -> None:
                 await respond(writer, "400 Bad Request")
             else:
                 cwd = Path(event.get("cwd") or root).resolve()
-                inside = cwd == root or cwd.is_relative_to(root)
-                await respond(writer, "200 OK", await hooks.handle(event) if inside else {})
+                if cwd == root or cwd.is_relative_to(root):
+                    await respond(writer, "200 OK", await hooks.handle(event))
+                else:
+                    await respond(writer, "421 Misdirected Request")
         except Exception as err:  # fail-open: Claude Code treats a non-2xx answer as a non-blocking error
             hooks._log({"event": "hookd", "error": f"{type(err).__name__}: {redact(str(err))[0][:300]}"})
             try:
@@ -648,7 +672,7 @@ async def serve(hooks: Hooks, host: str, port: int, root: Path) -> None:
 
     server = await asyncio.start_server(on_conn, host, port)
     saver = asyncio.create_task(save_cache())
-    print(f"jrfc hookd: listening on http://{host}:{port}/hook for {root}", file=sys.stderr)
+    print(f"jrfc hookd: listening on http://{host}:{port}/hook-events for {root}", file=sys.stderr)
     try:
         async with server:
             await server.serve_forever()
