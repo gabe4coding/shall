@@ -188,6 +188,35 @@ Re-running on every push is safe and cheap:
   `.jrfc-cache/review.json`, which the workflow caches per pull request. A push that changes
   one file of a two-file PR cost $0.15 instead of $0.39; re-running an unchanged push cost $0.
 
+### Triage the comments of other AI reviewers
+
+Copilot, CodeRabbit and similar bots leave many comments on a pull request. A few point to
+real problems; the rest is noise: praise, summaries, nits, optional extras, the same concern
+twice, or a claim that code in another file already refutes. `jrfc triage` sorts the open
+comments of these bots with the same method as the review:
+
+1. **Code** keeps open threads started by a bot (GitHub type `Bot` or a login in
+   `triage.authors`) and sets aside comments whose code changed since (outdated).
+2. **Jev** selects the rules that apply to the commented file (the same questions as the
+   review), then asks per comment: does it name a concrete problem in this code? which of
+   those rules covers it? does it repeat a jrfc finding or an earlier comment on nearby lines?
+3. **An agent** without tools checks each remaining claim against evidence from the repository
+   (the same code graph and search as verification): confirmed, refuted or unknown.
+4. **Code** decides: *relevant* (confirmed), *unverified* (not decided: kept), *noise* (not
+   actionable, duplicate, or refuted with cited evidence) or *outdated*, always with the reason.
+
+```bash
+gh pr diff 123 > /tmp/pr.diff
+jrfc triage /tmp/pr.diff --pr 123 --findings .jrfc-out/pr/findings.json   # reads the PR, writes nothing
+jrfc triage /tmp/pr.diff --comments threads.json                         # offline, from a file
+```
+
+It writes `triage.md` and `triage.json`. In CI, `jrfc-pr-review --post N --triage` adds the
+triage to the summary comment; `--resolve-noise` also replies to each noise thread with the
+reason and resolves it. A thread that a person answered, resolved or reopened is never
+touched, and a triaged comment never blocks a merge. Cost: about $0.01–0.02 per bot comment
+that reaches the agent; not-actionable comments and duplicates cost only Jev.
+
 ### What it costs
 
 Estimated per review run, from measured unit costs (Claude review ≈ $0.01–0.08 per changed
@@ -315,6 +344,9 @@ Settings live in `jrfc.yaml` (organisation) and can be overridden in `.jrfc/jrfc
 | `review.max_comments` | `25` | cap on comments per review |
 | `conflicts.fail_threshold` | `0.75` | `conflicts --local` fails at or above this |
 | `codegraph.download_grammars` | `true` | `false`: never download parser grammars during a run (run `jrfc prefetch` first) |
+| `triage.authors` | Copilot, CodeRabbit, `*[bot]`… | logins whose comments `jrfc triage` sorts (`*` is the only wildcard); GitHub Apps always count |
+| `triage.thresholds` | `actionable 0.5, statement 0.5, duplicate 0.7` | a comment below `actionable` is noise; `duplicate` marks a repeated concern |
+| `triage.verify` | `true` | check each actionable comment against repository evidence (`--no-verify` skips it) |
 
 Environment variables: `TYPESAFE_API_KEY`, `ANTHROPIC_API_KEY` (CI), `JRFC_CONFIG`,
 `JRFC_EXTENDS`, `JRFC_GIT_TOKEN`, `JRFC_CACHE_DIR`.
@@ -332,10 +364,11 @@ Environment variables: `TYPESAFE_API_KEY`, `ANTHROPIC_API_KEY` (CI), `JRFC_CONFI
 | `jrfc prefetch` | no (download) | download parser grammars for the repository's languages (CI) |
 | `jrfc select PATH \| --text T` | Jev | which rules apply, with probabilities |
 | `jrfc review PATH` | Jev + Claude | select → review → validate → verify → reports |
-| `jrfc publish --pr N [--dry-run]` | no | post a review to a GitHub pull request |
+| `jrfc publish --pr N [--dry-run] [--resolve-noise]` | no | post a review to a GitHub pull request; with `triage.json`, add the triage and optionally resolve noise threads |
+| `jrfc triage DIFF --pr N \| --comments F` | Jev + Claude | sort other AI reviewers' comments: relevant, unverified, noise, outdated |
 | `jrfc conflicts FILE` / `--local` | Jev | duplicates, weakening and conflicts between rules |
 | `jrfc bundle`, `validate`, `verify` | varies | the review in separate steps (used by the `jrfc-review` skill) |
-| `jrfc eval`, `jrfc eval-verify` | Jev (+ Claude) | measure selection and verification on labelled cases |
+| `jrfc eval`, `jrfc eval-verify`, `jrfc eval-triage` | Jev (+ Claude) | measure selection, verification and triage on labelled cases |
 
 `jrfc <command> --help` shows every option.
 
@@ -351,6 +384,10 @@ Environment variables: `TYPESAFE_API_KEY`, `ANTHROPIC_API_KEY` (CI), `JRFC_CONFI
 | `github-review.json` | payload for `jrfc publish` (`--format github`) |
 | `health.json` | what could have gone wrong silently: failed calls, unverified blocking findings, files not parsed, rules just below the threshold |
 | `prompts/` | the exact prompt sent to the reviewer per chunk |
+
+`jrfc triage` writes `triage.md` (relevant and unverified comments first, noise folded) and
+`triage.json` (every comment with its status, reason, scores, matched rules and the evidence
+the verifier cited). `jrfc publish --resolve-noise` writes `triage-plan.json`.
 
 | Exit code | Meaning |
 | --- | --- |
@@ -370,6 +407,7 @@ make eval          # selection on 11 cases (needs TYPESAFE_API_KEY)
 make eval-scale    # selection with ~540 rules, 20 cases
 make eval-facts    # known effects on vs off, 19 files in 9 languages
 plugins/jrfc/bin/jrfc --config jrfc.yaml eval-verify --retrieval treesitter   # verification (needs claude)
+make eval-triage   # triage of AI review comments, 24 labelled comments (needs claude)
 ```
 
 Jev answers are cached in `.jrfc-cache/`, so re-runs only pay for changed questions. Current
@@ -386,7 +424,7 @@ numbers and what they mean: [docs/results.md](docs/results.md).
 | `ci/github/` | workflow templates for the corpus repository and for application repositories |
 | `examples/booking-service/.jrfc/` | an application repository's local rules (`BOOK-`) |
 | `.jrfc/` | this repository's own rules for its tooling (`JTOOL-`) |
-| `eval/` | labelled cases: `cases/`, `scale/`, `facts/` (selection), `verify/` (verification) |
+| `eval/` | labelled cases: `cases/`, `scale/`, `facts/` (selection), `verify/` (verification), `triage/` (AI review comments) |
 | `docs/` | [architecture](docs/architecture.md), [results](docs/results.md) |
 
 ## Known limits
@@ -398,5 +436,7 @@ numbers and what they mean: [docs/results.md](docs/results.md).
   reflection and clients configured in YAML or environment variables are not followed.
 - **Only blocking findings are verified.** Advisory comments are not checked against the
   rest of the repository.
+- **Triage sees bots' comments when the job runs.** A bot that comments after the jrfc job is
+  triaged on the next push. Only inline review threads are read, not PR-level comments.
 - **Two external services.** An outage fails the job with exit 3.
 - **Data leaves your machine.** Diffs are sent to TypeSafe and Anthropic.

@@ -29,7 +29,7 @@ from .fetch import Parent, resolve_parent
 
 CONFIG_NAME = "jrfc.yaml"
 DOT_DIR = ".jrfc"
-SETTINGS = ("jev", "selection", "review", "conflicts", "codegraph")
+SETTINGS = ("jev", "selection", "review", "conflicts", "codegraph", "triage")
 
 DEFAULTS: dict[str, Any] = {
     "jev": {
@@ -66,6 +66,15 @@ DEFAULTS: dict[str, Any] = {
         "timeout": 300,  # seconds per agent call
         "verify": True,  # verify blocking findings (and those with depends_on) before they block
         "cache": True,   # reuse agent answers when the prompt is identical (incremental re-review)
+    },
+    "triage": {
+        # comments of other AI reviewers (`jrfc triage`): authors with GraphQL type Bot always
+        # count; `*` is the only wildcard. Copilot's GraphQL login has no [bot] suffix.
+        "authors": ["*[bot]", "copilot-pull-request-reviewer", "Copilot", "coderabbitai",
+                    "gemini-code-assist", "sourcery-ai", "greptile-apps", "cursor"],
+        "ignore_authors": ["github-actions*", "dependabot*", "renovate*"],
+        "thresholds": {"actionable": 0.5, "statement": 0.5, "duplicate": 0.7},
+        "verify": True,  # check each actionable comment against repository evidence (agent)
     },
 }
 

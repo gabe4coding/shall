@@ -117,6 +117,37 @@ Trade-off: an answer is stable until its input changes, so a wrong finding on an
 file does not disappear by chance on the next push (it also cannot flap). `--no-cache`
 forces fresh calls. The PR workflow restores the cache per pull request.
 
+## Triage of other AI reviewers' comments
+
+`jrfc triage` applies the same split of work to comments that Copilot, CodeRabbit and similar
+bots left on the pull request. The goal is the opposite of a review: not to find problems, but
+to keep the bots' real problems and set the noise aside, with a reason for each.
+
+```
+open review threads (gh, read only) or a JSON file
+   ├─ code   keep threads started by a bot (GraphQL type Bot, triage.authors), not jrfc's own,
+   │         not resolved; strip folded extras (<details>, HTML comments); anchor on the diff
+   │         → outdated when the file or the line is gone
+   ├─ Jev    selection of the commented chunk (the review's questions, shared cache)
+   ├─ Jev    per comment: actionable? + one Noul per selected statement: does it cover the concern?
+   ├─ Jev    per pair on nearby lines (jrfc findings first, then earlier comments): same problem?
+   ├─ agent  jrfc-comment-verifier (no tools) with the verification evidence: confirmed | refuted | unknown
+   └─ code   relevant (confirmed + cited) · unverified (kept) · noise (not actionable, duplicate,
+             or refuted + cited evidence that exists) · outdated → triage.json, triage.md
+```
+
+- **Noise needs a reason code can show.** An unknown verdict or a verdict without valid
+  citations keeps the comment as unverified: a dropped real problem costs more than one comment
+  too many.
+- **The verifier judges truth, not importance.** "Also log the amount" is literally true, so
+  importance is Jev's "actionable" question, before the agent.
+- **Never blocking.** A bot comment has no corpus severity; blocking stays with jrfc's review.
+- **Publishing.** `jrfc publish` adds the triage to the summary comment. With
+  `--resolve-noise` it reads the threads again, and for each noise thread that is still open,
+  has no reply by a person and no earlier jrfc reply, it posts the reason (with a hidden
+  `jrfc:triage` key) and resolves it. A person who reopens the thread wins: jrfc replied once
+  and does not resolve it again. `--dry-run` writes `triage-plan.json` only.
+
 ## Run health
 
 A missed rule, a file that could not be parsed, or evidence that was not found all look the
@@ -219,5 +250,6 @@ commands use `--config jrfc.yaml` (the Makefile does this).
 | Repo-specific rules | Local `.jrfc/` layer with its own prefix, pinned `extends:`, `conflicts --local` gate |
 | Reviewer sees one file | Verification of blocking findings against repository evidence |
 | Silent failures | `health.json` + summary warnings |
+| Noise from other AI reviewers | `jrfc triage`: Jev (actionable, covering rule, duplicate) + verifier with repository evidence; noise only with a reason |
 | Service outages | Jev failures exit 3 (not 2), so CI can tell "service down" from "change blocked" |
 | Code leaves the company | **Open.** Diffs go to TypeSafe and Anthropic: get data-protection approval first |

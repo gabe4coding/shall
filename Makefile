@@ -4,7 +4,7 @@ JRFC := plugins/jrfc/bin/jrfc
 # the root resolves to .jrfc/; organisation targets pass --config explicitly.
 ORG := $(JRFC) --config jrfc.yaml
 
-.PHONY: check lint build test eval eval-scale eval-facts review-example self-check self-conflicts self-review
+.PHONY: check lint build test eval eval-scale eval-facts eval-triage review-example self-check self-conflicts self-review
 
 check: lint          ## organisation corpus: deterministic CI checks (no model calls)
 	$(ORG) build --check
@@ -27,6 +27,9 @@ eval-facts:          ## hidden effects: known_effects on vs off (eval/facts, nee
 
 eval-scale:          ## selection at scale: ~540 statements (eval/scale), layered vs flat (needs TYPESAFE_API_KEY)
 	$(JRFC) --config eval/scale/.jrfc/jrfc.yaml eval --labels eval/scale/labels.yaml --out .jrfc-out/eval-scale.json
+
+eval-triage:         ## triage of AI review comments on eval/triage (needs TYPESAFE_API_KEY and claude)
+	$(ORG) eval-triage --out .jrfc-out/eval-triage.json
 
 review-example:      ## full pipeline on one case (needs TYPESAFE_API_KEY and claude)
 	$(ORG) review eval/cases/01-booking-endpoint.diff --out-dir .jrfc-out/example --format github

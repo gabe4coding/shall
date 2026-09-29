@@ -243,3 +243,88 @@ def render_verify_eval(report: dict) -> str:
     out.append("")
     out.append(f"Jev usage: {report['usage']}")
     return "\n".join(out)
+
+
+# ---------------------------------------------------------------- triage of other AI reviewers' comments
+
+async def _triage_case(cfg: Config, corpus: Corpus, jev: Jev, case_dir: Path, cache=None) -> dict:
+    import shutil
+    import subprocess
+    import tempfile
+
+    from .artifact import build_artifact
+    from .triage import bot_comments, triage_comments
+    from .verify import repo_index
+
+    meta = yaml.safe_load((case_dir / "case.yaml").read_text(encoding="utf-8"))
+    raw = (case_dir / meta.get("diff", "pr.diff")).read_text(encoding="utf-8")
+    artifact = build_artifact("pr.diff", raw, "diff", int(cfg.get("jev.max_chunk_chars")))
+    default_path = artifact.chunks[0].path
+    threads = [{"thread": None, "comment_id": None, "author_type": None, "outdated": False, "resolved": False,
+                "url": None, "replies": [], "path": default_path, **c} for c in meta["comments"]]
+    expected = {c["id"]: c["expected"] for c in meta["comments"] if "expected" in c}
+    comments, skipped = bot_comments(cfg, threads)
+    with tempfile.TemporaryDirectory(prefix="jrfc-triage-") as tmp:
+        root = Path(tmp) / "repo"
+        shutil.copytree(case_dir / "repo", root)
+        subprocess.run(["git", "init", "-q"], cwd=root, check=True)  # the code graph runs `git grep`
+        index = repo_index(cfg, corpus, root)
+        facts = {}
+        if cfg.get("selection.facts") and corpus.effects:
+            from .effects import chunk_facts
+            facts = chunk_facts(corpus.effects, artifact, index, int(cfg.get("selection.facts_depth")))
+        items, stats = await triage_comments(cfg, corpus, artifact, jev, comments, index=index, cache=cache,
+                                             search_root=root, facts=facts)
+    rows = []
+    for i in items:
+        exp = expected.get(i["id"])
+        kept = i["status"] in ("relevant", "unverified")
+        rows.append({"id": i["id"], "expected": exp, "status": i["status"], "reason": i["reason"],
+                     "correct": exp == i["status"] or (exp == "relevant" and kept),
+                     "p_actionable": i.get("p_actionable"),
+                     "standards": [f"{s['id']}={s['p']}" for s in i.get("standards") or []]})
+    return {"case": case_dir.name, "rows": rows, "skipped": skipped, "unlabelled": sorted(set(expected) - {r["id"] for r in rows}),
+            "cost_usd": stats.get("cost_usd", 0.0), "agent_calls": stats.get("agent_calls", 0),
+            "errors": stats.get("errors", [])}
+
+
+async def run_triage_eval(cfg: Config, corpus: Corpus, jev: Jev, cases_root: Path, cache=None) -> dict:
+    """Per labelled comment: was a relevant one kept (relevant or unverified), was noise removed?
+    The costly error is a relevant comment marked noise: it is counted separately."""
+    cases = sorted(p for p in cases_root.iterdir() if (p / "case.yaml").is_file())
+    results = [await _triage_case(cfg, corpus, jev, c, cache) for c in cases]
+    rows = [r for c in results for r in c["rows"] if r["expected"]]
+
+    def rate(exp: str, ok) -> float | None:
+        sel = [r for r in rows if r["expected"] == exp]
+        return round(sum(1 for r in sel if ok(r)) / len(sel), 2) if sel else None
+
+    return {
+        "comments": len(rows),
+        "relevant_kept": rate("relevant", lambda r: r["status"] in ("relevant", "unverified")),
+        "relevant_confirmed": rate("relevant", lambda r: r["status"] == "relevant"),
+        "noise_removed": rate("noise", lambda r: r["status"] == "noise"),
+        "outdated_found": rate("outdated", lambda r: r["status"] == "outdated"),
+        "relevant_dropped": [f"{c['case']}/{r['id']}" for c in results for r in c["rows"]
+                             if r["expected"] == "relevant" and r["status"] == "noise"],
+        "cost_usd": round(sum(c["cost_usd"] for c in results), 4),
+        "cases": results,
+        "usage": dict(jev.usage),
+    }
+
+
+def render_triage_eval(report: dict) -> str:
+    def pct(x):
+        return "-" if x is None else f"{x:.2f}"
+    out = [f"{report['comments']} labelled comment(s): relevant kept {pct(report['relevant_kept'])} "
+           f"(confirmed {pct(report['relevant_confirmed'])}) · noise removed {pct(report['noise_removed'])} · "
+           f"outdated found {pct(report['outdated_found'])} · relevant dropped as noise: "
+           f"{', '.join(report['relevant_dropped']) or 'none'} · ${report['cost_usd']:.3f}", ""]
+    for c in report["cases"]:
+        out += [f"### {c['case']}", "", "| comment | expected | status | reason |", "|---|---|---|---|"]
+        for r in c["rows"]:
+            mark = "" if r["correct"] else " ❌"
+            out.append(f"| {r['id']} | {r['expected'] or '-'} | {r['status']}{mark} | {r['reason'][:140]} |")
+        out.append("")
+    out.append(f"Jev usage: {report['usage']}")
+    return "\n".join(out)
