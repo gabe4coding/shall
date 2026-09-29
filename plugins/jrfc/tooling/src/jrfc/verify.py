@@ -216,11 +216,16 @@ def _via(e: Excerpt) -> str:
     return " -> ".join(e.via) if e.via else f"text match on {', '.join(e.terms)}"
 
 
-def verifier_prompt(finding: dict, context: str, excerpts: list[Excerpt], notes: list[str] | None = None) -> str:
+def render_evidence(excerpts: list[Excerpt], notes: list[str] | None = None) -> str:
     evidence = "\n\n".join(f'<excerpt id="{e.id}" file="{e.path}" lines="{e.start}-{e.end}" via="{_via(e)}">\n'
                            f'{e.text}\n</excerpt>' for e in excerpts) or "(no excerpt found)"
     if notes:
         evidence += "\n\n<notes>\n" + "\n".join(f"- {n}" for n in notes) + "\n</notes>"
+    return evidence
+
+
+def verifier_prompt(finding: dict, context: str, excerpts: list[Excerpt], notes: list[str] | None = None) -> str:
+    evidence = render_evidence(excerpts, notes)
     return (
         f"<finding>\nstatement: {finding['statement_id']} [{finding['level']}] {finding['statement_text']}\n"
         f"file: {finding['path']}:{finding['line']}\nquote: {finding['quote']}\n"
@@ -276,6 +281,53 @@ def repo_index(cfg: Config, corpus: Corpus, root: Path) -> RepoIndex:
                      download_grammars=bool(cfg.get("codegraph.download_grammars", True)))
 
 
+async def gather_evidence(artifact: Artifact, jev: Jev, f: dict, root: Path, excluded: set[str],
+                          index: RepoIndex | None) -> tuple[list[Excerpt], list[str]]:
+    """Excerpts of the repository that help decide `f` (a finding, or any claim about a line):
+    the code graph from the calls on the line, then keyword search; Jev keeps the relevant ones
+    when there are too many. `f` needs path, line, quote, chunk, statement_text, message and
+    depends_on."""
+    chunk = next((c for c in artifact.chunks if c.id == f.get("chunk")), None)
+    key_path = yaml_key_path(chunk.line_text, f.get("line")) if chunk and chunk.language == "yaml" else None
+    terms = search_terms(f, key_path)
+    notes: list[str] = []
+    excerpts: list[Excerpt] = []
+    if index is not None:
+        seeds = (index.seeds_at(f["path"], f["line"], f.get("quote", "")) if f.get("line") else
+                 names_in(f.get("quote", ""))) + [t for t in f.get("depends_on", []) if IDENT_RE.fullmatch(t)]
+        hide = {f["path"]} if artifact.kind != "diff" else set()  # a whole file is already in the chunk
+        windows, notes = expand(index, seeds, f["path"], hide=hide)
+        excerpts = [Excerpt(id="", path=w.path, start=w.start, end=w.end, text=w.text, terms=[], via=w.via)
+                    for w in windows]
+    taken = {(e.path, e.start) for e in excerpts}
+    excerpts += [e for e in gather_excerpts(root, terms, excluded | {f["path"]}) if (e.path, e.start) not in taken]
+    for i, e in enumerate(excerpts[:MAX_EXCERPTS]):
+        e.id = f"e{i}"
+    excerpts = excerpts[:MAX_EXCERPTS]
+    if len(excerpts) > KEEP_EXCERPTS:  # Jev only cuts down; a short chain goes through whole
+        base = {"requirement": f["statement_text"], "quote": f["quote"], "message": f["message"]}
+        answers = await jev.gather(
+            jev.ask({"finding": base, "excerpt_file": e.path, "reached_via": _via(e), "excerpt": e.text},
+                    {"relevant": relevance_question()})
+            for e in excerpts
+        )
+        scored = sorted(zip(excerpts, answers), key=lambda t: -t[1]["relevant"]["p"])
+        excerpts = [e for e, a in scored if a["relevant"]["p"] >= SELECT_THRESHOLD][:KEEP_EXCERPTS]
+    return excerpts, notes
+
+
+def verification_scope(cfg: Config, corpus: Corpus, index: RepoIndex | None,
+                       search_root: Path | None = None) -> tuple[Path, set[str], RepoIndex | None]:
+    """(root, excluded paths, index or None for keyword-only retrieval) for one run."""
+    root = index.root if index is not None else repo_root(search_root)
+    retrieval = cfg.get("review.verify_retrieval") or "treesitter"
+    if retrieval != "treesitter":
+        index = None
+    elif index is None:
+        index = repo_index(cfg, corpus, root)
+    return root, excluded_paths(corpus, root), index
+
+
 async def verify_findings(cfg: Config, corpus: Corpus, artifact: Artifact, jev: Jev, findings: list[dict],
                           search_root: Path | None = None, agent=None, model: str | None = None,
                           index: RepoIndex | None = None,
@@ -283,13 +335,7 @@ async def verify_findings(cfg: Config, corpus: Corpus, artifact: Artifact, jev: 
     model = model or cfg.get("review.verify_model") or None
     agent = agent or (lambda prompt, sem: run_claude(cfg, prompt, agent_prompt("jrfc-verifier"),
                                                      VERDICT_SCHEMA, sem, model=model, cache=cache))
-    root = index.root if index is not None else repo_root(search_root)
-    excluded = excluded_paths(corpus, root)
-    retrieval = cfg.get("review.verify_retrieval") or "treesitter"
-    if retrieval != "treesitter":
-        index = None
-    elif index is None:
-        index = repo_index(cfg, corpus, root)
+    root, excluded, index = verification_scope(cfg, corpus, index, search_root)
     sem = asyncio.Semaphore(int(cfg.get("review.concurrency")))
     stats = {"verified": 0, "confirmed": 0, "refuted": 0, "unknown": 0, "agent_calls": 0, "reused": 0,
              "cost_usd": 0.0}
@@ -297,32 +343,7 @@ async def verify_findings(cfg: Config, corpus: Corpus, artifact: Artifact, jev: 
     async def one(f: dict):
         if not needs_verification(f):
             return f, None
-        chunk = next((c for c in artifact.chunks if c.id == f.get("chunk")), None)
-        key_path = yaml_key_path(chunk.line_text, f.get("line")) if chunk and chunk.language == "yaml" else None
-        terms = search_terms(f, key_path)
-        notes: list[str] = []
-        excerpts: list[Excerpt] = []
-        if index is not None:
-            seeds = (index.seeds_at(f["path"], f["line"], f.get("quote", "")) if f.get("line") else
-                     names_in(f.get("quote", ""))) + [t for t in f.get("depends_on", []) if IDENT_RE.fullmatch(t)]
-            hide = {f["path"]} if artifact.kind != "diff" else set()  # a whole file is already in the chunk
-            windows, notes = expand(index, seeds, f["path"], hide=hide)
-            excerpts = [Excerpt(id="", path=w.path, start=w.start, end=w.end, text=w.text, terms=[], via=w.via)
-                        for w in windows]
-        taken = {(e.path, e.start) for e in excerpts}
-        excerpts += [e for e in gather_excerpts(root, terms, excluded | {f["path"]}) if (e.path, e.start) not in taken]
-        for i, e in enumerate(excerpts[:MAX_EXCERPTS]):
-            e.id = f"e{i}"
-        excerpts = excerpts[:MAX_EXCERPTS]
-        if len(excerpts) > KEEP_EXCERPTS:  # Jev only cuts down; a short chain goes through whole
-            base = {"requirement": f["statement_text"], "quote": f["quote"], "message": f["message"]}
-            answers = await jev.gather(
-                jev.ask({"finding": base, "excerpt_file": e.path, "reached_via": _via(e), "excerpt": e.text},
-                        {"relevant": relevance_question()})
-                for e in excerpts
-            )
-            scored = sorted(zip(excerpts, answers), key=lambda t: -t[1]["relevant"]["p"])
-            excerpts = [e for e, a in scored if a["relevant"]["p"] >= SELECT_THRESHOLD][:KEEP_EXCERPTS]
+        excerpts, notes = await gather_evidence(artifact, jev, f, root, excluded, index)
         verdict, meta = await agent(verifier_prompt(f, chunk_context(artifact, f), excerpts, notes), sem)
         stats["reused" if meta.get("cached") else "agent_calls"] += 1
         stats["cost_usd"] = round(stats["cost_usd"] + meta.get("cost_usd", 0.0), 6)

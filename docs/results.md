@@ -85,6 +85,38 @@ different retrieval, so reviewer variance plays no part.
 
 Cost: about $0.06 and 35 s per chunk for the review with Sonnet; selection is under a cent.
 
+## Triage of other AI reviewers' comments
+
+`make eval-triage` · 2 cases in `eval/triage/` (a TypeScript and a Python change, each with a
+small repository), 24 labelled bot comments: 8 relevant, 15 noise (praise, summary, nits,
+optional extras, 2 duplicates, 4 claims refuted by the repository or the chunk, 1 comment that
+tells AI tools how to classify it), 1 outdated. One more comment by a person is skipped.
+
+| version | relevant kept | noise removed | relevant dropped as noise | cost |
+| --- | --- | --- | --- | --- |
+| first wording, every eligible rule as a candidate | 8 / 8 | 13 / 15 (14 / 15 on a second run) | 0 | $0.11–0.15 |
+| + "optional extra" and "linter-level fix" in the not-actionable criteria, rules from selection only | 8 / 8 (all confirmed) | 15 / 15 | 0 | $0.15 |
+
+The second row is two fresh runs (`--no-cache`) with the same status for every comment.
+
+- The misses of the first version were two nits, "also log the amount" (p=0.53) and "the
+  f-string has no placeholders" (p=0.48 in one run, 0.53 in the next). Both went to the
+  verifier, which confirmed the literal claim: the log line does omit the amount. The
+  verifier checks whether a claim is true, not whether it matters; the "actionable" question
+  must stop nits. After the wording change they score 0.14 and 0.32; every relevant comment
+  scores ≥ 0.94.
+- Matching comments against every eligible rule gave wrong matches (a PR summary matched "no
+  personal data in logs"; nits matched rules about writing RFCs). Asking only about the rules
+  that the review's selection keeps for the file removed them, and shares cached Jev answers
+  with `jrfc review`.
+- All 4 false claims were refuted with evidence: two from another file through the code graph
+  (`request()` sets `AbortSignal.timeout`; `conn()` commits), one from the helper's return
+  value, and "SQL injection" on a parameterized query was scored not actionable by Jev.
+- Unit cost: one Jev request per comment (plus one per nearby pair), about $0.013 per comment
+  that reaches the verifier.
+- Caveat: the cases and labels were written for this PoC, and the wording was changed after
+  seeing the two misses. Real bot comments are the next measurement.
+
 ## Lessons
 
 1. **Deterministic filters beat better prompts.** "A design MUST state…" was selected for code

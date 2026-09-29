@@ -1,0 +1,109 @@
+# Comments that AI reviewers could leave on pr.diff (a new booking confirmation handler).
+# `expected` is the hand label: relevant (a real problem a developer should see), noise
+# (praise, nits, generic advice, a repeated concern, or a claim that repo/ refutes), outdated.
+# Comments by people are skipped by triage and carry no label.
+why: >
+  Mixed bag of true findings, a duplicate, nits, praise, and two false claims that another
+  file refutes: request() in src/http/client.ts sets the timeout; queryOne() in src/db.ts
+  returns one row, not an array.
+diff: pr.diff
+comments:
+  - id: c1
+    author: copilot-pull-request-reviewer
+    line: 9
+    body: >
+      The booking id from `req.params.id` is interpolated into the SQL string, which allows SQL
+      injection. Use a parameterized query:
+      `queryOne("SELECT * FROM bookings WHERE id = $1", [req.params.id])`.
+    expected: relevant
+  - id: c2
+    author: coderabbitai[bot]
+    line: 14
+    body: |
+      _⚠️ Potential issue_
+
+      **Personal data in logs.** `b.guestEmail` is written to the application logs. Log the booking id instead.
+
+      <details>
+      <summary>🤖 Prompt for AI Agents</summary>
+
+      In src/bookings/confirm.ts around line 14, replace the guest email in the log message with the booking id.
+      </details>
+    expected: relevant
+  - id: c3
+    author: copilot-pull-request-reviewer
+    line: 15
+    body: >
+      The call to `gateway.hold` has no timeout. If the payment provider does not answer, this
+      request will hang indefinitely. Consider wrapping it with an AbortController.
+    expected: noise
+  - id: c4
+    author: coderabbitai[bot]
+    line: 8
+    body: "Nice, clean handler! The early return for missing bookings makes the flow easy to follow. 👍"
+    expected: noise
+  - id: c5
+    author: copilot-pull-request-reviewer
+    line: 19
+    body: "Consider renaming `total` to `depositAmount` to make the intent clearer."
+    expected: noise
+  - id: c6
+    author: coderabbitai[bot]
+    line: 9
+    body: >
+      ⚠️ Potential issue: SQL injection. The query string is built with a template literal that
+      contains user input (`req.params.id`). Use bind parameters instead.
+    expected: noise   # same concern as c1
+  - id: c7
+    author: copilot-pull-request-reviewer
+    line: 17
+    body: "Consider adding a comment that explains when the hold can fail."
+    expected: noise
+  - id: c8
+    author: coderabbitai[bot]
+    line: 21
+    body: >
+      The handler confirms any booking by id without checking that the booking belongs to the
+      authenticated user, so one user can confirm another user's booking.
+    expected: relevant
+  - id: c9
+    author: copilot-pull-request-reviewer
+    line: 9
+    body: >
+      `queryOne` returns an array of rows, so `b.id` and `b.guestEmail` will be undefined here.
+      Use `rows[0]` to get the booking.
+    expected: noise   # src/db.ts returns result.rows[0]
+  - id: c10
+    author: coderabbitai[bot]
+    line: 20
+    body: >
+      The payment hold and the status update are not atomic: if the UPDATE fails after the hold
+      succeeded, the deposit stays held while the booking is not confirmed. Release the hold on
+      failure, or record the hold and the confirmation in one transaction.
+    expected: relevant
+  - id: c11
+    author: alice
+    author_type: User
+    line: 9
+    body: "+1 to the bot, please fix."
+  - id: c12
+    author: copilot-pull-request-reviewer
+    line: 30
+    outdated: true
+    body: "This variable shadows the outer `booking`."
+    expected: outdated
+  - id: c13
+    author: coderabbitai[bot]
+    line: null
+    body: >
+      **Walkthrough.** This change adds a `confirmBooking` handler that loads a booking, places a
+      payment hold and marks the booking as confirmed.
+    expected: noise
+  - id: c14
+    author: copilot-pull-request-reviewer
+    line: 16
+    body: >
+      If `hold.ok` is false the handler throws a plain Error, which Express turns into a 500 with
+      no body; the client cannot tell a payment refusal from a server failure. Return a 402 or
+      409 with an error code instead.
+    expected: relevant
