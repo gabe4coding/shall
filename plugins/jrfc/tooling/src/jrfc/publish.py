@@ -9,12 +9,18 @@ Each run on a PR:
 
 A finding that is still in the diff but that the agent did not report this time is left
 open: only a change of the line itself closes a thread, so model variance cannot flap it.
+
+With a `triage.json` (`jrfc triage`) next to the review, the summary also lists the triage of
+other AI reviewers' comments, and `--resolve-noise` replies to each noise thread with the
+reason and resolves it. A thread a person replied to, resolved or reopened is left alone.
 All GitHub access goes through `gh`, so auth is whatever `gh` uses (GH_TOKEN in CI).
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import subprocess
 from dataclasses import dataclass, field
 from typing import Callable
@@ -41,6 +47,28 @@ query($owner: String!, $name: String!, $number: Int!, $endCursor: String) {
   }
 }
 """
+# Every thread with its comments: the input of `jrfc triage` and the state `--resolve-noise`
+# checks again right before it writes.
+ALL_THREADS_QUERY = """
+query($owner: String!, $name: String!, $number: Int!, $endCursor: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100, after: $endCursor) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          isResolved
+          isOutdated
+          path
+          line
+          comments(first: 50) { nodes { databaseId body url author { __typename login } } }
+        }
+      }
+    }
+  }
+}
+"""
+TRIAGE_MARKER_RE = re.compile(r"<!-- jrfc:triage key=([0-9a-f]+) -->")
 RESOLVE = "mutation($id: ID!) { resolveReviewThread(input: {threadId: $id}) { thread { id } } }"
 UNRESOLVE = "mutation($id: ID!) { unresolveReviewThread(input: {threadId: $id}) { thread { id } } }"
 
@@ -122,6 +150,35 @@ class GitHub:
                 return out
             cursor = page["pageInfo"]["endCursor"]
 
+    def review_threads(self) -> list[dict]:
+        """Every review thread as {thread, comment_id, author, author_type, path, line, outdated,
+        resolved, body, url, replies: [{author, author_type, body}]}; the first comment is the root."""
+        out, cursor = [], None
+        while True:
+            args = ["graphql", "-f", f"query={ALL_THREADS_QUERY}", "-F", f"owner={self.owner}",
+                    "-F", f"name={self.name}", "-F", f"number={self.pr}"]
+            if cursor:
+                args += ["-f", f"endCursor={cursor}"]
+            page = json.loads(self.api(args))["data"]["repository"]["pullRequest"]["reviewThreads"]
+            for node in page["nodes"]:
+                comments = [{"id": c.get("databaseId"), "body": c.get("body") or "", "url": c.get("url"),
+                             "author": (c.get("author") or {}).get("login") or "ghost",
+                             "author_type": (c.get("author") or {}).get("__typename") or "User"}
+                            for c in node["comments"]["nodes"]]
+                if not comments:
+                    continue
+                root = comments[0]
+                out.append({
+                    "thread": node["id"], "comment_id": root["id"], "author": root["author"],
+                    "author_type": root["author_type"], "path": node.get("path") or "",
+                    "line": node.get("line"), "outdated": bool(node.get("isOutdated")),
+                    "resolved": bool(node["isResolved"]), "body": root["body"], "url": root["url"],
+                    "replies": [{k: c[k] for k in ("author", "author_type", "body")} for c in comments[1:]],
+                })
+            if not page["pageInfo"]["hasNextPage"]:
+                return out
+            cursor = page["pageInfo"]["endCursor"]
+
     def summary_comment_id(self) -> int | None:
         out = self.api(["--paginate", f"repos/{self.repo}/issues/{self.pr}/comments",
                         "--jq", f'.[] | select(.body | contains("{SUMMARY_MARKER}")) | .id'])
@@ -154,13 +211,89 @@ def make_plan(review: dict, threads: list[Thread], summary_id: int | None) -> Pl
     return plan
 
 
-def summary_body(review: dict, plan: Plan) -> str:
+def summary_body(review: dict, plan: Plan, triage_md: str | None = None) -> str:
     status = (f"new {len(plan.new)} · still open {len(plan.kept) + len(plan.unresolve)} · "
               f"fixed {len(plan.resolve)} · dismissed by reviewers {len(plan.dismissed)}")
-    return f"{SUMMARY_MARKER}\n{review['jrfc']['summary']}\n<sub>jrfc: {status}</sub>\n"
+    triage = f"\n{triage_md.rstrip()}\n" if triage_md else ""
+    return f"{SUMMARY_MARKER}\n{review['jrfc']['summary']}{triage}\n<sub>jrfc: {status}</sub>\n"
 
 
-def execute(gh: GitHub, review: dict, plan: Plan) -> None:
+# ---------------------------------------------------------------- triage of other AI reviewers
+
+JRFC_MARKERS = ("<!-- jrfc:finding", "<!-- jrfc:triage", SUMMARY_MARKER)
+
+
+def login_matches(login: str, pattern: str) -> bool:
+    """`*` is the only wildcard: `*[bot]` means a login ending in `[bot]` (fnmatch would read
+    `[bot]` as one of b, o, t)."""
+    return re.fullmatch(".*".join(re.escape(part) for part in pattern.split("*")), login) is not None
+
+
+def is_bot(author: str, author_type: str | None, patterns: list[str]) -> bool:
+    """A GitHub App (GraphQL type Bot, REST login `name[bot]`) or a login in `triage.authors`."""
+    return author_type == "Bot" or any(login_matches(author, p) for p in patterns)
+
+
+def is_jrfc(body: str) -> bool:
+    return any(m in (body or "") for m in JRFC_MARKERS)
+
+
+def triage_key(item: dict) -> str:
+    return hashlib.sha1(f"{item.get('thread')}|{item.get('comment_id')}".encode()).hexdigest()[:16]
+
+
+@dataclass
+class TriagePlan:
+    resolve: list[dict] = field(default_factory=list)   # noise: reply with the reason, then resolve
+    human: list[dict] = field(default_factory=list)     # a person replied: left alone
+    done: list[dict] = field(default_factory=list)      # resolved already, or jrfc replied before
+
+    def to_json(self) -> dict:
+        def row(i: dict) -> dict:
+            return {"thread": i.get("thread"), "author": i.get("author"), "path": i.get("path"),
+                    "line": i.get("line"), "reason": i.get("reason")}
+        return {"resolve": [row(i) for i in self.resolve], "human": [row(i) for i in self.human],
+                "done": [row(i) for i in self.done]}
+
+
+def make_triage_plan(triage: dict, threads: list[dict], bot_patterns: list[str]) -> TriagePlan:
+    """Noise threads to answer and resolve, from the current thread state (not the state
+    `jrfc triage` read): a thread resolved, reopened or answered by a person since then is
+    not touched."""
+    plan = TriagePlan()
+    by_id = {t["thread"]: t for t in threads}
+    for item in triage["comments"]:
+        if item["status"] != "noise" or not item.get("thread"):
+            continue
+        t = by_id.get(item["thread"])
+        if t is None or not is_bot(t["author"], t.get("author_type"), bot_patterns):
+            continue  # gone, or not a bot's thread: triage.json is never trusted for that
+        item = {**item, "comment_id": t["comment_id"]}   # reply to the live root comment
+        replies = t.get("replies", [])
+        if t["resolved"] or any(TRIAGE_MARKER_RE.search(r["body"] or "") for r in replies):
+            plan.done.append(item)       # handled already; if a person reopened it, that stands
+        elif any(not is_bot(r["author"], r.get("author_type"), bot_patterns) and not is_jrfc(r["body"])
+                 for r in replies):
+            plan.human.append(item)      # a person engaged in the thread: their call
+        else:
+            plan.resolve.append(item)
+    return plan
+
+
+def triage_reply(item: dict) -> str:
+    return (f"jrfc triage: noise — {item['reason']}\n\n"
+            "<sub>Resolved by jrfc. Reopen the thread if you disagree; jrfc will not resolve it again.</sub>\n\n"
+            f"<!-- jrfc:triage key={triage_key(item)} -->")
+
+
+def execute_triage(gh: GitHub, plan: TriagePlan) -> None:
+    for item in plan.resolve:
+        gh.api(["--method", "POST", f"repos/{gh.repo}/pulls/{gh.pr}/comments/{item['comment_id']}/replies"],
+               {"body": triage_reply(item)})
+        gh.api(["graphql", "-f", f"query={RESOLVE}", "-f", f"id={item['thread']}"])
+
+
+def execute(gh: GitHub, review: dict, plan: Plan, triage_md: str | None = None) -> None:
     if plan.new:
         comments = [{k: v for k, v in c.items() if not k.startswith("jrfc_")} for c in plan.new]
         # Always COMMENT: blocking is enforced by the required check (exit code), not by a
@@ -174,16 +307,23 @@ def execute(gh: GitHub, review: dict, plan: Plan) -> None:
         gh.api(["graphql", "-f", f"query={RESOLVE}", "-f", f"id={t.id}"])
     for t in plan.unresolve:
         gh.api(["graphql", "-f", f"query={UNRESOLVE}", "-f", f"id={t.id}"])
-    body = {"body": summary_body(review, plan)}
+    body = {"body": summary_body(review, plan, triage_md)}
     if plan.summary_comment_id:
         gh.api(["--method", "PATCH", f"repos/{gh.repo}/issues/comments/{plan.summary_comment_id}"], body)
     else:
         gh.api(["--method", "POST", f"repos/{gh.repo}/issues/{gh.pr}/comments"], body)
 
 
-def publish(review: dict, repo: str, pr: int, dry_run: bool, runner: Runner = gh_runner) -> Plan:
+def publish(review: dict, repo: str, pr: int, dry_run: bool, runner: Runner = gh_runner,
+            triage: dict | None = None, resolve_noise: bool = False,
+            bot_patterns: list[str] | None = None) -> tuple[Plan, TriagePlan | None]:
     gh = GitHub(repo, pr, runner)
     plan = make_plan(review, gh.threads(), gh.summary_comment_id())
+    tplan = None
+    if triage is not None and resolve_noise:
+        tplan = make_triage_plan(triage, gh.review_threads(), bot_patterns or [])
     if not dry_run:
-        execute(gh, review, plan)
-    return plan
+        execute(gh, review, plan, triage["markdown"] if triage else None)
+        if tplan is not None:
+            execute_triage(gh, tplan)
+    return plan, tplan

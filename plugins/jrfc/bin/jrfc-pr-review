@@ -2,12 +2,16 @@
 # CI-agnostic jrfc PR review. Run from the root of the repository under review.
 #
 #   jrfc-pr-review [--base <ref>] [--out-dir <dir>] [--post <pr-number> [--dry-run]] [--fail-on-blocking]
+#                  [--triage [--resolve-noise]]
 #
 # Needs: TYPESAFE_API_KEY (Jev selection), Claude Code auth for `claude -p`
 # (ANTHROPIC_API_KEY in CI), and a corpus: .jrfc/jrfc.yaml in the repository (local rules +
 # `extends:` the organisation corpus) or JRFC_EXTENDS=owner/name@ref. --post needs `gh` and GH_TOKEN and is
 # the only step that writes outside the working directory (`jrfc publish`, deterministic).
 # --dry-run with --post reads the PR and writes publish-plan.json without changing it.
+# --triage (with --post) also sorts the open comments of other AI reviewers into relevant /
+# unverified / noise (`jrfc triage`) and adds the result to the summary comment;
+# --resolve-noise then replies to each noise thread with the reason and resolves it.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -16,6 +20,8 @@ out_dir=".jrfc-out/pr"
 post=""
 fail=""
 dry_run=""
+triage=""
+resolve_noise=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --base) base="$2"; shift 2 ;;
@@ -23,12 +29,15 @@ while [[ $# -gt 0 ]]; do
     --post) post="$2"; shift 2 ;;
     --fail-on-blocking) fail="--fail-on-blocking"; shift ;;
     --dry-run) dry_run="--dry-run"; shift ;;
-    -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
+    --triage) triage=1; shift ;;
+    --resolve-noise) resolve_noise="--resolve-noise"; shift ;;
+    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 64 ;;
   esac
 done
 
 mkdir -p "$out_dir"
+rm -f "$out_dir/triage.json" "$out_dir/triage.md"   # never publish the triage of an earlier run
 git diff --no-color "$base"...HEAD > "$out_dir/pr.diff"
 if [[ ! -s "$out_dir/pr.diff" ]]; then
   echo "jrfc-pr-review: empty diff against $base, nothing to review"
@@ -38,8 +47,14 @@ fi
 status=0
 "$here/jrfc" review "$out_dir/pr.diff" --out-dir "$out_dir" --format github $fail || status=$?
 
+if [[ -n "$triage" && -n "$post" && -f "$out_dir/findings.json" ]]; then
+  # A triage failure must not hide the review result: it only drops the triage section.
+  "$here/jrfc" triage "$out_dir/pr.diff" --pr "$post" --findings "$out_dir/findings.json" --out-dir "$out_dir" \
+    > /dev/null || { echo "jrfc-pr-review: triage failed, publishing without it" >&2; rm -f "$out_dir/triage.json"; resolve_noise=""; }
+fi
+
 if [[ -n "$post" && -f "$out_dir/github-review.json" ]]; then
   # Idempotent: new findings only, fixed threads resolved, one summary comment updated in place.
-  "$here/jrfc" publish --pr "$post" --dir "$out_dir" $dry_run
+  "$here/jrfc" publish --pr "$post" --dir "$out_dir" $dry_run $resolve_noise
 fi
 exit $status
