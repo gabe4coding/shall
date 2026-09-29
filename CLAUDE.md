@@ -20,6 +20,7 @@ make check                    # org corpus: lint + index up to date (no model ca
 make build                    # regenerate corpus/index/ after editing corpus/ (the index is committed)
 make self-check               # this repo's own rules (.jrfc/, JTOOL-) lint + index
 make eval / eval-scale / eval-facts   # selection evals (need TYPESAFE_API_KEY)
+make eval-triage              # triage of AI review comments (needs TYPESAFE_API_KEY and claude)
 plugins/jrfc/bin/jrfc --config jrfc.yaml eval-verify --retrieval treesitter   # verification eval (needs claude)
 ```
 
@@ -37,7 +38,8 @@ measuring model behavior, since `review` otherwise reuses answers for unchanged 
 
 Flow of `jrfc review`: `cli.py` → `config.py` → `corpus.py` → `artifact.py` → `effects.py`
 → `select.py` → `review.py` → `verify.py` (+ `codegraph.py`) → `health.py` → outputs;
-`publish.py` posts separately.
+`publish.py` posts separately. `jrfc triage` (`triage.py`) sorts other AI reviewers' PR
+comments with the same selection and verification evidence (`verify.gather_evidence`).
 
 - **config.py**: layer discovery (`--config`/`JRFC_CONFIG` → `.jrfc/jrfc.yaml` or `jrfc.yaml`
   walking up → `JRFC_EXTENDS` → `~/.config/jrfc`), one optional parent layer via `extends`

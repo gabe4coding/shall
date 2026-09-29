@@ -103,6 +103,11 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GH_TOKEN: ${{ github.token }}
         # Make this job a required check to block merges on exit 2 (enforced MUST findings).
+        # Optional: add `--triage` to sort the open comments of other AI reviewers (Copilot,
+        # CodeRabbit...) into relevant / unverified / noise in the summary comment, and
+        # `--resolve-noise` to reply to and resolve the noise threads (needs
+        # `pull-requests: write`, already granted above). Bots that comment after this job
+        # are triaged on the next push.
         run: $JRFC/jrfc-pr-review --post ${{ github.event.pull_request.number }} --fail-on-blocking
 
       - name: Job summary

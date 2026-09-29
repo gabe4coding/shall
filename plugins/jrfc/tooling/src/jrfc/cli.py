@@ -416,6 +416,58 @@ def cmd_verify(args, cfg) -> int:
     return EXIT_BLOCKING if (blocking and args.fail_on_blocking) else EXIT_OK
 
 
+def cmd_triage(args, cfg) -> int:
+    """Triage the comments of other AI reviewers on a PR: relevant, unverified, noise, outdated."""
+    import os
+    from .jev import Jev
+    from .review import answer_cache
+    from .triage import bot_comments, load_threads, render_triage, triage_comments
+    corpus = load_corpus(cfg)
+    if bool(args.comments) == bool(args.pr):
+        raise SystemExit("jrfc triage: give --comments <file.json> or --pr <number>")
+    if args.pr:
+        from .publish import GitHub
+        repo = args.repo or os.environ.get("GITHUB_REPOSITORY")
+        if not repo:
+            raise SystemExit("jrfc triage: pass --repo owner/name or set GITHUB_REPOSITORY")
+        threads = GitHub(repo, args.pr).review_threads()   # read only
+    else:
+        threads = load_threads(Path(args.comments))
+    comments, skipped = bot_comments(cfg, threads)
+    name, raw = read_source(args.path, None)
+    artifact = build_artifact(name, raw, "diff", int(cfg.get("jev.max_chunk_chars")))
+    findings = None
+    if args.findings:
+        findings = json.loads(Path(args.findings).read_text(encoding="utf-8"))
+        findings = findings.get("findings", findings) if isinstance(findings, dict) else findings
+    if args.no_verify:
+        cfg.data.setdefault("triage", {})["verify"] = False
+    cache = answer_cache(cfg, enabled=not args.no_cache)
+
+    async def run():
+        async with Jev(cfg, use_cache=not args.no_cache) as jev:
+            index = _index(cfg, corpus, args)
+            return await triage_comments(cfg, corpus, artifact, jev, comments, findings, index=index, cache=cache,
+                                         facts=_facts(cfg, corpus, artifact, index))
+
+    try:
+        items, stats = asyncio.run(run()) if comments else ([], {"comments": 0, "errors": []})
+    finally:
+        cache.save()
+    stats["skipped"] = skipped
+    md = render_triage(items, stats)
+    out_dir = Path(args.out_dir)
+    _dump({"comments": items, "stats": stats, "markdown": md}, str(out_dir / "triage.json"))
+    (out_dir / "triage.md").write_text(md, encoding="utf-8")
+    print(md)
+    for err in stats.get("errors", []):
+        print(f"jrfc triage: verification error on comment {err['comment']}: {err['error'][:300]}", file=sys.stderr)
+    print(f"jrfc triage: {len(items)} AI comment(s) ({', '.join(f'{v} {k}' for k, v in skipped.items() if v) or 'none'}"
+          f" skipped), {stats.get('agent_calls', 0)} verification call(s), {stats.get('reused', 0)} reused, "
+          f"${stats.get('cost_usd', 0):.4f}, outputs in {out_dir}", file=sys.stderr)
+    return EXIT_ERROR if stats.get("errors") else EXIT_OK
+
+
 def cmd_publish(args, cfg) -> int:
     import os
     from .publish import publish
@@ -424,8 +476,15 @@ def cmd_publish(args, cfg) -> int:
         raise SystemExit("jrfc publish: pass --repo owner/name or set GITHUB_REPOSITORY")
     out_dir = Path(args.dir)
     review = json.loads((out_dir / "github-review.json").read_text(encoding="utf-8"))
-    plan = publish(review, repo, args.pr, args.dry_run)
+    triage_path = out_dir / "triage.json"
+    triage = json.loads(triage_path.read_text(encoding="utf-8")) if triage_path.is_file() else None
+    if args.resolve_noise and triage is None:
+        raise SystemExit(f"jrfc publish: --resolve-noise needs {triage_path} (run `jrfc triage` first)")
+    plan, tplan = publish(review, repo, args.pr, args.dry_run, triage=triage, resolve_noise=args.resolve_noise,
+                          bot_patterns=list(cfg.get("triage.authors") or []))
     _dump(plan.to_json(), str(out_dir / "publish-plan.json"))
+    if tplan is not None:
+        _dump(tplan.to_json(), str(out_dir / "triage-plan.json"))
     # Threads resolved by a person while the finding is still reported: feedback labels
     # for tuning selection thresholds and statement wording.
     _dump([{"key": t.key, "path": t.path, "resolved_by": t.resolved_by} for t in plan.dismissed],
@@ -435,6 +494,10 @@ def cmd_publish(args, cfg) -> int:
     print(f"jrfc publish ({repo}#{args.pr}): {verb} post {len(p['new'])} new comment(s), "
           f"keep {len(p['kept'])}, resolve {len(p['resolve'])}, reopen {len(p['unresolve'])}, "
           f"{p['summary']} summary; {len(p['dismissed'])} dismissed by reviewers", file=sys.stderr)
+    if tplan is not None:
+        t = tplan.to_json()
+        print(f"jrfc publish ({repo}#{args.pr}): {verb} reply to and resolve {len(t['resolve'])} noise thread(s); "
+              f"{len(t['human'])} left alone (a person replied), {len(t['done'])} already handled", file=sys.stderr)
     return EXIT_OK
 
 
@@ -462,6 +525,27 @@ def cmd_conflicts(args, cfg) -> int:
             print(f"[{mark}] {f['new']} ~ {f['existing']}: {f['relation']} (p={f['p']:.2f})\n"
                   f"    {f['existing_text']}")
     return EXIT_ERROR if any(f["relation"] in FAILING for f in found) else EXIT_OK
+
+
+def cmd_eval_triage(args, cfg) -> int:
+    from .evaluate import render_triage_eval, run_triage_eval
+    from .jev import Jev
+    from .review import answer_cache
+    corpus = load_corpus(cfg)
+    cache = answer_cache(cfg, enabled=not args.no_cache)
+
+    async def run():
+        async with Jev(cfg, use_cache=not args.no_cache) as jev:
+            return await run_triage_eval(cfg, corpus, jev, Path(args.cases), cache)
+
+    try:
+        report = asyncio.run(run())
+    finally:
+        cache.save()
+    if args.out:
+        _dump(report, args.out)
+    print(render_triage_eval(report))
+    return EXIT_OK
 
 
 def cmd_eval(args, cfg) -> int:
@@ -607,7 +691,21 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--repo", help="owner/name (default: $GITHUB_REPOSITORY)")
     s.add_argument("--dir", default=".jrfc-out/pr", help="review output dir with github-review.json")
     s.add_argument("--dry-run", action="store_true", help="read the PR and write the plan, change nothing")
+    s.add_argument("--resolve-noise", action="store_true",
+                   help="reply with the reason to each noise thread of triage.json, then resolve it")
     s.set_defaults(fn=cmd_publish)
+
+    s = sub.add_parser("triage", help="triage other AI reviewers' PR comments: relevant, unverified, noise (Jev + agent)")
+    s.add_argument("path", help="the PR diff the comments were made on")
+    s.add_argument("--comments", help="review threads as JSON (shape of `jrfc triage --pr`, see README)")
+    s.add_argument("--pr", type=int, help="read the review threads of this PR with gh (read only)")
+    s.add_argument("--repo", help="owner/name (default: $GITHUB_REPOSITORY)")
+    s.add_argument("--findings", help="jrfc findings.json: bot comments repeating a finding are noise")
+    s.add_argument("--out-dir", default=".jrfc-out/pr")
+    s.add_argument("--no-verify", action="store_true", help="skip checking claims against repository evidence")
+    s.add_argument("--no-cache", action="store_true", help="ignore the Jev and agent answer caches")
+    s.add_argument("--search-root", help="repository for verification evidence (default: git toplevel)")
+    s.set_defaults(fn=cmd_triage)
 
     s = sub.add_parser("conflicts", help="duplicate / weakens / conflict / overlap checks (Jev)")
     s.add_argument("file", nargs="?", help="a (draft) RFC to compare with the corpus")
@@ -625,6 +723,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--retrieval", choices=["keyword", "treesitter", "all"], default="all")
     s.add_argument("--out")
     s.set_defaults(fn=cmd_eval_verify)
+
+    s = sub.add_parser("eval-triage", help="measure triage of AI review comments on labelled cases (Jev + agent)")
+    s.add_argument("--cases", default="eval/triage")
+    s.add_argument("--no-cache", action="store_true", help="fresh Jev and agent answers (measuring the models)")
+    s.add_argument("--out")
+    s.set_defaults(fn=cmd_eval_triage)
 
     s = sub.add_parser("eval", help="measure selection recall/precision on labelled cases")
     s.add_argument("--labels", default="eval/labels.yaml")

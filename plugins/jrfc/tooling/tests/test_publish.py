@@ -78,7 +78,7 @@ FIXED_LOG = 'logger.info("booking", { guestId: guest.id })'
 
 
 def run(gh, review):
-    return publish(review, "org/app", 7, dry_run=False, runner=gh).to_json()
+    return publish(review, "org/app", 7, dry_run=False, runner=gh)[0].to_json()
 
 
 def test_repeated_push_posts_nothing_new_and_updates_one_summary():
@@ -129,7 +129,7 @@ def test_changed_line_is_a_new_finding():
 
 def test_dry_run_reads_but_never_writes():
     gh = FakeGitHub()
-    plan = publish(review_for([LOG], [("JRFC-0003.1", LOG)]), "org/app", 7, dry_run=True, runner=gh)
+    plan, _ = publish(review_for([LOG], [("JRFC-0003.1", LOG)]), "org/app", 7, dry_run=True, runner=gh)
     assert len(plan.new) == 1 and gh.writes == []
 
 
