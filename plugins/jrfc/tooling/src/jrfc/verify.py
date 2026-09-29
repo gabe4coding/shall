@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .artifact import Artifact
-from .codegraph import RepoIndex, expand, names_in
+from .codegraph import RepoIndex, expand, names_in, numbered_lines
 from .config import Config
 from .corpus import Corpus
 from .jev import Jev, noul
@@ -185,7 +185,7 @@ def gather_excerpts(root: Path, terms: list[str], excluded: set[str]) -> list[Ex
         except (UnicodeDecodeError, OSError):
             continue
         hi = min(hi, len(lines))
-        text = "\n".join(f"{n:>5} | {lines[n - 1]}" for n in range(lo, hi + 1))
+        text = numbered_lines(lines, range(lo, hi + 1))
         excerpts.append(Excerpt(id=f"e{i}", path=path, start=lo, end=hi, text=text, terms=sorted(found)))
     return excerpts
 
