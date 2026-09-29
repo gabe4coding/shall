@@ -565,6 +565,75 @@ def cmd_eval(args, cfg) -> int:
     return EXIT_OK
 
 
+def cmd_eval_hooks(args, cfg) -> int:
+    from .evaluate import render_hooks_eval, run_hooks_eval
+    from .jev import Jev
+    corpus = load_corpus(cfg)
+
+    async def run():
+        async with Jev(cfg, use_cache=not args.no_cache) as jev:
+            return await run_hooks_eval(cfg, corpus, jev, Path(args.cases), score=args.score)
+
+    report = asyncio.run(run())
+    if args.out:
+        _dump(report, args.out)
+    print(render_hooks_eval(report))
+    return EXIT_OK
+
+
+# ---------------------------------------------------------------- hooks
+
+
+def cmd_hook(args, cfg) -> int:
+    """One Claude Code hook event on stdin (a `command` hook); the decision JSON on stdout."""
+    from .hooks import Hooks
+    from .jev import Jev
+    event = json.loads(sys.stdin.read() or "{}")
+    corpus = load_corpus(cfg)
+
+    async def run():
+        async with Jev(cfg) as jev:
+            hooks = Hooks(cfg, corpus, jev)
+            return hooks, await hooks.handle(event)
+
+    hooks, out = asyncio.run(run())
+    if out:
+        print(json.dumps(out, ensure_ascii=False))
+    # JTOOL-0003.1: a failed Jev request exits 3, which Claude Code treats as a non-blocking
+    # error, so the call runs (fail-open). A decision already made (secret scanner) exits 0.
+    return EXIT_SERVICE if hooks.jev_failed and not out.get("hookSpecificOutput") else EXIT_OK
+
+
+def cmd_hookd(args, cfg) -> int:
+    """Serve hook events over localhost HTTP with one warm Jev connection."""
+    from .hooks import Hooks, serve
+    from .jev import Jev
+    from .verify import repo_root
+    corpus = load_corpus(cfg)
+    root = repo_root(None).resolve()
+
+    async def run():
+        async with Jev(cfg) as jev:
+            await serve(Hooks(cfg, corpus, jev), args.host, args.port or int(cfg.get("hooks.port")), root)
+
+    try:
+        asyncio.run(run())
+    except KeyboardInterrupt:
+        pass
+    return EXIT_OK
+
+
+def cmd_hook_config(args, cfg) -> int:
+    """Print the `hooks` block for .claude/settings.json. Deterministic: no model call."""
+    import os
+    from .hooks import hook_settings
+    root = os.environ.get("JRFC_PLUGIN_ROOT")
+    command = str(Path(root) / "bin" / "jrfc") if root else "jrfc"
+    port = args.port or int(cfg.get("hooks.port"))
+    print(json.dumps(hook_settings(cfg, args.transport, port, command, not args.no_stop), indent=2))
+    return EXIT_OK
+
+
 def cmd_eval_verify(args, cfg) -> int:
     from .evaluate import render_verify_eval, run_verify_eval
     from .jev import Jev
@@ -729,6 +798,29 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--no-cache", action="store_true", help="fresh Jev and agent answers (measuring the models)")
     s.add_argument("--out")
     s.set_defaults(fn=cmd_eval_triage)
+
+    s = sub.add_parser("hook", help="handle one Claude Code hook event from stdin (command hook)")
+    s.set_defaults(fn=cmd_hook)
+
+    s = sub.add_parser("hookd", help="serve Claude Code hook events on localhost (http hook, warm Jev)")
+    s.add_argument("--host", default="127.0.0.1")
+    s.add_argument("--port", type=int, help="default: hooks.port")
+    s.set_defaults(fn=cmd_hookd)
+
+    s = sub.add_parser("hook-config", help="print the hooks block for .claude/settings.json (no model call)")
+    s.add_argument("--transport", choices=["http", "command"], default="http",
+                   help="http: `jrfc hookd` must run (~0.3 s per call); command: one process per call (~0.5 s)")
+    s.add_argument("--port", type=int, help="default: hooks.port")
+    s.add_argument("--no-stop", action="store_true", help="leave out the Stop hook (full review at the end of a turn)")
+    s.set_defaults(fn=cmd_hook_config)
+
+    s = sub.add_parser("eval-hooks", help="measure Jev as the hook judge on labelled tool calls and writes")
+    s.add_argument("--cases", default="eval/hooks/cases.yaml")
+    s.add_argument("--no-cache", action="store_true", help="fresh Jev answers (needed to measure latency)")
+    s.add_argument("--score", choices=["both", "violation"], default="both",
+                   help="both: min(applies, violates) as the hooks use it; violation: that question alone (A/B)")
+    s.add_argument("--out")
+    s.set_defaults(fn=cmd_eval_hooks)
 
     s = sub.add_parser("eval", help="measure selection recall/precision on labelled cases")
     s.add_argument("--labels", default="eval/labels.yaml")

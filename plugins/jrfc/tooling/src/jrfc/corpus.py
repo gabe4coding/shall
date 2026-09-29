@@ -12,7 +12,7 @@ import yaml
 from .config import Config, Layer
 
 STATUSES = ("draft", "approved", "enforced", "deprecated")
-ARTIFACTS = ("diff", "code", "spec", "doc")
+ARTIFACTS = ("diff", "code", "spec", "doc", "tool")  # tool: an agent tool call (hooks.py)
 ENFORCEMENTS = ("agent", "linter", "human")
 REQUIRED_FRONT = (
     "id", "title", "status", "domain", "artifacts", "languages", "owner",
@@ -23,7 +23,8 @@ PREFIX_RE = re.compile(r"^[A-Z][A-Z0-9]{1,9}$")
 STATEMENT_HEAD_RE = re.compile(r"^###\s+([A-Z][A-Z0-9]{1,9}-\d{4}\.\d+)\s+(.+?)\s*$")
 LOOSE_HEAD_RE = re.compile(r"^###\s+[A-Z][A-Z0-9]{1,9}-\d")
 SECTION_HEAD_RE = re.compile(r"^#{1,3}\s")
-META_RE = re.compile(r"^-\s+(Applies when|Not applies when|Enforcement|Artifacts):\s*(.*)$", re.I)
+META_RE = re.compile(
+    r"^-\s+(Applies when|Not applies when|Enforcement|Artifacts|Tools|Violated when):\s*(.*)$", re.I)
 # Longest alternatives first so "MUST NOT" wins over "MUST".
 KEYWORD_RE = re.compile(
     r"\b(MUST NOT|SHALL NOT|SHOULD NOT|NOT RECOMMENDED|MUST|SHALL|REQUIRED|SHOULD|RECOMMENDED|MAY|OPTIONAL)\b"
@@ -75,6 +76,8 @@ class Statement:
     enforcement: str
     line: int
     artifacts: list[str] | None = None  # narrower than the RFC's, e.g. [spec]
+    tools: str | None = None            # tool-name regex for `tool` statements, e.g. Bash|mcp__.*
+    violated_when: str | None = None    # hook Jev criterion: what a violating tool call looks like
 
 
 @dataclass
@@ -242,6 +245,8 @@ def _parse_statements(rfc_id: str, body: list[str], offset: int, rel: str, issue
             enforcement=(meta.get("enforcement") or "agent").lower(),
             line=offset + start + 1,
             artifacts=[a.strip() for a in meta["artifacts"].split(",")] if meta.get("artifacts") else None,
+            tools=meta.get("tools") or None,
+            violated_when=meta.get("violated when") or None,
         ))
         # lint per statement
         line = offset + start + 1
@@ -259,6 +264,11 @@ def _parse_statements(rfc_id: str, body: list[str], offset: int, rel: str, issue
         if not meta.get("applies when"):
             issues.append(Issue(rel, line, "warning", "no-applies-when",
                                 f"{sid} has no 'Applies when:' line; the RFC-level one is used (JRFC-0001.3)"))
+        if meta.get("tools"):
+            try:
+                re.compile(meta["tools"])
+            except re.error as err:
+                issues.append(Issue(rel, line, "error", "tools", f"{sid} Tools is not a valid regex: {err}"))
         enf = (meta.get("enforcement") or "agent").lower()
         if enf not in ENFORCEMENTS:
             issues.append(Issue(rel, line, "error", "enforcement", f"{sid} has unknown enforcement '{enf}'"))
@@ -351,6 +361,9 @@ def _load_layer(layer: Layer, root: Path, domains: dict[str, Domain], rfcs: dict
                 if a not in rfc.artifacts:
                     issues.append(Issue(rel, st.line, "error", "statement-artifacts",
                                         f"{st.id} artifact '{a}' is not in the RFC artifacts {rfc.artifacts}"))
+            if "tool" in (st.artifacts or rfc.artifacts) and not st.tools:
+                issues.append(Issue(rel, st.line, "warning", "no-tools",
+                                    f"{st.id} applies to tool calls but has no 'Tools:' line; it matches every hooked tool"))
             if st.id in rfc.retired:
                 issues.append(Issue(rel, st.line, "error", "retired-reused",
                                     f"{st.id} is retired and must not be reused (JRFC-0001.2)"))

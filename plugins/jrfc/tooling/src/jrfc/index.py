@@ -59,6 +59,9 @@ def build_index(corpus: Corpus, layers: set[str] | None = None) -> dict:
                 "not_applies_when": st.not_applies_when or rfc.not_applies_when,
                 "artifacts": st.artifacts or rfc.artifacts, "languages": rfc.languages,
                 "source": corpus.source(rfc, st.line),
+                # only when present: entries of code/spec statements stay byte-identical
+                **({"tools": st.tools} if st.tools else {}),
+                **({"violated_when": st.violated_when} if st.violated_when else {}),
             })
     parents = [
         {"name": layer.name, "repo": layer.parent.repo, "ref": layer.parent.ref, "prefix": layer.prefix}

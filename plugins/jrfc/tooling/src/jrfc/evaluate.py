@@ -328,3 +328,120 @@ def render_triage_eval(report: dict) -> str:
         out.append("")
     out.append(f"Jev usage: {report['usage']}")
     return "\n".join(out)
+
+
+# ---------------------------------------------------------------- hooks
+
+HOOK_THRESHOLDS = [0.5, 0.7, 0.9]
+
+
+def _pct(values: list[float], q: float) -> int | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    return round(ordered[min(len(ordered) - 1, int(q * len(ordered)))])
+
+
+async def run_hooks_eval(cfg: Config, corpus: Corpus, jev: Jev, cases_path: Path, score: str = "both") -> dict:
+    """Jev as the judge of tool calls and written code (eval/hooks/cases.yaml).
+
+    Measures the judgment, not the policy: every status is included (drafts too) and each
+    candidate statement's score is compared with the labelled `violates` set at the thresholds
+    the action tables use. Cases run one at a time, so latency is what a hook waits.
+    """
+    import tempfile
+
+    from .hooks import Hooks
+    data = yaml.safe_load(cases_path.read_text(encoding="utf-8"))
+    hooks = Hooks(cfg, corpus, jev, statuses=["draft", "approved", "enforced"], timeout=None, log=False,
+                  score=score)
+    rows = []
+    with tempfile.TemporaryDirectory(prefix="jrfc-hooks-eval-") as tmp:
+        for case in data["cases"]:
+            kind = "tool" if case["event"] == "PreToolUse" else "code"
+            event = {"hook_event_name": case["event"], "session_id": "eval", "cwd": case.get("cwd", tmp),
+                     "tool_name": case["tool"], "tool_input": dict(case.get("input") or {})}
+            if kind == "code":
+                path = Path(tmp) / case["file"]
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(case["content"], encoding="utf-8")
+                event["cwd"] = tmp
+                event["tool_input"].setdefault("file_path", str(path))
+                if case["tool"] == "Write":
+                    event["tool_input"].setdefault("content", case["content"])
+            hooks.git_branch = lambda cwd, b=case.get("branch", ""): b
+            record: dict = {}
+            t0 = time.perf_counter()
+            await (hooks.pre(event, record) if kind == "tool" else hooks.post(event, record))
+            ms = (time.perf_counter() - t0) * 1000
+            scores = {**record.get("scores", {}), **{sid: 1.0 for sid in record.get("scanner", [])}}
+            rows.append({"id": case["id"], "kind": kind, "expected": sorted(case.get("violates") or []),
+                         "scores": scores, "ms": round(ms), "jev": record.get("jev", "none"),
+                         "candidates": record.get("candidates", 0), "skip": record.get("skip")})
+    summary: dict = {}
+    for kind in ("tool", "code"):
+        krows = [r for r in rows if r["kind"] == kind]
+        per_t = {}
+        for t in HOOK_THRESHOLDS:
+            tp = fp = fn = 0
+            for r in krows:
+                got = {sid for sid, p in r["scores"].items() if p >= t}
+                exp = set(r["expected"])
+                tp, fp, fn = tp + len(got & exp), fp + len(got - exp), fn + len(exp - got)
+            per_t[str(t)] = {"tp": tp, "fp": fp, "fn": fn,
+                             "precision": round(tp / (tp + fp), 3) if tp + fp else None,
+                             "recall": round(tp / (tp + fn), 3) if tp + fn else None}
+        fresh = [r["ms"] for r in krows if r["jev"] == "request"]
+        summary[kind] = {"cases": len(krows), "thresholds": per_t,
+                         "latency_ms": {"requests": len(fresh), "p50": _pct(fresh, 0.5), "p95": _pct(fresh, 0.95),
+                                        "max": round(max(fresh)) if fresh else None}}
+    # the actions a user would see, with draft rules trialled as enforced (the JRFC-0012 trial)
+    from .hooks import action_for, code_action
+    policy = dict(cfg.get("hooks.actions") or {})
+    policy.setdefault("draft", policy.get("enforced", {}))
+    code_warn = float(cfg.get("hooks.code_warn"))
+    for kind in ("tool", "code"):
+        acts = {a: {"right": 0, "wrong": 0} for a in ("deny", "ask", "warn")}
+        missed = []
+        for r in (r for r in rows if r["kind"] == kind):
+            for sid, p in r["scores"].items():
+                rfc, st = corpus.statement(sid)
+                act = action_for(policy, rfc, st, p) if kind == "tool" else code_action(policy, code_warn, rfc, st, p)
+                if act in acts:
+                    acts[act]["right" if sid in r["expected"] else "wrong"] += 1
+                elif sid in r["expected"]:
+                    missed.append(f"{r['id']}:{sid}")
+            missed += [f"{r['id']}:{sid}" for sid in set(r["expected"]) - set(r["scores"])]
+        summary[kind]["actions"] = {**acts, "missed": sorted(missed)}
+    errors = []
+    for r in rows:
+        for sid, p in sorted(r["scores"].items()):
+            exp = sid in r["expected"]
+            if (p >= 0.5) != exp:
+                errors.append({"case": r["id"], "statement": sid, "p": p, "type": "FP" if not exp else "FN"})
+        for sid in set(r["expected"]) - set(r["scores"]):
+            errors.append({"case": r["id"], "statement": sid, "p": None, "type": "FN (not a candidate)"})
+    return {"model": cfg.get("jev.model"), "score": score, "cases": len(rows), "summary": summary, "errors": errors,
+            "rows": rows, "usage": dict(jev.usage)}
+
+
+def render_hooks_eval(report: dict) -> str:
+    lines = [f"jrfc eval-hooks: {report['cases']} case(s), {report['model']}, score={report['score']}"]
+    for kind, s in report["summary"].items():
+        th = "  ".join(f"t={t}: P={v['precision']} R={v['recall']} (fp {v['fp']}, fn {v['fn']})"
+                       for t, v in s["thresholds"].items())
+        lat = s["latency_ms"]
+        lines.append(f"  {kind:<5} {s['cases']:>3} case(s)  {th}")
+        lines.append(f"        latency of {lat['requests']} Jev request(s): p50 {lat['p50']} ms, "
+                     f"p95 {lat['p95']} ms, max {lat['max']} ms")
+        acts = s.get("actions")
+        if acts:
+            lines.append("        actions (drafts as enforced): " + ", ".join(
+                f"{a} {v['right']} right / {v['wrong']} wrong" for a, v in acts.items() if a != "missed")
+                + f"; missed {len(acts['missed'])}" + (f" ({', '.join(acts['missed'])})" if acts["missed"] else ""))
+    if report["errors"]:
+        lines.append("  errors at t=0.5:")
+        lines += [f"    {e['type']:<3} {e['case']:<28} {e['statement']:<13} p={e['p']}" for e in report["errors"]]
+    u = report["usage"]
+    lines.append(f"  jev: {u['requests']} request(s), {u['cached']} cached")
+    return "\n".join(lines)
