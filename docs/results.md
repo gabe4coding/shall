@@ -156,6 +156,11 @@ Actions the user would see, with the draft JRFC-0012 trialled as enforced:
   ran) and the PostToolUse warning for a `requests.get` without a timeout, word for word.
   The Stop hook blocked on the two verified missing timeouts (18 s) and skipped the
   unchanged change on the next stop (0.4 s).
+- **With the plugin** (`claude -p --plugin-dir plugins/jrfc`, no `hookd`): `git push --force
+  origin main` was denied (JRFC-0012.1 and .2, 0.49 s); Stop blocked on two missing timeouts;
+  the agent added them; the post-write checks of its edits were clean (0.52 s); the second
+  Stop reviewed the new change (20 s, no findings) and let the agent finish. Outside a jrfc
+  workspace `jrfc-hook` exits in ~10 ms; through `hookd` a call takes 0.38 s (0.06 s cached).
 - Caveat: the cases were written with the rules, by the same author. Real agent sessions
   (the decision log) are the next measurement.
 

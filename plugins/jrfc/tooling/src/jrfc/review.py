@@ -194,6 +194,8 @@ async def run_claude(cfg: Config, prompt: str, system: str, schema: dict,
     async with sem:
         proc = await asyncio.create_subprocess_exec(
             *cmd, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            # a pipeline agent never triggers jrfc hooks: its Stop would start another review
+            env={**os.environ, "JRFC_HOOKS_DISABLED": "1"},
         )
         try:
             out, err = await asyncio.wait_for(proc.communicate(prompt.encode()),

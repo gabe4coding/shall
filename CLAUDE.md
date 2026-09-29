@@ -73,6 +73,9 @@ comments with the same selection and verification evidence (`verify.gather_evide
   `Violated when:`) and written lines against code statements, p = min(applies, violates);
   `hooks.actions[status][level]` maps p to deny/ask/warn/log; writes only warn; Stop runs
   `jrfc review`. Secret scanner redacts before Jev. Fail-open on Jev timeout/error.
+  The plugin ships them: `plugins/jrfc/hooks/hooks.json` → `bin/jrfc-hook` (no-op outside a
+  workspace, forwards to `hookd`, else `jrfc hook`). Agents jrfc runs get
+  `JRFC_HOOKS_DISABLED=1` so a Stop review never triggers another one.
 - **evaluate.py**: selection eval (per-strategy cost, layer that dropped each miss,
   `--no-facts` A/B, optional `repo:` fixture per case) and verification eval.
 

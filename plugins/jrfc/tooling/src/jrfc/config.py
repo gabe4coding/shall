@@ -61,6 +61,7 @@ DEFAULTS: dict[str, Any] = {
     "hooks": {
         # Claude Code hooks (hooks.py). Pre: tool statements judged by Jev before a call.
         # Post: code statements on the lines a Write/Edit produced (warn only). Stop: full review.
+        "enabled": True,          # false: every hook event is answered "no opinion" (plugin hooks off)
         "pre_matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|mcp__.*",
         "code_tools": "Write|Edit|MultiEdit|NotebookEdit",
         "timeout": 3.0,           # seconds for the Jev step; past it the call runs (fail-open)
