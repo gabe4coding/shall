@@ -72,6 +72,10 @@ class Secret:
     end: int
 
 
+def _norm(word: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", word.lower())
+
+
 def scan_secrets(text: str) -> list[Secret]:
     found: list[Secret] = []
     for kind, rx in TOKEN_PATTERNS:
@@ -79,8 +83,11 @@ def scan_secrets(text: str) -> list[Secret]:
     for kind, rx in VALUE_PATTERNS:
         for m in rx.finditer(text):
             value = m.group("v")
-            if not PLACEHOLDER_RE.search(value):
-                found.append(Secret(kind, m.start("v"), m.end("v")))
+            # a value that repeats its own key name is a key (`jevTokens: 'jevTokens' in view`)
+            name = re.match(r"[\w.-]*", m.group(0)).group(0)
+            if PLACEHOLDER_RE.search(value) or _norm(value) == _norm(name):
+                continue
+            found.append(Secret(kind, m.start("v"), m.end("v")))
     found.sort(key=lambda s: (s.start, -s.end))
     merged: list[Secret] = []
     for s in found:  # overlapping hits: keep the first, widest one
@@ -501,7 +508,6 @@ class Hooks:
         return parse_diff(diff, int(self.cfg.get("jev.max_chunk_chars"))), rel
 
     async def post(self, event: dict, record: dict) -> dict:
-        from .select import Selector, statement_question
         tool = event.get("tool_name") or ""
         record["tool"] = tool
         if not self.code_rx.fullmatch(tool):
@@ -511,8 +517,18 @@ class Hooks:
             return {}
         chunks, rel = built
         record["file"] = rel
-        selector = Selector(self.cfg, self.corpus, self.jev, include_status=sorted(self.statuses))
         code_warn = float(self.cfg.get("hooks.code_warn"))
+        findings = await self.judge_code(
+            chunks, record, lambda rfc, st, p: code_action(self.actions, code_warn, rfc, st, p))
+        record["findings"] = [{k: f[k] for k in ("id", "p", "action")} for f in findings if f["action"]]
+        return post_output(findings, rel)
+
+    async def judge_code(self, chunks: list[Chunk], record: dict, action) -> list[dict]:
+        """Code statements eligible for each chunk, judged by Jev (min(applies, violates)).
+        Shared by the post-write hook and `jrfc scan`; `action(rfc, st, p)` names the outcome.
+        Sets record["scores"] (max p per statement over the chunks) and record["candidates"]."""
+        from .select import Selector, statement_question
+        selector = Selector(self.cfg, self.corpus, self.jev, include_status=sorted(self.statuses))
         findings: list[dict] = []
         scores: dict[str, float] = {}
         for chunk in chunks:
@@ -527,11 +543,9 @@ class Hooks:
             for rfc, st in cands:
                 p = ps[st.id]
                 scores[st.id] = max(scores.get(st.id, 0.0), p)
-                findings.append(self._finding(rfc, st, p, code_action(self.actions, code_warn, rfc, st, p),
-                                              "jev", lines=record.get("lines")))
+                findings.append(self._finding(rfc, st, p, action(rfc, st, p), "jev", lines=record.get("lines")))
         record["scores"] = scores
-        record["findings"] = [{k: f[k] for k in ("id", "p", "action")} for f in findings if f["action"]]
-        return post_output(findings, rel)
+        return findings
 
     # -- Stop
     async def stop(self, event: dict, record: dict) -> dict:
