@@ -1,0 +1,717 @@
+# Whole-file scan eval: ids only, file content is read with `git show <sha>:<path>`
+# from the local checkout, so no source code is stored in this repository.
+repos:
+  sca-gap-map:
+    url: git@github.com:gabe4coding/sca-gap-map.git
+    checkout: ~/Repositories/thefork/sca-gap-map
+    sha: fc89f0d0476403d0a5b620029bd1d79e3969164b
+  plainwright:
+    url: git@github.com:gabe4coding/plainwright.git
+    checkout: ~/Repositories/plainwright
+    sha: b18d4e359917b23e8bcd6fa027e2715a4e4bae24
+excluded:
+  sca-gap-map/sca_gap_map/baseline_data.py: embedded BlackDuck audit data (vulnerability rows); must not go to TypeSafe
+  tests, fixtures, generated: not the code a scan must judge first
+  plainwright/examples/*.yaml, examples/mobile/: plainwright test specs, not code
+  plainwright/plugins/*/bin/launch.mjs: 3 byte-identical copies of scripts/plugin-launcher.mjs
+cases:
+- id: sgm-001
+  repo: sca-gap-map
+  path: .github/workflows/daily-report.yml
+  tags:
+  - yaml
+  - sca-gap-map
+  - github
+- id: sgm-002
+  repo: sca-gap-map
+  path: investigations/2026-09-17/claude-verification/report-fixed-code-2026-09-17-cold/compare_today.py
+  tags:
+  - python
+  - sca-gap-map
+  - investigations
+- id: sgm-003
+  repo: sca-gap-map
+  path: investigations/2026-09-17/claude-verification/report-fixed-code-2026-09-17-cold/manual_vs_fixed.py
+  tags:
+  - python
+  - sca-gap-map
+  - investigations
+- id: sgm-004
+  repo: sca-gap-map
+  path: investigations/2026-09-17/claude-verification/scripts/assemble.py
+  tags:
+  - python
+  - sca-gap-map
+  - investigations
+- id: sgm-005
+  repo: sca-gap-map
+  path: investigations/2026-09-17/claude-verification/scripts/build_summary.py
+  tags:
+  - python
+  - sca-gap-map
+  - investigations
+- id: sgm-006
+  repo: sca-gap-map
+  path: investigations/2026-09-17/claude-verification/scripts/check_lock.py
+  tags:
+  - python
+  - sca-gap-map
+  - investigations
+- id: sgm-007
+  repo: sca-gap-map
+  path: investigations/2026-09-17/claude-verification/scripts/check_protobufjs.py
+  tags:
+  - python
+  - sca-gap-map
+  - investigations
+- id: sgm-008
+  repo: sca-gap-map
+  path: sca_gap_map/__init__.py
+  tags:
+  - python
+  - sca-gap-map
+  - package
+- id: sgm-009
+  repo: sca-gap-map
+  path: sca_gap_map/__main__.py
+  tags:
+  - python
+  - sca-gap-map
+  - package
+- id: sgm-010
+  repo: sca-gap-map
+  path: sca_gap_map/advisories.py
+  tags:
+  - python
+  - sca-gap-map
+  - package
+- id: sgm-011
+  repo: sca-gap-map
+  path: sca_gap_map/alerts.py
+  tags:
+  - python
+  - sca-gap-map
+  - package
+- id: sgm-012
+  repo: sca-gap-map
+  path: sca_gap_map/audit_source.py
+  tags:
+  - python
+  - sca-gap-map
+  - package
+- id: sgm-013
+  repo: sca-gap-map
+  path: sca_gap_map/cache.py
+  tags:
+  - python
+  - sca-gap-map
+  - package
+- id: sgm-014
+  repo: sca-gap-map
+  path: sca_gap_map/cli.py
+  tags:
+  - python
+  - sca-gap-map
+  - package
+- id: sgm-015
+  repo: sca-gap-map
+  path: sca_gap_map/deep_sweep.py
+  tags:
+  - python
+  - sca-gap-map
+  - package
+- id: sgm-016
+  repo: sca-gap-map
+  path: sca_gap_map/fix_prs.py
+  tags:
+  - python
+  - sca-gap-map
+  - package
+- id: sgm-017
+  repo: sca-gap-map
+  path: sca_gap_map/github_api.py
+  tags:
+  - python
+  - sca-gap-map
+  - package
+- id: sgm-018
+  repo: sca-gap-map
+  path: sca_gap_map/manifests.py
+  tags:
+  - python
+  - sca-gap-map
+  - package
+- id: sgm-019
+  repo: sca-gap-map
+  path: sca_gap_map/naming.py
+  tags:
+  - python
+  - sca-gap-map
+  - package
+- id: sgm-020
+  repo: sca-gap-map
+  path: sca_gap_map/osv.py
+  tags:
+  - python
+  - sca-gap-map
+  - package
+- id: sgm-021
+  repo: sca-gap-map
+  path: sca_gap_map/ownership.py
+  tags:
+  - python
+  - sca-gap-map
+  - package
+- id: sgm-022
+  repo: sca-gap-map
+  path: sca_gap_map/pipeline/__init__.py
+  tags:
+  - python
+  - sca-gap-map
+  - pipeline
+- id: sgm-023
+  repo: sca-gap-map
+  path: sca_gap_map/pipeline/alerts_discovery.py
+  tags:
+  - python
+  - sca-gap-map
+  - pipeline
+- id: sgm-024
+  repo: sca-gap-map
+  path: sca_gap_map/pipeline/audit_ingestion.py
+  tags:
+  - python
+  - sca-gap-map
+  - pipeline
+- id: sgm-025
+  repo: sca-gap-map
+  path: sca_gap_map/pipeline/ghost_alerts.py
+  tags:
+  - python
+  - sca-gap-map
+  - pipeline
+- id: sgm-026
+  repo: sca-gap-map
+  path: sca_gap_map/pipeline/installed_scan.py
+  tags:
+  - python
+  - sca-gap-map
+  - pipeline
+- id: sgm-027
+  repo: sca-gap-map
+  path: sca_gap_map/pipeline/inventory.py
+  tags:
+  - python
+  - sca-gap-map
+  - pipeline
+- id: sgm-028
+  repo: sca-gap-map
+  path: sca_gap_map/pipeline/long_rows.py
+  tags:
+  - python
+  - sca-gap-map
+  - pipeline
+- id: sgm-029
+  repo: sca-gap-map
+  path: sca_gap_map/pipeline/scoreboards.py
+  tags:
+  - python
+  - sca-gap-map
+  - pipeline
+- id: sgm-030
+  repo: sca-gap-map
+  path: sca_gap_map/pipeline/state.py
+  tags:
+  - python
+  - sca-gap-map
+  - pipeline
+- id: sgm-031
+  repo: sca-gap-map
+  path: sca_gap_map/pipeline/summary.py
+  tags:
+  - python
+  - sca-gap-map
+  - pipeline
+- id: sgm-032
+  repo: sca-gap-map
+  path: sca_gap_map/pipeline/triage.py
+  tags:
+  - python
+  - sca-gap-map
+  - pipeline
+- id: sgm-033
+  repo: sca-gap-map
+  path: sca_gap_map/pipeline/unplaced.py
+  tags:
+  - python
+  - sca-gap-map
+  - pipeline
+- id: sgm-034
+  repo: sca-gap-map
+  path: sca_gap_map/repos.py
+  tags:
+  - python
+  - sca-gap-map
+  - package
+- id: sgm-035
+  repo: sca-gap-map
+  path: sca_gap_map/sbom.py
+  tags:
+  - python
+  - sca-gap-map
+  - package
+- id: sgm-036
+  repo: sca-gap-map
+  path: sca_gap_map/util.py
+  tags:
+  - python
+  - sca-gap-map
+  - package
+- id: sgm-037
+  repo: sca-gap-map
+  path: sca_gap_map/versions.py
+  tags:
+  - python
+  - sca-gap-map
+  - package
+- id: sgm-038
+  repo: sca-gap-map
+  path: tools/compare_reports.py
+  tags:
+  - python
+  - sca-gap-map
+  - tools
+- id: sgm-039
+  repo: sca-gap-map
+  path: tools/leadership_summary.py
+  tags:
+  - python
+  - sca-gap-map
+  - tools
+- id: pw-040
+  repo: plainwright
+  path: bin/plainwright-computer.mjs
+  tags:
+  - javascript
+  - plainwright
+  - bin
+- id: pw-041
+  repo: plainwright
+  path: bin/plainwright-mobile.mjs
+  tags:
+  - javascript
+  - plainwright
+  - bin
+- id: pw-042
+  repo: plainwright
+  path: bin/plainwright.mjs
+  tags:
+  - javascript
+  - plainwright
+  - bin
+- id: pw-043
+  repo: plainwright
+  path: examples/hooks/login-dataset.mjs
+  tags:
+  - javascript
+  - plainwright
+  - examples
+- id: pw-044
+  repo: plainwright
+  path: examples/hooks/mobile-fixture.mjs
+  tags:
+  - javascript
+  - plainwright
+  - examples
+- id: pw-045
+  repo: plainwright
+  path: scripts/benchmark-agent.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-046
+  repo: plainwright
+  path: scripts/benchmark-mcp.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-047
+  repo: plainwright
+  path: scripts/benchmark-picks.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-048
+  repo: plainwright
+  path: scripts/benchmark-planner.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-049
+  repo: plainwright
+  path: scripts/benchmark-read.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-050
+  repo: plainwright
+  path: scripts/benchmark-snapshots.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-051
+  repo: plainwright
+  path: scripts/benchmark-steps.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-052
+  repo: plainwright
+  path: scripts/build-plugins.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-053
+  repo: plainwright
+  path: scripts/capture-read-states.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-054
+  repo: plainwright
+  path: scripts/mobile-fixture.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-055
+  repo: plainwright
+  path: scripts/plugin-launcher.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-056
+  repo: plainwright
+  path: scripts/smoke-computer-macos.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-057
+  repo: plainwright
+  path: scripts/smoke-mobile-android.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-058
+  repo: plainwright
+  path: scripts/smoke-mobile-ios.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-059
+  repo: plainwright
+  path: scripts/smoke-mobile.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-060
+  repo: plainwright
+  path: scripts/smoke-plugins.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-061
+  repo: plainwright
+  path: scripts/workflow-benchmark/accounting.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-062
+  repo: plainwright
+  path: scripts/workflow-benchmark/analyze.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-063
+  repo: plainwright
+  path: scripts/workflow-benchmark/artifacts.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-064
+  repo: plainwright
+  path: scripts/workflow-benchmark/fixtures.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-065
+  repo: plainwright
+  path: scripts/workflow-benchmark/jev-usage.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-066
+  repo: plainwright
+  path: scripts/workflow-benchmark/plot.py
+  tags:
+  - python
+  - plainwright
+  - scripts
+- id: pw-067
+  repo: plainwright
+  path: scripts/workflow-benchmark/report.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-068
+  repo: plainwright
+  path: scripts/workflow-benchmark/run.mjs
+  tags:
+  - javascript
+  - plainwright
+  - scripts
+- id: pw-069
+  repo: plainwright
+  path: src/aria-changes.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-070
+  repo: plainwright
+  path: src/automation.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-071
+  repo: plainwright
+  path: src/cli.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-072
+  repo: plainwright
+  path: src/computer-adapter.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-073
+  repo: plainwright
+  path: src/computer-cli.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-074
+  repo: plainwright
+  path: src/computer-mcp.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-075
+  repo: plainwright
+  path: src/computer-spec.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-076
+  repo: plainwright
+  path: src/computer.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-077
+  repo: plainwright
+  path: src/hooks-child.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-078
+  repo: plainwright
+  path: src/hooks.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-079
+  repo: plainwright
+  path: src/jev.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-080
+  repo: plainwright
+  path: src/mcp-result.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-081
+  repo: plainwright
+  path: src/mcp.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-082
+  repo: plainwright
+  path: src/mobile-adapter.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-083
+  repo: plainwright
+  path: src/mobile-cli.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-084
+  repo: plainwright
+  path: src/mobile-discovery.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-085
+  repo: plainwright
+  path: src/mobile-mcp.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-086
+  repo: plainwright
+  path: src/mobile-spec.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-087
+  repo: plainwright
+  path: src/mobile-tree.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-088
+  repo: plainwright
+  path: src/mobile.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-089
+  repo: plainwright
+  path: src/native-mcp.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-090
+  repo: plainwright
+  path: src/native.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-091
+  repo: plainwright
+  path: src/page.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-092
+  repo: plainwright
+  path: src/planner.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-093
+  repo: plainwright
+  path: src/read.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-094
+  repo: plainwright
+  path: src/results.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-095
+  repo: plainwright
+  path: src/runner.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-096
+  repo: plainwright
+  path: src/serial-queue.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-097
+  repo: plainwright
+  path: src/snapshot-view.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-098
+  repo: plainwright
+  path: src/spec.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-099
+  repo: plainwright
+  path: src/step-kind.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
+- id: pw-100
+  repo: plainwright
+  path: src/steps.ts
+  tags:
+  - typescript
+  - plainwright
+  - src
