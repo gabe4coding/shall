@@ -1,0 +1,40 @@
+{
+ "harness_sha": "c3440dfc42787e76",
+ "harness_paths": [
+  "eval/scan/run.py",
+  "eval/scan/cases.yaml"
+ ],
+ "metrics": [
+  {
+   "id": "prec_7",
+   "label": "prec@0.7/file",
+   "kind": "float"
+  },
+  {
+   "id": "fp_7",
+   "label": "false pos@0.7",
+   "kind": "float"
+  },
+  {
+   "id": "tp_7",
+   "label": "true pos@0.7",
+   "kind": "float"
+  },
+  {
+   "id": "fn_7",
+   "label": "missed@0.7",
+   "kind": "float"
+  }
+ ],
+ "perf_fields": [
+  "jev_cost_usd",
+  "flags_7",
+  "label_cost_usd"
+ ],
+ "prices": {
+  "jev-1.13.0": {
+   "in": 0.042,
+   "out": 0
+  }
+ }
+}

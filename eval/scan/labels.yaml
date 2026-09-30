@@ -1,0 +1,507 @@
+# Human-reviewed labels for eval/scan (no source code). Pairs not listed fall back to
+# Claude's proposal in .claude/hillclimb/scan/labels/proposed.jsonl.
+labels:
+- case: sgm-001
+  statement: JRFC-0006.3
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-005
+  statement: JRFC-0011.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-010
+  statement: JRFC-0003.2
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-011
+  statement: JRFC-0011.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-013
+  statement: JRFC-0011.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-015
+  statement: JRFC-0006.2
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-016
+  statement: JRFC-0003.2
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-018
+  statement: JRFC-0011.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-019
+  statement: JRFC-0011.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-020
+  statement: JRFC-0003.2
+  verdict: clean
+  picked_by: jev
+  sample: false
+  note: 'user: CLI tools are not services'
+- case: sgm-021
+  statement: JRFC-0011.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-023
+  statement: JRFC-0003.2
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-024
+  statement: JRFC-0011.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-025
+  statement: JRFC-0011.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-027
+  statement: JRFC-0011.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-028
+  statement: JRFC-0011.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-029
+  statement: JRFC-0011.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-031
+  statement: JRFC-0011.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-032
+  statement: JRFC-0011.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-033
+  statement: JRFC-0003.2
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-034
+  statement: JRFC-0011.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-035
+  statement: JRFC-0003.2
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-035
+  statement: JRFC-0006.2
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-035
+  statement: JRFC-0011.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-036
+  statement: JRFC-0003.2
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-037
+  statement: JRFC-0011.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-039
+  statement: JRFC-0011.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-042
+  statement: JRFC-0006.1
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-043
+  statement: JRFC-0003.1
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-043
+  statement: JRFC-0003.2
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-045
+  statement: JRFC-0004.1
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: 'user: public demo login is not a credential'
+- case: pw-045
+  statement: JRFC-0006.1
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-046
+  statement: JRFC-0004.1
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-046
+  statement: JRFC-0006.1
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-048
+  statement: JRFC-0003.2
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-053
+  statement: JRFC-0006.1
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-054
+  statement: JRFC-0004.1
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-055
+  statement: JRFC-0006.1
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-057
+  statement: JRFC-0003.2
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-064
+  statement: JRFC-0002.1
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-064
+  statement: JRFC-0002.3
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-065
+  statement: JRFC-0003.3
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-068
+  statement: JRFC-0006.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-071
+  statement: JRFC-0003.2
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-072
+  statement: JRFC-0007.4
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-073
+  statement: JRFC-0003.2
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-079
+  statement: JRFC-0006.1
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-079
+  statement: JRFC-0006.2
+  verdict: violation
+  picked_by: both
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-081
+  statement: JRFC-0003.2
+  verdict: clean
+  picked_by: jev
+  sample: false
+  note: 'user: a local MCP server is a developer tool, not a service'
+- case: pw-082
+  statement: JRFC-0006.1
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-082
+  statement: JRFC-0007.4
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-086
+  statement: JRFC-0001.5
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-090
+  statement: JRFC-0006.2
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-093
+  statement: JRFC-0007.4
+  verdict: clean
+  picked_by: jev
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-055
+  statement: JRFC-0003.2
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-079
+  statement: JRFC-0004.1
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-005
+  statement: JRFC-0010.3
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-086
+  statement: JRFC-0004.2
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-029
+  statement: JRFC-0002.4
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-038
+  statement: JRFC-0001.4
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-078
+  statement: JRFC-0004.3
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-053
+  statement: JRFC-0008.3
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-046
+  statement: JRFC-0002.2
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-077
+  statement: JRFC-0001.4
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-092
+  statement: JRFC-0008.1
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-069
+  statement: JRFC-0003.2
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-060
+  statement: JRFC-0006.3
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-047
+  statement: JRFC-0006.1
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-078
+  statement: JRFC-0003.3
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-047
+  statement: JRFC-0005.2
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-065
+  statement: JRFC-0008.2
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-022
+  statement: JRFC-0008.1
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-028
+  statement: JRFC-0010.2
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-083
+  statement: JRFC-0001.4
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-091
+  statement: JRFC-0010.3
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-080
+  statement: JRFC-0007.4
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-073
+  statement: JRFC-0010.3
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-013
+  statement: JRFC-0001.4
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-059
+  statement: JRFC-0008.2
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-045
+  statement: JRFC-0010.1
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: sgm-019
+  statement: JRFC-0008.3
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-075
+  statement: JRFC-0002.4
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-098
+  statement: JRFC-0001.2
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)
+- case: pw-094
+  statement: JRFC-0002.3
+  verdict: clean
+  picked_by: random-clean
+  sample: true
+  note: bulk-accepted Claude's verdict (2026-09-30)

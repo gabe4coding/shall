@@ -178,6 +178,38 @@ Actions the user would see before that change, with JRFC-0012 trialled as enforc
 - Caveat: the cases were written with the rules, by the same author. Real agent sessions
   (the decision log) are the next measurement.
 
+## Whole-file scan (linting)
+
+`eval/scan/run.py` · can the post-write hook path (`Hooks.post` with a `Write` of the whole
+file: code prefilter, then one Jev request with min(applies, violates)) lint existing code?
+100 real files from two repositories (sca-gap-map, Python; plainwright, TypeScript and
+JavaScript), 2 fresh reps, ~31 candidate statements per file (all statuses), 6,270 pairs.
+`cases.yaml` holds only repository, sha and path; the runner reads the files with `git show`.
+Labels: Claude Opus 5.5 labelled every pair without seeing Jev's scores; a person ruled on 3
+pairs (CLI tools and local developer tools are not services; a public demo login is not a
+credential), and those rulings went into the labeller prompt. The random half of the 97
+flagged pairs (hash of the pair) and 30 random clean pairs were then accepted without a
+per-item check, so treat the labels as Claude's.
+
+| p ≥ | precision (reviewed half) | precision (all pairs) | recall (all pairs) | files with a wrong flag |
+| --- | --- | --- | --- | --- |
+| 0.5 | 0.43 [0.29–0.58] | 0.37 [0.27–0.47] | 0.93 | 45 / 100 |
+| 0.7 | **0.68 [0.47–0.87]** | **0.68 [0.53–0.81]** | 0.72 | 14 / 100 |
+| 0.9 | – (1 flag) | 0.89 [0.50–1.00] | 0.11 | 1 / 100 |
+
+- **Cost and speed are not the problem.** 12.1k input tokens per file ($0.00051), latency
+  p50 0.34 s, p95 0.46 s (max 0.69 s), one request per file; reps differ by more than 0.05 on
+  1% of pairs. Labelling cost $10.32 for 100 files (Opus 5.5 through `claude -p`).
+- **Noise is.** At 0.7, 12 of the 25 wrong flags are JRFC-0003.2 (structured logs) on CLI tools
+  and scripts: its RFC's `applies_when` does not say "services". Without it, precision at 0.7
+  would be about 0.80. Real violations mostly score 0.55–0.7, the range of the wrong flags.
+- Every violation Claude found was scored ≥ 0.5 by Jev at least once, and none of the 30 random
+  clean pairs was a violation: the scan misses little at 0.5; the threshold trades noise, not recall.
+- Harness checks: an oracle (scores = labels) gives 1.00 / 1.00, a null gives no flags.
+- Caveat: two repositories of one author, neither a service with HTTP routes or migrations
+  (JRFC-0002 and 0008 could only produce false positives); labels are a model's with 3 human
+  rulings.
+
 ## Lessons
 
 1. **Deterministic filters beat better prompts.** "A design MUST state…" was selected for code
