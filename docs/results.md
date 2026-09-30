@@ -206,6 +206,20 @@ per-item check, so treat the labels as Claude's.
 - Every violation Claude found was scored ≥ 0.5 by Jev at least once, and none of the 30 random
   clean pairs was a violation: the scan misses little at 0.5; the threshold trades noise, not recall.
 - Harness checks: an oracle (scores = labels) gives 1.00 / 1.00, a null gives no flags.
+- **Hill-climb on the criteria** (`.claude/hillclimb/scan/`, 50/50 train/test split stratified
+  by language and gold violation; the analyzer read train only; deltas paired over the test files):
+
+  | round | change | test precision@0.7 | test recall@0.7 |
+  | --- | --- | --- | --- |
+  | 0 | baseline | 0.75 | 0.75 |
+  | 1 | JRFC-0003 applies only to service code | 0.82 (+0.07 [-0.04, +0.20]) | 0.75 |
+  | 2 | criteria lines for 0004.1, 0006.1, 0007.4, 0010.2 | **0.96 (+0.21 [+0.06, +0.36])** | 0.72 (-0.03 [-0.09, 0.00]) |
+
+  Each wrong-flag cause was a rule whose criteria did not say what its statement already meant
+  (services only, real credentials only, reading an error property). No statement text changed.
+  Guardrails: `make eval` flat R 0.98 / P 0.60 -> 0.98 / 0.61; `make eval-hooks` code writes
+  P@0.5 0.55 -> 0.62, P/R@0.9 0.92/0.75 -> 1.00/0.81, tool calls unchanged except the known
+  borderline JRFC-0012.6 on `wget | bash` (0.68 -> 0.70). Round 1 was chosen before the split.
 - Caveat: two repositories of one author, neither a service with HTTP routes or migrations
   (JRFC-0002 and 0008 could only produce false positives); labels are a model's with 3 human
   rulings.
