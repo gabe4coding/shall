@@ -1,0 +1,270 @@
+{
+ "files": 100,
+ "reps": 2,
+ "pairs": 6270,
+ "reviewed_share": 0.027,
+ "thresholds": {
+  "0.5": {
+   "tp": 68,
+   "fp": 47,
+   "fn": 4,
+   "tn": 6151,
+   "precision": 0.591304347826087,
+   "recall": 0.9444444444444444,
+   "specificity": 0.9924169086802195,
+   "fpr": 0.0075830913197805746,
+   "precision_ci": [
+    0.447,
+    0.737
+   ],
+   "recall_ci": [
+    0.857,
+    1.0
+   ],
+   "files_flagged": 47,
+   "files_with_fp": 23
+  },
+  "0.7": {
+   "tp": 60,
+   "fp": 7,
+   "fn": 12,
+   "tn": 6191,
+   "precision": 0.8955223880597015,
+   "recall": 0.8333333333333334,
+   "specificity": 0.9988706034204582,
+   "fpr": 0.0011293965795417876,
+   "precision_ci": [
+    0.779,
+    0.985
+   ],
+   "recall_ci": [
+    0.692,
+    0.967
+   ],
+   "files_flagged": 34,
+   "files_with_fp": 4
+  },
+  "0.9": {
+   "tp": 49,
+   "fp": 3,
+   "fn": 23,
+   "tn": 6195,
+   "precision": 0.9423076923076923,
+   "recall": 0.6805555555555556,
+   "specificity": 0.9995159728944821,
+   "fpr": 0.000484027105517909,
+   "precision_ci": [
+    0.841,
+    1.0
+   ],
+   "recall_ci": [
+    0.527,
+    0.833
+   ],
+   "files_flagged": 28,
+   "files_with_fp": 2
+  }
+ },
+ "fp_by_rule_at_0.7": {
+  "JRFC-0011.1": 6,
+  "JRFC-0002.3": 1
+ },
+ "jev_cost_usd_per_file": 0.000521,
+ "jev_input_tokens_per_file": 12414,
+ "latency_s": {
+  "p50": 0.328,
+  "p95": 0.492
+ },
+ "label_cost_usd_total": 10.3177,
+ "sample": {
+  "union_pairs": 65,
+  "sample_pairs": 36,
+  "reviewed": 32,
+  "thresholds": {
+   "0.5": {
+    "tp": 42,
+    "fp": 16,
+    "fn": 2,
+    "tn": 4,
+    "precision": 0.7241379310344828,
+    "recall": 0.9545454545454546,
+    "specificity": 0.2,
+    "fpr": 0.8,
+    "precision_ci": [
+     0.538,
+     0.889
+    ],
+    "recall_ci": [
+     0.842,
+     1.0
+    ]
+   },
+   "0.7": {
+    "tp": 36,
+    "fp": 1,
+    "fn": 8,
+    "tn": 19,
+    "precision": 0.972972972972973,
+    "recall": 0.8181818181818182,
+    "specificity": 0.95,
+    "fpr": 0.05,
+    "precision_ci": [
+     0.9,
+     1.0
+    ],
+    "recall_ci": [
+     0.619,
+     1.0
+    ]
+   },
+   "0.9": {
+    "tp": 27,
+    "fp": 0,
+    "fn": 17,
+    "tn": 20,
+    "precision": 1.0,
+    "recall": 0.6136363636363636,
+    "specificity": 1.0,
+    "fpr": 0.0,
+    "precision_ci": [
+     1.0,
+     1.0
+    ],
+    "recall_ci": [
+     0.413,
+     0.824
+    ]
+   }
+  },
+  "claude_agreement": {
+   "reviewed": 84,
+   "agree": 84
+  },
+  "random_clean": {
+   "reviewed": 30,
+   "violations": 0
+  }
+ },
+ "splits": {
+  "train": {
+   "files": 50,
+   "0.5": {
+    "tp": 36,
+    "fp": 27,
+    "fn": 0,
+    "tn": 3073,
+    "precision": 0.5714285714285714,
+    "recall": 1.0,
+    "specificity": 0.9912903225806452,
+    "fpr": 0.008709677419354838,
+    "precision_ci": [
+     0.412,
+     0.72
+    ],
+    "recall_ci": [
+     1.0,
+     1.0
+    ]
+   },
+   "0.7": {
+    "tp": 32,
+    "fp": 4,
+    "fn": 4,
+    "tn": 3096,
+    "precision": 0.8888888888888888,
+    "recall": 0.8888888888888888,
+    "specificity": 0.9987096774193548,
+    "fpr": 0.0012903225806451613,
+    "precision_ci": [
+     0.714,
+     1.0
+    ],
+    "recall_ci": [
+     0.684,
+     1.0
+    ]
+   },
+   "0.9": {
+    "tp": 26,
+    "fp": 1,
+    "fn": 10,
+    "tn": 3099,
+    "precision": 0.9629629629629629,
+    "recall": 0.7222222222222222,
+    "specificity": 0.9996774193548387,
+    "fpr": 0.0003225806451612903,
+    "precision_ci": [
+     0.864,
+     1.0
+    ],
+    "recall_ci": [
+     0.5,
+     0.929
+    ]
+   }
+  },
+  "test": {
+   "files": 50,
+   "0.5": {
+    "tp": 32,
+    "fp": 20,
+    "fn": 4,
+    "tn": 3078,
+    "precision": 0.6153846153846154,
+    "recall": 0.8888888888888888,
+    "specificity": 0.9935442220787605,
+    "fpr": 0.006455777921239509,
+    "precision_ci": [
+     0.375,
+     0.872
+    ],
+    "recall_ci": [
+     0.714,
+     1.0
+    ]
+   },
+   "0.7": {
+    "tp": 28,
+    "fp": 3,
+    "fn": 8,
+    "tn": 3095,
+    "precision": 0.9032258064516129,
+    "recall": 0.7777777777777778,
+    "specificity": 0.9990316333118141,
+    "fpr": 0.0009683666881859264,
+    "precision_ci": [
+     0.741,
+     1.0
+    ],
+    "recall_ci": [
+     0.583,
+     0.944
+    ]
+   },
+   "0.9": {
+    "tp": 23,
+    "fp": 2,
+    "fn": 13,
+    "tn": 3096,
+    "precision": 0.92,
+    "recall": 0.6388888888888888,
+    "specificity": 0.9993544222078761,
+    "fpr": 0.0006455777921239509,
+    "precision_ci": [
+     0.727,
+     1.0
+    ],
+    "recall_ci": [
+     0.417,
+     0.867
+    ]
+   }
+  }
+ },
+ "fingerprint": {
+  "commit": "f022e55",
+  "app_sha": "5a807438f7807073"
+ },
+ "description": "reverted: recall +0.06 for precision -0.06 on test (inside noise); new flags are Jev errors (ast check)",
+ "suspicious": null
+}

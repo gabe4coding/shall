@@ -1,0 +1,10 @@
+diff --git a/corpus/rfcs/JRFC-0011-python-typing.md b/corpus/rfcs/JRFC-0011-python-typing.md
+index 851caf6..9bc5624 100644
+--- a/corpus/rfcs/JRFC-0011-python-typing.md
++++ b/corpus/rfcs/JRFC-0011-python-typing.md
+@@ -25,4 +25,5 @@ Public functions and methods in Python modules SHOULD have type hints for all pa
+ and the return value.
+ 
+ - Applies when: the content adds or changes a public Python function or method.
++- Violated when: at least one public function or method (its name does not start with an underscore) has a parameter other than `self` or `cls` without a type hint, or has no return annotation. One such function is enough: the other functions being fully typed does not make the content follow the requirement.
+ - Enforcement: agent
