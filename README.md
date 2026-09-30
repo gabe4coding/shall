@@ -224,6 +224,32 @@ hooks:
     draft: {MUST: [[0.9, deny], [0.5, ask]], SHOULD: [[0.7, warn]], MAY: [[0.7, log]]}
 ```
 
+### E. Lint existing code (`jrfc scan`)
+
+`jrfc scan` applies the code rules to whole files, the way the post-write hook applies them
+to written lines: the secret scanner on the raw text, then one Jev request per file (secrets
+redacted) with p = min(applies, violates) for every eligible rule. No agent runs.
+
+```bash
+jrfc scan                          # the current folder: git-tracked and untracked, not ignored
+jrfc scan src/ lib/client.py       # files or folders
+jrfc scan --fail-on-blocking       # CI: exit 2 on a secret-scanner hit on an enforced MUST rule
+jrfc scan --threshold 0.5          # more warnings (higher recall, more noise)
+```
+
+It prints one line per warning (`path[:line]: ID [level, p] title`) and writes `scan.md` and
+`scan.json` to `--out-dir` (`.jrfc-out`). A Jev warning never blocks: one file is not
+evidence, so check it against the code, or run `jrfc review` on the change for verified
+findings. Only secret-scanner hits can block. Markdown documents, `scan.exclude` globs
+(node_modules, dist, vendor, lock files, ...) and files over `scan.max_file_chars` are
+skipped; statuses default to `selection.include_status` (`--status draft,approved,enforced`
+to trial drafts). Answers are cached, so a second scan pays only for changed files.
+
+Measured on 100 real files (`eval/scan`, [docs/results.md](docs/results.md)): ~$0.0005 and
+~0.4 s per file (48 files in 5 s with 4 requests in flight); precision 0.96 and recall 0.72 at
+p ≥ 0.7 on the held-out half, after the criteria fixes the eval found. Rules a linter can check
+exactly (type hints, formatting) belong to a linter (`Enforcement: linter`), not to Jev.
+
 ## Run it in CI on pull requests
 
 1. Copy [`ci/github/jrfc-review.yml`](ci/github/jrfc-review.yml) to `.github/workflows/` in your
@@ -439,6 +465,7 @@ Environment variables: `TYPESAFE_API_KEY`, `ANTHROPIC_API_KEY` (CI), `JRFC_CONFI
 | `jrfc prefetch` | no (download) | download parser grammars for the repository's languages (CI) |
 | `jrfc select PATH \| --text T` | Jev | which rules apply, with probabilities |
 | `jrfc review PATH` | Jev + Claude | select → review → validate → verify → reports |
+| `jrfc scan [PATHS…]` | Jev | lint whole files: secret scanner + one Jev request per file; warnings, `scan.md` / `scan.json` |
 | `jrfc publish --pr N [--dry-run] [--resolve-noise]` | no | post a review to a GitHub pull request; with `triage.json`, add the triage and optionally resolve noise threads |
 | `jrfc triage DIFF --pr N \| --comments F` | Jev + Claude | sort other AI reviewers' comments: relevant, unverified, noise, outdated |
 | `jrfc conflicts FILE` / `--local` | Jev | duplicates, weakening and conflicts between rules |
@@ -462,6 +489,10 @@ Environment variables: `TYPESAFE_API_KEY`, `ANTHROPIC_API_KEY` (CI), `JRFC_CONFI
 | `github-review.json` | payload for `jrfc publish` (`--format github`) |
 | `health.json` | what could have gone wrong silently: failed calls, unverified blocking findings, files not parsed, rules just below the threshold |
 | `prompts/` | the exact prompt sent to the reviewer per chunk |
+
+`jrfc scan --out-dir DIR` writes `scan.md` (warnings per file, skipped files, files Jev could not
+check) and `scan.json` (every file's scores, findings, skips and Jev usage). It exits 3 when Jev
+failed for a file, and 2 only with `--fail-on-blocking` (secret-scanner hits) or `--fail-on-warn`.
 
 `jrfc triage` writes `triage.md` (relevant and unverified comments first, noise folded) and
 `triage.json` (every comment with its status, reason, scores, matched rules and the evidence

@@ -395,6 +395,39 @@ def cmd_review(args, cfg) -> int:
     return EXIT_BLOCKING if (blocking and args.fail_on_blocking) else EXIT_OK
 
 
+def cmd_scan(args, cfg) -> int:
+    """Lint whole files: secret scanner + Jev per file. Warnings never block; scanner hits can."""
+    from .jev import Jev
+    from .scan import render_lines, render_markdown, run_scan
+    corpus = load_corpus(cfg)
+    statuses = [x.strip() for x in args.status.split(",")] if args.status else None
+
+    async def run():
+        async with Jev(cfg, use_cache=not args.no_cache) as jev:
+            if not jev.available():
+                raise SystemExit("jrfc scan: TYPESAFE_API_KEY is not set (needed for Jev calls)")
+            return await run_scan(cfg, corpus, jev, args.paths or ["."], threshold=args.threshold,
+                                  statuses=statuses, exclude=args.exclude)
+
+    report = asyncio.run(run())
+    out_dir = Path(args.out_dir)
+    _dump(report, str(out_dir / "scan.json"))
+    (out_dir / "scan.md").write_text(render_markdown(report), encoding="utf-8")
+    for line in render_lines(report):
+        print(line)
+    s = report["summary"]
+    for err in report["errors"]:
+        print(f"jrfc scan: not checked: {err['path']}: {err['error'][:300]}", file=sys.stderr)
+    print(f"jrfc scan: {s['scanned']} file(s), {s['skipped']} skipped, {s['warnings']} warning(s) in "
+          f"{s['files_with_warnings']} file(s), {s['blocking']} blocking; {s['jev_requests']} Jev request(s) "
+          f"({s['jev_cached']} cached), ~${s['jev_cost_usd']:.4f}; outputs in {out_dir}", file=sys.stderr)
+    if report["errors"]:
+        return EXIT_SERVICE
+    if (args.fail_on_blocking and s["blocking"]) or (args.fail_on_warn and s["warnings"]):
+        return EXIT_BLOCKING
+    return EXIT_OK
+
+
 def cmd_verify(args, cfg) -> int:
     """Verify already-validated findings (in-session flow: bundle -> agent -> validate -> verify)."""
     from .jev import Jev
@@ -729,6 +762,18 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--dry-run", action="store_true", help="select only and write bundle.md, no agent call")
     s.add_argument("--no-verify", action="store_true", help="skip verification of blocking findings")
     s.set_defaults(fn=cmd_review)
+
+    s = sub.add_parser("scan", help="lint whole files: secret scanner + Jev per file (warnings, no agent)")
+    s.add_argument("paths", nargs="*", help="files or folders (default: the current folder)")
+    s.add_argument("--out-dir", default=".jrfc-out")
+    s.add_argument("--threshold", type=float, help="warn at or above this p (default: scan.threshold)")
+    s.add_argument("--status", help="comma-separated RFC statuses to check (default: selection.include_status)")
+    s.add_argument("--exclude", action="append", default=[], help="glob to skip (repeatable), on top of scan.exclude")
+    s.add_argument("--fail-on-blocking", action="store_true",
+                   help=f"exit {EXIT_BLOCKING} on a blocking finding (secret-scanner hit on an enforced MUST)")
+    s.add_argument("--fail-on-warn", action="store_true", help=f"exit {EXIT_BLOCKING} on any warning")
+    s.add_argument("--no-cache", action="store_true", help="ignore the Jev answer cache")
+    s.set_defaults(fn=cmd_scan)
 
     s = sub.add_parser("verify", help="verify validated findings against repository evidence (Jev + agent)")
     s.add_argument("findings", help="findings.json written by `jrfc validate`")

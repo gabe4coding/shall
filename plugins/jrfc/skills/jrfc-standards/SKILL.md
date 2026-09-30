@@ -33,6 +33,18 @@ user the reason. Mention the ids you followed in your summary or commit message.
 - `jrfc list [--domain api] [--status enforced]` — RFCs with status.
 - `jrfc show JRFC-0002` — a full RFC with its context.
 
+## Lint existing files
+
+To check files that already exist (a module you are about to change, a folder), without an
+agent review:
+
+```bash
+jrfc scan src/payments/          # one Jev request per file; warnings, secret-scanner hits
+```
+
+A warning is Jev's judgment on one file: read the code before you act on it. Only
+secret-scanner hits are blocking.
+
 ## Before you hand over
 
 Run the review on your own change and fix what it reports:

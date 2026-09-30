@@ -39,7 +39,8 @@ measuring model behavior, since `review` otherwise reuses answers for unchanged 
 
 Flow of `jrfc review`: `cli.py` → `config.py` → `corpus.py` → `artifact.py` → `effects.py`
 → `select.py` → `review.py` → `verify.py` (+ `codegraph.py`) → `health.py` → outputs;
-`publish.py` posts separately. `jrfc triage` (`triage.py`) sorts other AI reviewers' PR
+`publish.py` posts separately. `jrfc scan` (`scan.py`) lints whole files with the post-write hook's
+judgment (`Hooks.judge_code`): secret scanner + one Jev request per file, warnings only. `jrfc triage` (`triage.py`) sorts other AI reviewers' PR
 comments with the same selection and verification evidence (`verify.gather_evidence`).
 
 - **config.py**: layer discovery (`--config`/`JRFC_CONFIG` → `.jrfc/jrfc.yaml` or `jrfc.yaml`
