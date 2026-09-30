@@ -1,0 +1,59 @@
+diff --git a/corpus/rfcs/JRFC-0003-logging-personal-data.md b/corpus/rfcs/JRFC-0003-logging-personal-data.md
+index adac7f6..754dee6 100644
+--- a/corpus/rfcs/JRFC-0003-logging-personal-data.md
++++ b/corpus/rfcs/JRFC-0003-logging-personal-data.md
+@@ -44,7 +44,7 @@ Services MUST emit logs as structured key-value records through the shared logge
+ as interpolated free-text strings built by concatenation.
+ 
+ - Applies when: service code adds or changes a log call.
+-- Not applies when: the content only changes logger configuration, or the code is a command-line tool, script, benchmark or local developer tool, not a service.
++- Not applies when: the content only changes logger configuration, or the code is a command-line tool, script, benchmark or local developer tool, not a service; progress or status messages printed to the terminal for the person running the program are a sign of a command-line tool.
+ - Enforcement: agent
+ 
+ ### JRFC-0003.3 Correlation identifier
+diff --git a/corpus/rfcs/JRFC-0004-secrets.md b/corpus/rfcs/JRFC-0004-secrets.md
+index 403b003..5b45a45 100644
+--- a/corpus/rfcs/JRFC-0004-secrets.md
++++ b/corpus/rfcs/JRFC-0004-secrets.md
+@@ -31,6 +31,7 @@ Source code, configuration files and tests MUST NOT contain real credentials (pa
+ API keys, tokens, private keys, connection strings with passwords).
+ 
+ - Applies when: the content contains a string literal, constant, config value or default that is or looks like a password, key, token or credential.
++- Violated when: the content contains a literal value that is a real credential of a real account or system: a password, API key, token, private key, or a connection string with a password. Public demo logins published for a practice or test site, placeholders, example values, and passwords of throwaway keys or keystores that the code itself generates for a local test fixture are not real credentials.
+ - Enforcement: agent
+ 
+ ### JRFC-0004.2 Secrets from the secret manager
+diff --git a/corpus/rfcs/JRFC-0006-outbound-calls.md b/corpus/rfcs/JRFC-0006-outbound-calls.md
+index a7867af..26ac136 100644
+--- a/corpus/rfcs/JRFC-0006-outbound-calls.md
++++ b/corpus/rfcs/JRFC-0006-outbound-calls.md
+@@ -32,6 +32,7 @@ Every outbound network call MUST set an explicit timeout that is shorter than th
+ caller's own deadline.
+ 
+ - Applies when: the content creates an HTTP client, performs a fetch/request/RPC, or configures a client for another service or third party.
++- Not applies when: no outbound network call is made, configured or described, or the code makes no network call itself: it only runs local commands or subprocesses, or exchanges messages with a local child process over stdin/stdout.
+ - Enforcement: agent
+ 
+ ### JRFC-0006.2 Bounded retries with backoff
+diff --git a/corpus/rfcs/JRFC-0007-typescript.md b/corpus/rfcs/JRFC-0007-typescript.md
+index de9fbb5..4bb57b5 100644
+--- a/corpus/rfcs/JRFC-0007-typescript.md
++++ b/corpus/rfcs/JRFC-0007-typescript.md
+@@ -45,4 +45,5 @@ Code in a `catch` block SHOULD treat the error as `unknown` and narrow it (for e
+ with `instanceof`) before reading its properties.
+ 
+ - Applies when: the content adds or changes a try/catch block or a `.catch` handler.
++- Violated when: code in a `catch` block or `.catch` handler reads a property of the caught error (such as `.message`, `.code` or `.status`) without first narrowing it with `instanceof`, a type guard or a type check. A handler that ignores the error, rethrows it, returns a default value, or only passes it to a function that accepts `unknown` does not break the requirement.
+ - Enforcement: agent
+diff --git a/corpus/rfcs/JRFC-0010-feature-flags.md b/corpus/rfcs/JRFC-0010-feature-flags.md
+index fe0e188..a438d5b 100644
+--- a/corpus/rfcs/JRFC-0010-feature-flags.md
++++ b/corpus/rfcs/JRFC-0010-feature-flags.md
+@@ -32,6 +32,7 @@ behind a feature flag that can be turned off without a deploy.
+ Every new feature flag MUST declare an owning team and an expiry date in its definition.
+ 
+ - Applies when: the content defines a new feature flag.
++- Not applies when: no new feature flag is defined; an environment variable or command-line option that a developer tool reads to turn a behavior off for testing, benchmarking or measurement is configuration, not a feature flag.
+ - Enforcement: agent
+ 
+ ### JRFC-0010.3 Safe default
