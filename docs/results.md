@@ -117,6 +117,67 @@ The second row is two fresh runs (`--no-cache`) with the same status for every c
 - Caveat: the cases and labels were written for this PoC, and the wording was changed after
   seeing the two misses. Real bot comments are the next measurement.
 
+## Hooks: Jev as the judge of tool calls
+
+`make eval-hooks` · 75 labelled cases in `eval/hooks/cases.yaml`: 50 tool calls (every
+JRFC-0012 statement with violating calls and near misses such as `gh pr create --base main`,
+`git fetch --force`, `rm -rf /tmp/…`, read-only production queries; 7 secret-scanner cases)
+and 25 writes (Python, TypeScript, an API router, a migration, README and YAML edits, and an
+`Edit` whose timeout is set 30 lines above the written line). Fresh answers (`--no-cache`).
+
+| | precision / recall at p ≥ 0.5 | at 0.7 | at 0.9 | Jev latency p50 / p95 |
+| --- | --- | --- | --- | --- |
+| tool calls, min(applies, violates) | 0.94 / 1.00 | 0.97 / 0.97 | 1.00 / 0.97 | 269 / 366 ms |
+| tool calls, violation question only | 0.97 / 1.00 | 1.00 / 0.97 | 1.00 / 0.93 | 271 / 354 ms |
+| code writes, min(applies, violates) | 0.57 / 1.00 | 0.76 / 1.00 | 0.92 / 0.75 | 318 / 412 ms |
+| code writes, violation question only | 0.29 / 1.00 | 0.55 / 1.00 | 0.80 / 0.75 | 288 / 309 ms |
+
+After JRFC-0012.2, .3 and .8 became regex rules (`Pattern:`, no Jev) and .9 (required CI
+checks) was split from .3, with 16 more tool cases (flag clusters such as `-uf` and `-an`,
+`SKIP=`, `core.hooksPath`, `http.sslVerify=false`, commit messages and heredocs that mention
+`--no-verify`, `gh workflow disable`): 91 cases.
+
+| | precision / recall at p ≥ 0.5 | at 0.7 | at 0.9 | Jev latency p50 / p95 |
+| --- | --- | --- | --- | --- |
+| tool calls (66), patterns + Jev | 0.95 / 1.00 | 1.00 / 1.00 | 1.00 / 1.00 | 250 / 310 ms |
+
+Actions: deny 30 right / 0 wrong, ask 0 right / 1–2 wrong over two fresh runs (the same
+JRFC-0012.6 on `curl | sh` and `wget | bash`), warn 8 right / 0 wrong, 0 missed. `git commit
+-nm` is now denied (it was an ask at 0.66). When a pattern or the scanner already denies a
+call, the hook does not wait for Jev (0 ms instead of ~0.35 s).
+
+Actions the user would see before that change, with JRFC-0012 trialled as enforced:
+
+| | deny | ask | warn | missed |
+| --- | --- | --- | --- | --- |
+| tool calls | 22 right, 0 wrong | 1 right, 2 wrong | 6 right, 0 wrong | 0 |
+| code writes | – | – | 16 right, 3 wrong | 0 |
+
+- **Tool calls separate cleanly.** Violations score 0.9–0.99 and clean calls stay below 0.1.
+  The branch fact matters: a plain `git push` scores 0.32 without it and 0.97 on `main`.
+  The one violation under 0.9 is `git commit -nm` (0.66): it asks instead of denying.
+- **The wrong asks** are JRFC-0012.6 ("no destructive commands outside the workspace") on
+  `curl … | sh` and `wget … | bash` (p 0.5–0.72): a downloaded script can do anything, which
+  is the point of JRFC-0012.5, not of 0.6.
+- **The wrong warnings on code** are JRFC-0002.1 ("resource-oriented paths") on an HTTP
+  *client* that builds a URL (p 0.8), and JRFC-0006.1 on the session with a timeout set
+  30 lines above (0.91). This is why writes only warn.
+- **Latency is one round trip.** 1, 20 or 60 questions take the same ~0.25–0.3 s. A new
+  process per call adds ~0.2 s (Python start and TLS handshake); `jrfc hookd` keeps the
+  connection warm; a cache hit answers in ~20 ms. Numbers vary by ~0.1 s between runs.
+- **End to end with Claude Code** (`claude -p` with the http hooks): the model received the
+  deny reason for `git push origin main`, the PreToolUse warning for `curl | sh` (the call
+  ran) and the PostToolUse warning for a `requests.get` without a timeout, word for word.
+  The Stop hook blocked on the two verified missing timeouts (18 s) and skipped the
+  unchanged change on the next stop (0.4 s).
+- **With the plugin** (`claude -p --plugin-dir plugins/jrfc`, no `hookd`): `git push --force
+  origin main` was denied (JRFC-0012.1 and .2, 0.49 s); Stop blocked on two missing timeouts;
+  the agent added them; the post-write checks of its edits were clean (0.52 s); the second
+  Stop reviewed the new change (20 s, no findings) and let the agent finish. Outside a jrfc
+  workspace `jrfc-hook` exits in ~10 ms; through `hookd` a call takes 0.38 s (0.06 s cached).
+- Caveat: the cases were written with the rules, by the same author. Real agent sessions
+  (the decision log) are the next measurement.
+
 ## Lessons
 
 1. **Deterministic filters beat better prompts.** "A design MUST state…" was selected for code

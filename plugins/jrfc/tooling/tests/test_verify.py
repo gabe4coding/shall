@@ -56,6 +56,27 @@ def test_gather_excerpts_finds_other_files_and_skips_own_file_and_standards(tmp_
     assert "'--tools', ''" in ex[0].text and ex[0].start == 1
 
 
+def test_excerpts_stay_small_on_one_line_files(tmp_path):
+    # an untracked one-line JSON cache once made a 155k-token Jev state and crashed the review
+    (tmp_path / "cache.json").write_text('{"review.command": "' + "x" * 400_000 + '"}\n')
+    (tmp_path / "run.py").write_text("\n".join(f"cmd{i} = cfg.get('review.command')  # {'y' * 300}"
+                                              for i in range(200)) + "\n")
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    ex = {e.path: e for e in gather_excerpts(tmp_path, ["review.command"], set())}
+    assert set(ex) == {"cache.json", "run.py"}
+    assert len(ex["cache.json"].text) < 500 and "…[cut " in ex["cache.json"].text
+    assert all(len(e.text) <= 12_100 for e in ex.values())
+
+
+def test_code_graph_windows_cut_long_lines():
+    from jrfc.codegraph import MAX_EXCERPT_CHARS, numbered_lines
+    lines = ["a" * 10_000] + [f"line {i} " + "b" * 390 for i in range(100)]
+    text = numbered_lines(lines, range(1, 101))
+    assert text.startswith("    1 | " + "a" * 400 + "…[cut 9600 chars]")
+    assert len(text) <= MAX_EXCERPT_CHARS + 30 and text.endswith("[excerpt cut]")
+    assert numbered_lines(["x = 1", "y = 2"], [1, 2]) == "    1 | x = 1\n    2 | y = 2"
+
+
 def test_refuted_with_evidence_is_dropped():
     kept, dropped = apply_verdict(finding(), {"verdict": "refuted", "reason": "review.py adds --tools ''",
                                               "evidence": ["e0"]}, [SimpleNamespace(id="e0", path="src/review.py",
