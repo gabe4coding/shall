@@ -1,5 +1,5 @@
 {
-  "corpus_hash": "e6d7c6cbab4b5094",
+  "corpus_hash": "b0e45afb7c914bbd",
   "counts": {
     "domains": 11,
     "rfcs": 12,
@@ -789,7 +789,7 @@
       ],
       "layer": "local",
       "level": "MUST",
-      "not_applies_when": "the content only changes logger configuration, or the code is a command-line tool, script, benchmark or local developer tool, not a service.",
+      "not_applies_when": "the content only changes logger configuration, or the code is a command-line tool, script, benchmark or local developer tool, not a service; progress or status messages printed to the terminal for the person running the program are a sign of a command-line tool.",
       "rfc": "JRFC-0003",
       "source": "corpus/rfcs/JRFC-0003-logging-personal-data.md#L42",
       "status": "enforced",
@@ -863,7 +863,8 @@
       "source": "corpus/rfcs/JRFC-0004-secrets.md#L29",
       "status": "enforced",
       "text": "Source code, configuration files and tests MUST NOT contain real credentials (passwords, API keys, tokens, private keys, connection strings with passwords).",
-      "title": "No secrets in source"
+      "title": "No secrets in source",
+      "violated_when": "the content contains a literal value that is a real credential of a real account or system: a password, API key, token, private key, or a connection string with a password. Public demo logins published for a practice or test site, placeholders, example values, and passwords of throwaway keys or keystores that the code itself generates for a local test fixture are not real credentials."
     },
     {
       "applies_when": "the content loads, configures or passes a credential for a database, broker, third-party API or service.",
@@ -883,7 +884,7 @@
       "level": "MUST",
       "not_applies_when": "No credential of any kind is used, stored, passed or described.",
       "rfc": "JRFC-0004",
-      "source": "corpus/rfcs/JRFC-0004-secrets.md#L36",
+      "source": "corpus/rfcs/JRFC-0004-secrets.md#L37",
       "status": "enforced",
       "text": "Services MUST read credentials at runtime from the secret manager (directly or through environment variables injected by the platform), never from files committed to the repository.",
       "title": "Secrets from the secret manager"
@@ -906,7 +907,7 @@
       "level": "MUST",
       "not_applies_when": "No credential of any kind is used, stored, passed or described.",
       "rfc": "JRFC-0004",
-      "source": "corpus/rfcs/JRFC-0004-secrets.md#L44",
+      "source": "corpus/rfcs/JRFC-0004-secrets.md#L45",
       "status": "enforced",
       "text": "Credentials MUST NOT be placed in URL query strings, log records, error messages or exception text.",
       "title": "Secrets never in URLs or logs"
@@ -927,7 +928,7 @@
       "level": "SHOULD",
       "not_applies_when": "No credential of any kind is used, stored, passed or described.",
       "rfc": "JRFC-0004",
-      "source": "corpus/rfcs/JRFC-0004-secrets.md#L51",
+      "source": "corpus/rfcs/JRFC-0004-secrets.md#L52",
       "status": "enforced",
       "text": "A design that introduces a new credential SHOULD describe how it is rotated and who owns the rotation.",
       "title": "Rotation"
@@ -1014,7 +1015,7 @@
       ],
       "layer": "local",
       "level": "MUST",
-      "not_applies_when": "No outbound network call is made, configured or described.",
+      "not_applies_when": "no outbound network call is made, configured or described, or the code makes no network call itself: it only runs local commands or subprocesses, or exchanges messages with a local child process over stdin/stdout.",
       "rfc": "JRFC-0006",
       "source": "corpus/rfcs/JRFC-0006-outbound-calls.md#L30",
       "status": "enforced",
@@ -1039,7 +1040,7 @@
       "level": "MUST",
       "not_applies_when": "No outbound network call is made, configured or described.",
       "rfc": "JRFC-0006",
-      "source": "corpus/rfcs/JRFC-0006-outbound-calls.md#L37",
+      "source": "corpus/rfcs/JRFC-0006-outbound-calls.md#L38",
       "status": "enforced",
       "text": "Retries MUST be bounded in count, MUST use exponential backoff with jitter, and MUST only be applied to idempotent operations or requests carrying an idempotency key.",
       "title": "Bounded retries with backoff"
@@ -1062,7 +1063,7 @@
       "level": "SHOULD",
       "not_applies_when": "No outbound network call is made, configured or described.",
       "rfc": "JRFC-0006",
-      "source": "corpus/rfcs/JRFC-0006-outbound-calls.md#L44",
+      "source": "corpus/rfcs/JRFC-0006-outbound-calls.md#L45",
       "status": "enforced",
       "text": "A call to a dependency that is not required for the core user flow SHOULD have a fallback (cached value, default, or feature disabled) instead of failing the request.",
       "title": "Degradation for optional dependencies"
@@ -1083,7 +1084,7 @@
       "level": "MUST",
       "not_applies_when": "No outbound network call is made, configured or described.",
       "rfc": "JRFC-0006",
-      "source": "corpus/rfcs/JRFC-0006-outbound-calls.md#L51",
+      "source": "corpus/rfcs/JRFC-0006-outbound-calls.md#L52",
       "status": "enforced",
       "text": "A design that adds a new synchronous dependency MUST state its expected latency, its timeout, and the behavior of the system when the dependency is down.",
       "title": "Dependencies in designs"
@@ -1174,7 +1175,8 @@
       "source": "corpus/rfcs/JRFC-0007-typescript.md#L43",
       "status": "enforced",
       "text": "Code in a `catch` block SHOULD treat the error as `unknown` and narrow it (for example with `instanceof`) before reading its properties.",
-      "title": "Narrow caught errors"
+      "title": "Narrow caught errors",
+      "violated_when": "code in a `catch` block or `.catch` handler reads a property of the caught error (such as `.message`, `.code` or `.status`) without first narrowing it with `instanceof`, a type guard or a type check. A handler that ignores the error, rethrows it, returns a default value, or only passes it to a function that accepts `unknown` does not break the requirement."
     },
     {
       "applies_when": "the content adds a migration that drops, renames or changes the type of a column or table.",
@@ -1433,7 +1435,7 @@
       ],
       "layer": "local",
       "level": "MUST",
-      "not_applies_when": "No feature flag is involved and no user-visible production behavior changes.",
+      "not_applies_when": "no new feature flag is defined; an environment variable or command-line option that a developer tool reads to turn a behavior off for testing, benchmarking or measurement is configuration, not a feature flag.",
       "rfc": "JRFC-0010",
       "source": "corpus/rfcs/JRFC-0010-feature-flags.md#L31",
       "status": "approved",
@@ -1458,7 +1460,7 @@
       "level": "MUST",
       "not_applies_when": "No feature flag is involved and no user-visible production behavior changes.",
       "rfc": "JRFC-0010",
-      "source": "corpus/rfcs/JRFC-0010-feature-flags.md#L37",
+      "source": "corpus/rfcs/JRFC-0010-feature-flags.md#L38",
       "status": "approved",
       "text": "Code that reads a flag MUST behave safely when the flag service is unavailable, using the old behavior as the default value.",
       "title": "Safe default"
