@@ -1,7 +1,7 @@
 ---
 id: JRFC-0012
 title: Agent tool use
-status: draft
+status: enforced
 domain: agents
 artifacts: [tool]
 languages: [any]
@@ -24,9 +24,11 @@ not_applies_when: >
 Coding agents run shell commands and call tools on behalf of an engineer, often many per
 minute and without a human reading each one. The `jrfc` hooks (`jrfc hookd`, `jrfc hook`)
 check each tool call against the statements below before it runs. `Tools:` limits a
-statement to some tools (a regular expression on the tool name); `Violated when:` describes
-a violating call for the Jev judgment. The action depends on the RFC status and the
-statement level: see "Hooks" in the README.
+statement to some tools (a regular expression on the tool name). A statement with
+`Enforcement: linter` is checked by code: its `Pattern:` (a regular expression searched in
+the command, with quoted strings masked) or the secret scanner. The others are judged by
+Jev; `Violated when:` describes a violating call. The action depends on the RFC status and
+the statement level: see "Hooks" in the README.
 
 ## Requirements
 
@@ -44,18 +46,18 @@ Agents MUST NOT force-push (`--force`, `-f`, `--force-with-lease`, a `+` refspec
 remote branch.
 
 - Applies when: the tool call runs `git push`.
-- Violated when: the command force-pushes with --force, -f, --force-with-lease or a refspec that starts with +.
 - Tools: Bash
-- Enforcement: agent
+- Pattern: \bgit\b[^;&|\n]*\spush\b[^;&|\n]*(?:\s--force(?:-with-lease|-if-includes)?\b|\s-[A-Za-z]*f[A-Za-z]*\b|\s\+[^\s+]+)
+- Enforcement: linter
 
-### JRFC-0012.3 Checks are not skipped
-Agents MUST NOT skip git hooks or checks, for example with `--no-verify`, `-n` on commit,
-`HUSKY=0` or by disabling a required CI job.
+### JRFC-0012.3 Git hooks are not skipped
+Agents MUST NOT skip git hooks, for example with `--no-verify`, `-n` on commit, `HUSKY=0`,
+`SKIP=` or `core.hooksPath=/dev/null`.
 
-- Applies when: the tool call commits, pushes or changes git hooks or CI configuration.
-- Violated when: the command skips or disables git hooks or checks, for example git commit --no-verify, git push --no-verify, HUSKY=0 or SKIP= environment variables.
+- Applies when: the tool call commits, pushes, merges or changes git hook settings.
 - Tools: Bash
-- Enforcement: agent
+- Pattern: --no-verify\b|\bHUSKY=0\b|\bHUSKY_SKIP_HOOKS=\S|(?:^|[\s;&|(])SKIP=\S|core\.hooksPath=/dev/null|\bgit\b[^;&|\n]*\scommit\b[^;&|\n]*\s-[A-Za-z]*n[A-Za-z]*\b
+- Enforcement: linter
 
 ### JRFC-0012.4 No credential literals in tool calls
 Tool calls MUST NOT contain a real credential (password, token, API key, private key) as a
@@ -94,9 +96,19 @@ Agents MUST NOT change data or schema in a production database, queue or cloud r
 
 ### JRFC-0012.8 TLS verification stays on
 Agents SHOULD NOT disable TLS certificate verification in commands (`curl -k`,
-`--insecure`, `GIT_SSL_NO_VERIFY`, `verify=False`).
+`--insecure`, `wget --no-check-certificate`, `GIT_SSL_NO_VERIFY`, `http.sslVerify=false`,
+`NODE_TLS_REJECT_UNAUTHORIZED=0`, `PYTHONHTTPSVERIFY=0`, `strict-ssl false`).
 
 - Applies when: the tool call makes a network request.
-- Violated when: the command disables TLS certificate verification, for example curl -k or --insecure, wget --no-check-certificate, GIT_SSL_NO_VERIFY=1 or NODE_TLS_REJECT_UNAUTHORIZED=0.
+- Tools: Bash
+- Pattern: \bcurl\b[^;&|\n]*(?:\s--insecure\b|\s-[A-Za-z]*k[A-Za-z]*\b)|--no-check-certificate\b|\bGIT_SSL_NO_VERIFY=(?!0\b|false\b)\S|(?i:http\.sslverify)=false\b|\bNODE_TLS_REJECT_UNAUTHORIZED=0\b|\bPYTHONHTTPSVERIFY=0\b|strict-ssl\s+false\b
+- Enforcement: linter
+
+### JRFC-0012.9 Required CI checks stay on
+Agents MUST NOT disable a required CI workflow, job or status check (for example with
+`gh workflow disable` or by removing required checks from branch protection).
+
+- Applies when: the tool call manages CI workflows, runs or branch protection.
+- Violated when: the command disables a CI workflow, cancels required checks for good, or removes or weakens required status checks or branch protection.
 - Tools: Bash
 - Enforcement: agent

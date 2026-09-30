@@ -354,7 +354,7 @@ async def run_hooks_eval(cfg: Config, corpus: Corpus, jev: Jev, cases_path: Path
     from .hooks import Hooks
     data = yaml.safe_load(cases_path.read_text(encoding="utf-8"))
     hooks = Hooks(cfg, corpus, jev, statuses=["draft", "approved", "enforced"], timeout=None, log=False,
-                  score=score)
+                  score=score, skip_when_denied=False)
     rows = []
     with tempfile.TemporaryDirectory(prefix="jrfc-hooks-eval-") as tmp:
         for case in data["cases"]:
@@ -374,7 +374,8 @@ async def run_hooks_eval(cfg: Config, corpus: Corpus, jev: Jev, cases_path: Path
             t0 = time.perf_counter()
             await (hooks.pre(event, record) if kind == "tool" else hooks.post(event, record))
             ms = (time.perf_counter() - t0) * 1000
-            scores = {**record.get("scores", {}), **{sid: 1.0 for sid in record.get("scanner", [])}}
+            scores = {**record.get("scores", {}),
+                      **{sid: 1.0 for sid in record.get("scanner", []) + record.get("patterns", [])}}
             rows.append({"id": case["id"], "kind": kind, "expected": sorted(case.get("violates") or []),
                          "scores": scores, "ms": round(ms), "jev": record.get("jev", "none"),
                          "candidates": record.get("candidates", 0), "skip": record.get("skip")})

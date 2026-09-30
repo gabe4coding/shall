@@ -115,6 +115,14 @@ def redact_value(value, max_chars: int):
     return value
 
 
+QUOTED_RE = re.compile(r"'[^']*'|\"(?:\\.|[^\"\\])*\"")
+
+
+def mask_quotes(text: str) -> str:
+    """Empty every quoted string: a commit message saying "-n" or "--force" is not a flag."""
+    return QUOTED_RE.sub(lambda m: m.group(0)[0] * 2, text)
+
+
 def written_text(tool_input: dict) -> str:
     """The text a tool call puts somewhere. `old_string` is left out: removing a secret is fine."""
     parts = []
@@ -187,7 +195,7 @@ def strongest(findings: list[dict]) -> str | None:
 
 
 def _line(f: dict) -> str:
-    p = "scanner" if f["by"] == "scanner" else f"p={f['p']:.2f}"
+    p = f["by"] if f["by"] in ("scanner", "pattern") else f"p={f['p']:.2f}"
     where = f" (lines {f['lines']})" if f.get("lines") else ""
     return (f"- {f['id']} {f['title']} [{f['level']}, {f['status']}, {p}]{where}: "
             f"{f['text'][:300]}{' Found: ' + ', '.join(f['secrets']) if f.get('secrets') else ''}")
@@ -300,7 +308,8 @@ def working_diff(root: Path) -> str:
 
 class Hooks:
     def __init__(self, cfg: Config, corpus: Corpus, jev: Jev, statuses: list[str] | None = None,
-                 timeout: float | None = -1, log: bool = True, score: str = "both"):
+                 timeout: float | None = -1, log: bool = True, score: str = "both",
+                 skip_when_denied: bool = True):
         self.cfg = cfg
         self.corpus = corpus
         self.jev = jev
@@ -317,6 +326,7 @@ class Hooks:
         # request (no extra latency); the "applies" question keeps off-topic rules quiet.
         # violation: the violation question alone (eval A/B).
         self.score = score
+        self.skip_when_denied = skip_when_denied  # eval: False, to score every statement
 
     # -- entry point shared by `jrfc hook` and `jrfc hookd`
     async def handle(self, event: dict) -> dict:
@@ -407,6 +417,21 @@ class Hooks:
             out.append((rfc, st))
         return out
 
+    def patterns(self, tool: str, tool_input: dict) -> list[dict]:
+        """`Enforcement: linter` tool statements with a `Pattern:`: a regex, no model."""
+        text = None
+        out = []
+        for rfc, st in self.corpus.statements():
+            if not st.pattern or rfc.status not in self.statuses or "tool" not in (st.artifacts or rfc.artifacts):
+                continue
+            if st.tools and not re.fullmatch(st.tools, tool):
+                continue
+            if text is None:
+                text = mask_quotes(str(tool_input.get("command") or "") if tool == "Bash" else written_text(tool_input))
+            if re.search(st.pattern, text):
+                out.append(self._finding(rfc, st, 1.0, action_for(self.actions, rfc, st, 1.0), "pattern"))
+        return out
+
     def scan(self, tool: str, tool_input: dict) -> list[dict]:
         kinds = [s.kind for s in scan_secrets(written_text(tool_input))]
         if not kinds:
@@ -427,11 +452,16 @@ class Hooks:
             return {}
         findings = self.scan(tool, tool_input)
         record["scanner"] = [f["id"] for f in findings]
+        by_pattern = self.patterns(tool, tool_input)
+        record["patterns"] = [f["id"] for f in by_pattern]
+        findings += by_pattern
         cands = self.tool_candidates(tool)
         safe_input = redact_value(tool_input, self.max_chars)
         record["input"] = redact_value(tool_input, 500)
         record["candidates"] = len(cands)
-        if cands:
+        if cands and self.skip_when_denied and strongest(findings) == "deny":
+            record["jev"] = "skipped: already denied by code"  # no wait for a call that cannot run
+        elif cands:
             state = {"tool": tool, "input": safe_input, "cwd": event.get("cwd") or ""}
             if tool == "Bash" and event.get("cwd"):
                 branch = self.git_branch(event["cwd"])

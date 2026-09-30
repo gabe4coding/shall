@@ -238,6 +238,8 @@ and Claude only runs at the end of the turn.
 PreToolUse   (Bash | Write | Edit | … | mcp__.*)
    ├─ code   secret scanner on the text the call writes (not `old_string`): a hit breaks
    │         the rule `hooks.secrets` maps to the tool (JRFC-0004.1 for writes, JRFC-0012.4 else)
+   ├─ code   `Pattern:` of `Enforcement: linter` tool statements, searched in the command with
+   │         quoted strings masked: a match is p = 1 (force push, skipped git hooks, TLS off)
    ├─ code   candidates: `tool` statements whose `Tools:` regex matches the tool name,
    │         `Enforcement: agent`, RFC status with an action table
    ├─ Jev    one request: per candidate "does the call break it?" (criterion: `Violated when:`)
@@ -261,6 +263,10 @@ Why these choices:
   choosing what the reviewer reads, but a hook must decide alone. Asking both questions in
   the same request costs no latency (one round trip whatever the number of questions) and
   keeps off-topic rules quiet: on 25 code writes, false positives at 0.5 fell from 40 to 12.
+- **Regex where a regex is exact.** Flags such as `--force`, `-nm` or `curl -k` are
+  mechanical (JRFC-0001.5): a pattern is instant and never unsure, while Jev scored
+  `git commit -nm` 0.66 (an ask, not a deny). Quoted strings are masked first, so a commit
+  message that mentions a flag is not a violation; a flag inside `bash -c "…"` is missed.
 - **The level and the status decide, not the model.** Jev only gives a probability; the
   action comes from the corpus, as `blocking` does in a review (JTOOL-0002.5). The band
   0.5–0.9 of an enforced MUST asks the user instead of denying.

@@ -164,7 +164,7 @@ the rule's level and its RFC's status choose the action:
 
 | When | What is checked | Possible actions | Time |
 | --- | --- | --- | --- |
-| before a Bash / MCP call | `tool` rules (e.g. [JRFC-0012](corpus/rfcs/JRFC-0012-agent-tool-use.md)) | deny · ask · warn | ~0.3 s |
+| before a Bash / MCP call | `tool` rules ([JRFC-0012](corpus/rfcs/JRFC-0012-agent-tool-use.md)): regex patterns, then Jev | deny · ask · warn | ~0.3 s |
 | before a Write / Edit | secret scanner (code, not Jev) | deny | ~1 ms |
 | after a Write / Edit | code rules on the written lines plus context | warn only | ~0.3 s |
 | end of the agent's turn (Stop) | the whole change through `jrfc review` | block (verified findings only) | seconds; skipped when nothing changed |
@@ -204,8 +204,18 @@ jrfc hook-config --no-stop            # without the end-of-turn review
 get 421); run one per repository with `--port` (`JRFC_HOOKD_PORT` for the plugin). Set
 `JRFC_HOOK_TOKEN` before `hookd` and the hooks to require a bearer token.
 
-The tool rules in JRFC-0012 are `draft`, so the defaults do not act on them. To try them
-before the owner approves them, add a `draft` action table in your workspace:
+The tool rules are in [JRFC-0012](corpus/rfcs/JRFC-0012-agent-tool-use.md) (`enforced`).
+A `tool` rule names the tools it covers with `Tools:` (a regular expression on the tool
+name, full match). Rules that code can check exactly have `Enforcement: linter`:
+
+- with a `Pattern:` — a regular expression searched in the command, with quoted strings
+  masked so a commit message that mentions `--no-verify` does not match (JRFC-0012.2 force
+  push, .3 skipped git hooks, .8 TLS verification off). No Jev call; a match counts as p = 1;
+- through the secret scanner — JRFC-0012.4 and JRFC-0004.1 (`hooks.secrets` maps a tool to
+  the rule a hit breaks).
+
+The other rules are judged by Jev, with `Violated when:` as the criterion. To try a draft
+RFC's tool rules before its owner approves them, add a `draft` action table in a workspace:
 
 ```yaml
 # .jrfc/jrfc.yaml
@@ -213,11 +223,6 @@ hooks:
   actions:
     draft: {MUST: [[0.9, deny], [0.5, ask]], SHOULD: [[0.7, warn]], MAY: [[0.7, log]]}
 ```
-
-A `tool` rule names the tools it covers with `Tools:` (a regular expression on the tool
-name, full match) and can describe a violating call with `Violated when:` (the Jev
-criterion). Rules with `Enforcement: linter` are left to code: JRFC-0012.4 and JRFC-0004.1
-are enforced by the secret scanner (`hooks.secrets` maps a tool to the rule it breaks).
 
 ## Run it in CI on pull requests
 
