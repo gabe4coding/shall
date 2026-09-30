@@ -39,6 +39,10 @@ MAX_WINDOWS = 24
 MAX_GREP_FILES = 40
 WINDOW_LINES = 60
 MAX_FILE_BYTES = 400_000
+# Evidence goes into a Jev state and the verifier prompt: a minified file or a one-line JSON
+# cache must not make an excerpt larger than the request budget.
+MAX_LINE_CHARS = 400
+MAX_EXCERPT_CHARS = 12_000
 GIT_TIMEOUT = 30
 
 SKIP_PARTS = {".git", ".venv", "venv", "node_modules", ".jrfc-out", ".jrfc-cache", "__pycache__", "dist",
@@ -79,6 +83,22 @@ class Def:
     kind: str = "definition"
     header: int | None = None                        # enclosing class/module line of a member
     calls: list[str] = field(default_factory=list)   # chains used inside the definition
+
+
+def numbered_lines(lines: list[str], numbers) -> str:
+    """`  n | text` lines for an excerpt, each line and the whole text cut to the caps."""
+    out, size = [], 0
+    for n in numbers:
+        text = lines[n - 1]
+        if len(text) > MAX_LINE_CHARS:
+            text = text[:MAX_LINE_CHARS] + f"…[cut {len(text) - MAX_LINE_CHARS} chars]"
+        row = f"{n:>5} | {text}"
+        if out and size + len(row) + 1 > MAX_EXCERPT_CHARS:
+            out.append("  ... | [excerpt cut]")
+            break
+        out.append(row)
+        size += len(row) + 1
+    return "\n".join(out)
 
 
 @dataclass
@@ -375,12 +395,12 @@ class RepoIndex:
         end = min(d.end, d.line + WINDOW_LINES - 1, len(lines))
         if d.kind in CLASS_KINDS and d.end - d.line + 1 > WINDOW_LINES:
             end = min(d.line + 2, len(lines))  # members are indexed on their own
-        numbered = [f"{n:>5} | {lines[n - 1]}" for n in range(d.line, end + 1)]
+        text = numbered_lines(lines, range(d.line, end + 1))
         start = d.line
         if d.header is not None and d.header < d.line:
-            numbered = [f"{d.header:>5} | {lines[d.header - 1]}", "  ... |"] + numbered
+            text = numbered_lines(lines, [d.header]) + "\n  ... |\n" + text
             start = d.header
-        return Window(path=d.path, start=start, end=end, text="\n".join(numbered), depth=depth, via=via)
+        return Window(path=d.path, start=start, end=end, text=text, depth=depth, via=via)
 
 
 class _Extractor:

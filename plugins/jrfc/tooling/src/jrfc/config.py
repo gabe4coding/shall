@@ -29,7 +29,7 @@ from .fetch import Parent, resolve_parent
 
 CONFIG_NAME = "jrfc.yaml"
 DOT_DIR = ".jrfc"
-SETTINGS = ("jev", "selection", "review", "conflicts", "codegraph", "triage")
+SETTINGS = ("jev", "selection", "review", "conflicts", "codegraph", "triage", "hooks")
 
 DEFAULTS: dict[str, Any] = {
     "jev": {
@@ -57,6 +57,27 @@ DEFAULTS: dict[str, Any] = {
         "fail_threshold": 0.75,   # duplicate / weakens / conflict at or above this fails
         "report_threshold": 0.60,  # shown as info (overlap) at or above this
         "exclude_domains": [],     # meta domains never compared (e.g. governance)
+    },
+    "hooks": {
+        # Claude Code hooks (hooks.py). Pre: tool statements judged by Jev before a call.
+        # Post: code statements on the lines a Write/Edit produced (warn only). Stop: full review.
+        "enabled": True,          # false: every hook event is answered "no opinion" (plugin hooks off)
+        "pre_matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|mcp__.*",
+        "code_tools": "Write|Edit|MultiEdit|NotebookEdit",
+        "timeout": 3.0,           # seconds for the Jev step; past it the call runs (fail-open)
+        "max_input_chars": 12000,  # longer tool inputs are cut before they reach Jev
+        "context_lines": 15,      # lines kept around an edit for code statements
+        # status -> level -> [[min p, action], ...] (first match wins). A status without an
+        # entry is not checked; add e.g. `draft:` in a workspace to trial draft rules.
+        "actions": {
+            "enforced": {"MUST": [[0.9, "deny"], [0.5, "ask"]], "SHOULD": [[0.7, "warn"]], "MAY": [[0.7, "log"]]},
+            "approved": {"MUST": [[0.5, "warn"]], "SHOULD": [[0.7, "log"]], "MAY": [[0.7, "log"]]},
+        },
+        "code_warn": 0.7,         # code statements after a write: warn at or above, never block
+        "secrets": [],            # [[tool regex, statement id]]: which rule a secret-scanner hit breaks
+        "stop": {"enabled": True, "max_blocks": 2, "max_diff_chars": 200000},
+        "log": ".jrfc-cache/hooks/decisions.jsonl",
+        "port": 8765,
     },
     "review": {
         "command": ["claude", "-p"],

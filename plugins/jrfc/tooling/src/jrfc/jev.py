@@ -53,6 +53,10 @@ class Jev:
             await self._client.aclose()
         self.save()
 
+    def available(self) -> bool:
+        """False without an API key: callers that must not fail (hooks) skip Jev instead."""
+        return bool(os.environ.get("TYPESAFE_API_KEY"))
+
     def client(self) -> AsyncTypeSafeClient:
         if self._client is None:
             if not os.environ.get("TYPESAFE_API_KEY"):

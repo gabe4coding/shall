@@ -92,8 +92,9 @@ repository; without it, `jrfc` uses this repository's own rules in `.jrfc/`.
 
 ## Install the Claude Code plugin
 
-The plugin gives Claude Code the `jrfc` command, the reviewer and verifier agents, and four
-skills:
+The plugin gives Claude Code the `jrfc` command, the reviewer and verifier agents, the
+[hooks](#d-while-an-agent-works-claude-code-hooks) that check an agent's tool calls in
+repositories with a jrfc workspace, and four skills:
 
 | Skill | Claude uses it when you… |
 | --- | --- |
@@ -154,6 +155,73 @@ the plugin:
 ```bash
 jrfc select --text "add a Kafka consumer for booking events"
 jrfc show JRFC-0006.1
+```
+
+### D. While an agent works (Claude Code hooks)
+
+Hooks apply the rules to each tool call an agent makes, as it makes it. Jev is the judge;
+the rule's level and its RFC's status choose the action:
+
+| When | What is checked | Possible actions | Time |
+| --- | --- | --- | --- |
+| before a Bash / MCP call | `tool` rules ([JRFC-0012](corpus/rfcs/JRFC-0012-agent-tool-use.md)): regex patterns, then Jev | deny · ask · warn | ~0.3 s |
+| before a Write / Edit | secret scanner (code, not Jev) | deny | ~1 ms |
+| after a Write / Edit | code rules on the written lines plus context | warn only | ~0.3 s |
+| end of the agent's turn (Stop) | the whole change through `jrfc review` | block (verified findings only) | seconds; skipped when nothing changed |
+
+Default actions (`hooks.actions`): an **enforced MUST** rule denies at p ≥ 0.9 and asks the
+user at 0.5–0.9; an enforced SHOULD warns the agent at p ≥ 0.7; an **approved MUST** warns;
+everything else is only logged. After a write nothing is denied: the lines just written are
+not enough evidence (the timeout may be set in another file), so the agent gets a warning
+it can check, and only the Stop review can block. Every input is redacted by the secret
+scanner before it reaches Jev. If Jev is slow (`hooks.timeout`, 3 s) or down, the call
+runs: the hooks fail open. Each decision is appended to `.jrfc-cache/hooks/decisions.jsonl`.
+
+**With the plugin** the hooks are on: `hooks/hooks.json` calls `bin/jrfc-hook` for every
+event. Outside a jrfc workspace (no `.jrfc/jrfc.yaml` or `jrfc.yaml` up the tree, no
+`JRFC_CONFIG`, `JRFC_EXTENDS` or `~/.config/jrfc/config.yaml`) it exits in a few
+milliseconds. Inside one it sends the event to `jrfc hookd` when one runs for that
+repository (~0.3 s per call), and otherwise runs `jrfc hook` (~0.5 s per call):
+
+```bash
+jrfc hookd &                  # optional: keeps the Jev connection warm (port: hooks.port, 8765)
+```
+
+Turn the hooks off in a workspace with `hooks: {enabled: false}`, or only the end-of-turn
+review with `hooks: {stop: {enabled: false}}` (it runs `jrfc review`, with Claude, when the
+change is new). Without `TYPESAFE_API_KEY` only the secret scanner runs.
+
+**Without the plugin**, print a settings block and merge it into `.claude/settings.json`
+(project) or `~/.claude/settings.json`. Do not use both, or every hook runs twice.
+
+```bash
+jrfc hook-config                      # http hooks to `jrfc hookd` (start it yourself)
+jrfc hook-config --transport command  # no server: one process per call
+jrfc hook-config --no-stop            # without the end-of-turn review
+```
+
+`jrfc hookd` checks only events whose working directory is inside its repository (others
+get 421); run one per repository with `--port` (`JRFC_HOOKD_PORT` for the plugin). Set
+`JRFC_HOOK_TOKEN` before `hookd` and the hooks to require a bearer token.
+
+The tool rules are in [JRFC-0012](corpus/rfcs/JRFC-0012-agent-tool-use.md) (`enforced`).
+A `tool` rule names the tools it covers with `Tools:` (a regular expression on the tool
+name, full match). Rules that code can check exactly have `Enforcement: linter`:
+
+- with a `Pattern:` — a regular expression searched in the command, with quoted strings
+  masked so a commit message that mentions `--no-verify` does not match (JRFC-0012.2 force
+  push, .3 skipped git hooks, .8 TLS verification off). No Jev call; a match counts as p = 1;
+- through the secret scanner — JRFC-0012.4 and JRFC-0004.1 (`hooks.secrets` maps a tool to
+  the rule a hit breaks).
+
+The other rules are judged by Jev, with `Violated when:` as the criterion. To try a draft
+RFC's tool rules before its owner approves them, add a `draft` action table in a workspace:
+
+```yaml
+# .jrfc/jrfc.yaml
+hooks:
+  actions:
+    draft: {MUST: [[0.9, deny], [0.5, ask]], SHOULD: [[0.7, warn]], MAY: [[0.7, log]]}
 ```
 
 ## Run it in CI on pull requests
@@ -347,9 +415,16 @@ Settings live in `jrfc.yaml` (organisation) and can be overridden in `.jrfc/jrfc
 | `triage.authors` | Copilot, CodeRabbit, `*[bot]`… | logins whose comments `jrfc triage` sorts (`*` is the only wildcard); GitHub Apps always count |
 | `triage.thresholds` | `actionable 0.5, statement 0.5, duplicate 0.7` | a comment below `actionable` is noise; `duplicate` marks a repeated concern |
 | `triage.verify` | `true` | check each actionable comment against repository evidence (`--no-verify` skips it) |
+| `hooks.enabled` | `true` | `false`: the hooks (also the plugin's) do nothing in this workspace |
+| `hooks.actions` | see [hooks](#d-while-an-agent-works-claude-code-hooks) | status → level → `[[min p, action]]`; a status without a table is not checked |
+| `hooks.code_warn` | `0.7` | after a write, warn at or above this (never deny) |
+| `hooks.timeout` | `3.0` | seconds for Jev in a hook; past it the call runs (fail-open) |
+| `hooks.pre_matcher` / `hooks.code_tools` | `Bash\|Write\|Edit\|…\|mcp__.*` / `Write\|Edit\|MultiEdit\|NotebookEdit` | tools checked before / after the call |
+| `hooks.stop` | `enabled, max_blocks 2` | end-of-turn review; blocks at most twice per session |
 
 Environment variables: `TYPESAFE_API_KEY`, `ANTHROPIC_API_KEY` (CI), `JRFC_CONFIG`,
-`JRFC_EXTENDS`, `JRFC_GIT_TOKEN`, `JRFC_CACHE_DIR`.
+`JRFC_EXTENDS`, `JRFC_GIT_TOKEN`, `JRFC_CACHE_DIR`; for hooks `JRFC_HOOKD_PORT`,
+`JRFC_HOOK_TOKEN` and `JRFC_HOOKS_DISABLED` (set by jrfc for the agents it runs).
 
 ## Commands
 
@@ -368,7 +443,10 @@ Environment variables: `TYPESAFE_API_KEY`, `ANTHROPIC_API_KEY` (CI), `JRFC_CONFI
 | `jrfc triage DIFF --pr N \| --comments F` | Jev + Claude | sort other AI reviewers' comments: relevant, unverified, noise, outdated |
 | `jrfc conflicts FILE` / `--local` | Jev | duplicates, weakening and conflicts between rules |
 | `jrfc bundle`, `validate`, `verify` | varies | the review in separate steps (used by the `jrfc-review` skill) |
-| `jrfc eval`, `jrfc eval-verify`, `jrfc eval-triage` | Jev (+ Claude) | measure selection, verification and triage on labelled cases |
+| `jrfc hook` | Jev (+ Claude on Stop) | handle one Claude Code hook event from stdin (command hook) |
+| `jrfc hookd [--port P]` | Jev (+ Claude on Stop) | serve hook events on localhost for `type: http` hooks |
+| `jrfc hook-config [--transport http\|command] [--no-stop]` | no | print the `hooks` block for `.claude/settings.json` |
+| `jrfc eval`, `jrfc eval-verify`, `jrfc eval-triage`, `jrfc eval-hooks` | Jev (+ Claude) | measure selection, verification, triage and the hook judge on labelled cases |
 
 `jrfc <command> --help` shows every option.
 
@@ -408,6 +486,7 @@ make eval-scale    # selection with ~540 rules, 20 cases
 make eval-facts    # known effects on vs off, 19 files in 9 languages
 plugins/jrfc/bin/jrfc --config jrfc.yaml eval-verify --retrieval treesitter   # verification (needs claude)
 make eval-triage   # triage of AI review comments, 24 labelled comments (needs claude)
+make eval-hooks    # hook judge on 75 labelled tool calls and writes (--no-cache for latency)
 ```
 
 Jev answers are cached in `.jrfc-cache/`, so re-runs only pay for changed questions. Current
@@ -419,12 +498,12 @@ numbers and what they mean: [docs/results.md](docs/results.md).
 | --- | --- |
 | `corpus/` | example organisation corpus: `rfcs/`, `domains.yaml`, `effects.yaml`, generated `index/` |
 | `jrfc.yaml` | configuration of the example organisation corpus |
-| `plugins/jrfc/` | the Claude Code plugin: skills, agents, `bin/jrfc`, `bin/jrfc-pr-review` |
+| `plugins/jrfc/` | the Claude Code plugin: skills, agents, `hooks/hooks.json`, `bin/jrfc`, `bin/jrfc-hook`, `bin/jrfc-pr-review` |
 | `plugins/jrfc/tooling/` | the Python package behind the CLI (`uv` project, tests) |
 | `ci/github/` | workflow templates for the corpus repository and for application repositories |
 | `examples/booking-service/.jrfc/` | an application repository's local rules (`BOOK-`) |
 | `.jrfc/` | this repository's own rules for its tooling (`JTOOL-`) |
-| `eval/` | labelled cases: `cases/`, `scale/`, `facts/` (selection), `verify/` (verification), `triage/` (AI review comments) |
+| `eval/` | labelled cases: `cases/`, `scale/`, `facts/` (selection), `verify/` (verification), `triage/` (AI review comments), `hooks/` (tool calls and writes) |
 | `docs/` | [architecture](docs/architecture.md), [results](docs/results.md) |
 
 ## Known limits
@@ -440,3 +519,6 @@ numbers and what they mean: [docs/results.md](docs/results.md).
   triaged on the next push. Only inline review threads are read, not PR-level comments.
 - **Two external services.** An outage fails the job with exit 3.
 - **Data leaves your machine.** Diffs are sent to TypeSafe and Anthropic.
+- **Hooks see one call at a time.** A violation split over several calls (write a script,
+  then run it) is judged per call; the Stop review sees the resulting files, not the
+  commands. After a write, Jev judges the written lines plus 15 lines of context only.
