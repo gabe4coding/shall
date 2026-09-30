@@ -144,15 +144,16 @@
   "sgm-038"
  ],
  "goal": {
-  "target": "precision@0.7 (test)",
+  "target": "recall@0.7 (test)",
   "direction": "higher",
   "hold": [
-   "recall@0.7 (test)"
-  ]
+   "precision@0.7 (test)"
+  ],
+  "since_round": 3
  },
  "approve_each_round": false,
  "reps": 2,
- "current_round": 0,
+ "current_round": 4,
  "stop": "test precision@0.7 gain below noise for 3 rounds, recall@0.7 drop outside noise, or 8 rounds",
  "levers": [
   "RFC applies_when / not_applies_when / violated_when (same meaning)",
@@ -163,5 +164,9 @@
   "gold labels",
   "hooks.py questions",
   "score mode and threshold"
- ]
+ ],
+ "best": {
+  "round": 2,
+  "test_score": 0.96
+ }
 }
