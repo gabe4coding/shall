@@ -89,6 +89,8 @@ def test_scanner_finds_real_looking_secrets(text, kind):
     'password = "test-password-123"',
     "curl -H \"Authorization: Bearer $TOKEN\" https://api.example.com",
     "git push origin main",
+    "jevTokens: 'jevTokens' in view && view.jevTokens === null",
+    'API_KEY = "api_key"',
 ])
 def test_scanner_ignores_references_and_placeholders(text):
     assert scan_secrets(text) == []
