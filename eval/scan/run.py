@@ -49,7 +49,8 @@ JEV_PRICE_IN = 0.042                             # $ per 1M input tokens (evalua
 LABEL_MODEL = "claude-opus-5-5"
 RANDOM_CLEAN = 30                                # both-clean pairs a human checks, to estimate what both missed
 SAMPLE_SHARE = 0.5                               # share of flagged pairs a human reviews (fixed hash, not order)
-HARNESS = [Path(__file__).resolve(), CASES]
+# the gold labels are part of the harness: a round must not change what it is scored against
+HARNESS = [Path(__file__).resolve(), CASES, LABELS, FLOW / "labels" / "proposed.jsonl"]
 
 
 # ---------------------------------------------------------------- io helpers
@@ -432,7 +433,10 @@ def step_grade(args) -> None:
     }) + "\n" for r in rows), encoding="utf-8")
     tdir = vdir / "traces"
     tdir.mkdir(parents=True, exist_ok=True)
+    split = splits()
     for r in rows:
+        if split and r["prompt_id"] not in split["train"]:
+            continue  # the analyzer reads train traces only
         table = "\n".join(f"{sid:14} p={p:.2f} applies={r['applies'].get(sid, 0):.2f} violates={r['violates'].get(sid, 0):.2f} "
                           f"gold={'violation' if labels.get((r['prompt_id'], sid)) else 'clean'} "
                           f"[{source.get((r['prompt_id'], sid), 'none')}]"
@@ -445,8 +449,37 @@ def step_grade(args) -> None:
             {"role": "assistant", "content": table}], indent=1), encoding="utf-8")
     summary = summarize(rows, labels, source, len({r["prompt_id"] for r in rows}))
     summary["sample"] = sample_summary(rows, labels, source, picked)
+    if split:
+        summary["splits"] = {name: split_metrics([r for r in rows if r["prompt_id"] in ids], labels)
+                             for name, ids in split.items()}
+    summary["fingerprint"] = fingerprint()
     (vdir / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
     print(render(summary))
+
+
+def splits() -> dict | None:
+    s = state()
+    return {"train": set(s["train_ids"]), "test": set(s["test_ids"])} if s.get("test_ids") else None
+
+
+def split_metrics(rows, labels) -> dict:
+    out = {"files": len({r["prompt_id"] for r in rows})}
+    for t in THRESHOLDS:
+        m = metrics_of(rows, labels, t)
+        m["precision_ci"] = bootstrap(rows, labels, t, "precision")
+        m["recall_ci"] = bootstrap(rows, labels, t, "recall")
+        out[str(t)] = m
+    return out
+
+
+def fingerprint() -> dict:
+    """What the scores depend on besides the runner: the jrfc commit, the corpus and the hook code."""
+    h = hashlib.sha256()
+    for p in sorted([*(ROOT / "corpus").rglob("*.md"), *(ROOT / "corpus").glob("*.yaml"),
+                     *(ROOT / "plugins/jrfc/tooling/src/jrfc").glob("*.py"), ROOT / "jrfc.yaml"]):
+        h.update(p.relative_to(ROOT).as_posix().encode() + p.read_bytes())
+    head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+    return {"commit": head, "app_sha": h.hexdigest()[:16]}
 
 
 def summarize(rows, labels, source, n_files) -> dict:
@@ -524,6 +557,11 @@ def render(s: dict) -> str:
     lines.append(f"  false positives at 0.7 by rule: {s['fp_by_rule_at_0.7'] or 'none'}")
     lines.append(f"  Jev: {s['jev_input_tokens_per_file']} input tokens / file = ${s['jev_cost_usd_per_file']:.5f} / file; "
                  f"latency p50 {s['latency_s']['p50']}s p95 {s['latency_s']['p95']}s; labeler ${s['label_cost_usd_total']}")
+    for name, sm in (s.get("splits") or {}).items():
+        m = sm["0.7"]
+        lines.append(f"  {name} ({sm['files']} files) p>=0.7: precision {f(m['precision'])} "
+                     f"[{f(m['precision_ci'][0])}-{f(m['precision_ci'][1])}]  recall {f(m['recall'])} "
+                     f"[{f(m['recall_ci'][0])}-{f(m['recall_ci'][1])}]  tp {m['tp']} fp {m['fp']} fn {m['fn']}")
     if s["reviewed_share"] < 1:
         lines.append("  NOTE: not all labels are human-reviewed yet; numbers are provisional")
     return "\n".join(lines)
@@ -539,6 +577,75 @@ def step_check(args) -> None:
         rows = [{**r, "scores": {s: fn((r["prompt_id"], s)) for s in r["scores"]}} for r in raw]
         m = metrics_of(rows, labels, 0.7)
         print(f"{name}: precision {m['precision']} recall {m['recall']} tp {m['tp']} fp {m['fp']} fn {m['fn']}")
+
+
+def step_split(args) -> None:
+    """Fix the train/test split once: random, stratified by tags[0] (language), never by score."""
+    s = state()
+    if s.get("test_ids"):
+        sys.exit(f"split already fixed: {len(s['train_ids'])} train, {len(s['test_ids'])} test")
+    _, cases = load_cases(None)
+    labels, _, _ = gold()
+    positive = {k[0] for k, v in labels.items() if v}
+    # strata: language x "has a gold violation" (labels, never Jev's scores): a first draw by language
+    # alone put most violating files in test (recall 0.55 train vs 0.94 test)
+    key = {c["id"]: (c["tags"][0], c["id"] in positive) for c in cases}
+    rng = random.Random(4242)
+    train, test = [], []
+    for stratum in sorted(set(key.values())):
+        ids = sorted(i for i, k in key.items() if k == stratum)
+        rng.shuffle(ids)
+        half = (len(ids) + rng.randint(0, 1)) // 2
+        train += ids[:half]
+        test += ids[half:]
+    s.update({"train_ids": sorted(train), "test_ids": sorted(test)})
+    (FLOW / "_state.json").write_text(json.dumps(s, indent=1), encoding="utf-8")
+    print(f"split: {len(train)} train, {len(test)} test (seed 4242, stratified by language x has-violation)")
+
+
+def step_compare(args) -> None:
+    """Paired comparison of a variant against baseline on each split: the same resampled files for both."""
+    labels, _, _ = gold()
+    split = splits() or {"all": {c["id"] for c in load_cases(None)[1]}}
+    base = jsonl(FLOW / "baseline" / "raw.jsonl")
+    var = jsonl(FLOW / args.variant / "raw.jsonl")
+    if not var:
+        sys.exit(f"compare: no rows for {args.variant}")
+    for name, ids in split.items():
+        b = {}
+        v = {}
+        for r in base:
+            if r["prompt_id"] in ids:
+                b.setdefault(r["prompt_id"], []).append(r)
+        for r in var:
+            if r["prompt_id"] in ids:
+                v.setdefault(r["prompt_id"], []).append(r)
+        files = sorted(set(b) & set(v))
+        missing = sorted(set(b) ^ set(v))
+        for t in THRESHOLDS:
+            mb = metrics_of([r for i in files for r in b[i]], labels, t)
+            mv = metrics_of([r for i in files for r in v[i]], labels, t)
+            rng = random.Random(11)
+            deltas = {"precision": [], "recall": []}
+            for _ in range(2000):
+                pick = [rng.choice(files) for _ in files]
+                xb = metrics_of([r for i in pick for r in b[i]], labels, t)
+                xv = metrics_of([r for i in pick for r in v[i]], labels, t)
+                for k in deltas:
+                    if xb[k] is not None and xv[k] is not None:
+                        deltas[k].append(xv[k] - xb[k])
+            parts = []
+            for k in ("precision", "recall"):
+                d = sorted(deltas[k])
+                ci = (d[int(0.025 * len(d))], d[int(0.975 * len(d)) - 1]) if d else (None, None)
+                pb, pv = mb[k], mv[k]
+                delta = None if pb is None or pv is None else pv - pb
+                fmt = lambda x: "-" if x is None else f"{x:+.2f}"
+                parts.append(f"{k} {'-' if pb is None else f'{pb:.2f}'} -> {'-' if pv is None else f'{pv:.2f}'} "
+                             f"({fmt(delta)} [{fmt(ci[0])},{fmt(ci[1])}])")
+            print(f"{name} ({len(files)} files) p>={t}: " + "  ".join(parts) + f"  fp {mb['fp']}->{mv['fp']} tp {mb['tp']}->{mv['tp']}")
+        if missing:
+            print(f"  WARNING {name}: files in only one variant: {missing}")
 
 
 def step_approve(args) -> None:
@@ -558,7 +665,7 @@ def step_approve(args) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="step", required=True)
-    for name in ("approve", "jev", "label", "review", "export", "grade", "check"):
+    for name in ("approve", "jev", "label", "review", "export", "grade", "check", "split", "compare"):
         s = sub.add_parser(name)
         s.add_argument("--variant", default="baseline")
         s.add_argument("--only", help="comma-separated case ids")
