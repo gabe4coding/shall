@@ -213,7 +213,8 @@ async def run_claude(cfg: Config, prompt: str, system: str, schema: dict,
         result = json.loads(m.group(0)) if m else None
     if key is not None and result is not None:
         cache.put(key, result)
-    return result, {"cost_usd": data.get("total_cost_usd", 0.0)}
+    return result, {"cost_usd": data.get("total_cost_usd", 0.0), "usage": data.get("usage") or {},
+                    "models": sorted(data.get("modelUsage") or {})}
 
 
 async def _run_agent(cfg: Config, prompt: str, sem: asyncio.Semaphore,

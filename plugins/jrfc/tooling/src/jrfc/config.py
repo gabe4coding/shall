@@ -12,7 +12,7 @@ Discovery, first match wins:
 Layer paths default to `rfcs/`, `domains.yaml`, `index/`, `effects.yaml` inside a `.jrfc/`
 folder and to `corpus/rfcs`, `corpus/domains.yaml`, `corpus/index`, `corpus/effects.yaml` for a
 root-level jrfc.yaml.
-Settings (`jev`, `selection`, `review`) are inherited from the parent and overridden locally.
+Settings (`jev`, `selection`, `review`, `hooks`, `scan`, ...) are inherited from the parent and overridden locally.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from .fetch import Parent, resolve_parent
 
 CONFIG_NAME = "jrfc.yaml"
 DOT_DIR = ".jrfc"
-SETTINGS = ("jev", "selection", "review", "conflicts", "codegraph", "triage", "hooks")
+SETTINGS = ("jev", "selection", "review", "conflicts", "codegraph", "triage", "hooks", "scan")
 
 DEFAULTS: dict[str, Any] = {
     "jev": {
@@ -57,6 +57,15 @@ DEFAULTS: dict[str, Any] = {
         "fail_threshold": 0.75,   # duplicate / weakens / conflict at or above this fails
         "report_threshold": 0.60,  # shown as info (overlap) at or above this
         "exclude_domains": [],     # meta domains never compared (e.g. governance)
+    },
+    "scan": {
+        # `jrfc scan` (scan.py): whole files, the post-write hook's judgment per file.
+        "threshold": 0.7,         # warn at or above (eval/scan: precision ~0.96 at 0.7 after tuning)
+        "statuses": None,         # None: selection.include_status
+        "max_file_chars": 200000,  # larger files are skipped and listed
+        "concurrency": 8,         # files in flight (Jev requests are also bounded by jev.concurrency)
+        "exclude": ["*/node_modules/*", "*/dist/*", "*/build/*", "*/vendor/*", "*/.venv/*",
+                    "*.min.js", "*.lock", "*/package-lock.json", "*/.jrfc-cache/*", "*/.jrfc-out/*"],
     },
     "hooks": {
         # Claude Code hooks (hooks.py). Pre: tool statements judged by Jev before a call.

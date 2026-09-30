@@ -1,0 +1,274 @@
+{
+ "files": 100,
+ "reps": 2,
+ "pairs": 6270,
+ "reviewed_share": 0.027,
+ "thresholds": {
+  "0.5": {
+   "tp": 67,
+   "fp": 115,
+   "fn": 5,
+   "tn": 6083,
+   "precision": 0.36813186813186816,
+   "recall": 0.9305555555555556,
+   "specificity": 0.9814456276218135,
+   "fpr": 0.018554372378186513,
+   "precision_ci": [
+    0.273,
+    0.466
+   ],
+   "recall_ci": [
+    0.84,
+    1.0
+   ],
+   "files_flagged": 63,
+   "files_with_fp": 45
+  },
+  "0.7": {
+   "tp": 52,
+   "fp": 25,
+   "fn": 20,
+   "tn": 6173,
+   "precision": 0.6753246753246753,
+   "recall": 0.7222222222222222,
+   "specificity": 0.9959664407873507,
+   "fpr": 0.004033559212649242,
+   "precision_ci": [
+    0.533,
+    0.812
+   ],
+   "recall_ci": [
+    0.571,
+    0.875
+   ],
+   "files_flagged": 38,
+   "files_with_fp": 14
+  },
+  "0.9": {
+   "tp": 8,
+   "fp": 1,
+   "fn": 64,
+   "tn": 6197,
+   "precision": 0.8888888888888888,
+   "recall": 0.1111111111111111,
+   "specificity": 0.999838657631494,
+   "fpr": 0.00016134236850596966,
+   "precision_ci": [
+    0.5,
+    1.0
+   ],
+   "recall_ci": [
+    0.026,
+    0.229
+   ],
+   "files_flagged": 5,
+   "files_with_fp": 1
+  }
+ },
+ "fp_by_rule_at_0.7": {
+  "JRFC-0003.2": 12,
+  "JRFC-0006.1": 2,
+  "JRFC-0011.1": 2,
+  "JRFC-0003.1": 2,
+  "JRFC-0004.1": 2,
+  "JRFC-0010.2": 2,
+  "JRFC-0007.4": 2,
+  "JRFC-0002.3": 1
+ },
+ "jev_cost_usd_per_file": 0.000509,
+ "jev_input_tokens_per_file": 12131,
+ "latency_s": {
+  "p50": 0.335,
+  "p95": 0.456
+ },
+ "label_cost_usd_total": 10.3177,
+ "sample": {
+  "union_pairs": 97,
+  "sample_pairs": 52,
+  "reviewed": 52,
+  "thresholds": {
+   "0.5": {
+    "tp": 43,
+    "fp": 56,
+    "fn": 1,
+    "tn": 4,
+    "precision": 0.43434343434343436,
+    "recall": 0.9772727272727273,
+    "specificity": 0.06666666666666667,
+    "fpr": 0.9333333333333333,
+    "precision_ci": [
+     0.289,
+     0.578
+    ],
+    "recall_ci": [
+     0.921,
+     1.0
+    ]
+   },
+   "0.7": {
+    "tp": 30,
+    "fp": 14,
+    "fn": 14,
+    "tn": 46,
+    "precision": 0.6818181818181818,
+    "recall": 0.6818181818181818,
+    "specificity": 0.7666666666666667,
+    "fpr": 0.23333333333333334,
+    "precision_ci": [
+     0.469,
+     0.871
+    ],
+    "recall_ci": [
+     0.476,
+     0.882
+    ]
+   },
+   "0.9": {
+    "tp": 0,
+    "fp": 1,
+    "fn": 44,
+    "tn": 59,
+    "precision": 0.0,
+    "recall": 0.0,
+    "specificity": 0.9833333333333333,
+    "fpr": 0.016666666666666666,
+    "precision_ci": [
+     0.0,
+     0.0
+    ],
+    "recall_ci": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  "claude_agreement": {
+   "reviewed": 84,
+   "agree": 84
+  },
+  "random_clean": {
+   "reviewed": 30,
+   "violations": 0
+  }
+ },
+ "splits": {
+  "train": {
+   "files": 50,
+   "0.5": {
+    "tp": 36,
+    "fp": 66,
+    "fn": 0,
+    "tn": 3034,
+    "precision": 0.35294117647058826,
+    "recall": 1.0,
+    "specificity": 0.9787096774193549,
+    "fpr": 0.02129032258064516,
+    "precision_ci": [
+     0.218,
+     0.491
+    ],
+    "recall_ci": [
+     1.0,
+     1.0
+    ]
+   },
+   "0.7": {
+    "tp": 25,
+    "fp": 16,
+    "fn": 11,
+    "tn": 3084,
+    "precision": 0.6097560975609756,
+    "recall": 0.6944444444444444,
+    "specificity": 0.9948387096774194,
+    "fpr": 0.005161290322580645,
+    "precision_ci": [
+     0.405,
+     0.814
+    ],
+    "recall_ci": [
+     0.464,
+     0.912
+    ]
+   },
+   "0.9": {
+    "tp": 6,
+    "fp": 1,
+    "fn": 30,
+    "tn": 3099,
+    "precision": 0.8571428571428571,
+    "recall": 0.16666666666666666,
+    "specificity": 0.9996774193548387,
+    "fpr": 0.0003225806451612903,
+    "precision_ci": [
+     0.0,
+     1.0
+    ],
+    "recall_ci": [
+     0.0,
+     0.368
+    ]
+   }
+  },
+  "test": {
+   "files": 50,
+   "0.5": {
+    "tp": 31,
+    "fp": 49,
+    "fn": 5,
+    "tn": 3049,
+    "precision": 0.3875,
+    "recall": 0.8611111111111112,
+    "specificity": 0.9841833440929632,
+    "fpr": 0.0158166559070368,
+    "precision_ci": [
+     0.25,
+     0.538
+    ],
+    "recall_ci": [
+     0.679,
+     1.0
+    ]
+   },
+   "0.7": {
+    "tp": 27,
+    "fp": 9,
+    "fn": 9,
+    "tn": 3089,
+    "precision": 0.75,
+    "recall": 0.75,
+    "specificity": 0.9970948999354422,
+    "fpr": 0.002905100064557779,
+    "precision_ci": [
+     0.568,
+     0.917
+    ],
+    "recall_ci": [
+     0.556,
+     0.929
+    ]
+   },
+   "0.9": {
+    "tp": 2,
+    "fp": 0,
+    "fn": 34,
+    "tn": 3098,
+    "precision": 1.0,
+    "recall": 0.05555555555555555,
+    "specificity": 1.0,
+    "fpr": 0.0,
+    "precision_ci": [
+     1.0,
+     1.0
+    ],
+    "recall_ci": [
+     0.0,
+     0.188
+    ]
+   }
+  }
+ },
+ "fingerprint": {
+  "commit": "fcf0788",
+  "app_sha": "234062e785591e41"
+ }
+}

@@ -293,6 +293,18 @@ Why these choices:
   browser cannot send one cross-origin without a preflight) and, with `JRFC_HOOK_TOKEN`,
   requires a bearer token.
 
+## Scan: whole files, the hook's judgment
+
+`jrfc scan` (`scan.py`) lists files with `git ls-files` (tracked and untracked, not ignored)
+or a directory walk, keeps known code and config languages (not Markdown), and applies
+`scan.exclude` and `scan.max_file_chars`. Per file: the secret scanner on the raw text (exact;
+a hit on an enforced MUST is the only blocking finding), then the whole file, redacted, as one
+added-lines chunk through `Hooks.judge_code`, the loop the post-write hook uses: prefilter,
+one Jev request, p = min(applies, violates), a warning at p >= `scan.threshold` (0.7). Jev
+failures are listed and exit 3 instead of failing open: a scan that silently skipped files
+would read as clean. `eval/scan` measured this path on 100 files before the command existed;
+its hill-climb changed only rule criteria (`applies_when`, `Violated when:`), not code.
+
 ## Known pain points and how they are handled
 
 | Pain point | Handling |

@@ -1,0 +1,267 @@
+{
+ "files": 100,
+ "reps": 2,
+ "pairs": 6270,
+ "reviewed_share": 0.027,
+ "thresholds": {
+  "0.5": {
+   "tp": 68,
+   "fp": 36,
+   "fn": 4,
+   "tn": 6162,
+   "precision": 0.6538461538461539,
+   "recall": 0.9444444444444444,
+   "specificity": 0.9941916747337851,
+   "fpr": 0.005808325266214908,
+   "precision_ci": [
+    0.491,
+    0.82
+   ],
+   "recall_ci": [
+    0.857,
+    1.0
+   ],
+   "files_flagged": 41,
+   "files_with_fp": 15
+  },
+  "0.7": {
+   "tp": 50,
+   "fp": 1,
+   "fn": 22,
+   "tn": 6197,
+   "precision": 0.9803921568627451,
+   "recall": 0.6944444444444444,
+   "specificity": 0.999838657631494,
+   "fpr": 0.00016134236850596966,
+   "precision_ci": [
+    0.93,
+    1.0
+   ],
+   "recall_ci": [
+    0.538,
+    0.853
+   ],
+   "files_flagged": 26,
+   "files_with_fp": 1
+  },
+  "0.9": {
+   "tp": 8,
+   "fp": 0,
+   "fn": 64,
+   "tn": 6198,
+   "precision": 1.0,
+   "recall": 0.1111111111111111,
+   "specificity": 1.0,
+   "fpr": 0.0,
+   "precision_ci": [
+    1.0,
+    1.0
+   ],
+   "recall_ci": [
+    0.026,
+    0.229
+   ],
+   "files_flagged": 4,
+   "files_with_fp": 0
+  }
+ },
+ "fp_by_rule_at_0.7": {
+  "JRFC-0011.1": 1
+ },
+ "jev_cost_usd_per_file": 0.00052,
+ "jev_input_tokens_per_file": 12386,
+ "latency_s": {
+  "p50": 0.332,
+  "p95": 0.443
+ },
+ "label_cost_usd_total": 10.3177,
+ "sample": {
+  "union_pairs": 57,
+  "sample_pairs": 30,
+  "reviewed": 30,
+  "thresholds": {
+   "0.5": {
+    "tp": 42,
+    "fp": 14,
+    "fn": 2,
+    "tn": 2,
+    "precision": 0.75,
+    "recall": 0.9545454545454546,
+    "specificity": 0.125,
+    "fpr": 0.875,
+    "precision_ci": [
+     0.558,
+     0.923
+    ],
+    "recall_ci": [
+     0.842,
+     1.0
+    ]
+   },
+   "0.7": {
+    "tp": 28,
+    "fp": 0,
+    "fn": 16,
+    "tn": 16,
+    "precision": 1.0,
+    "recall": 0.6363636363636364,
+    "specificity": 1.0,
+    "fpr": 0.0,
+    "precision_ci": [
+     1.0,
+     1.0
+    ],
+    "recall_ci": [
+     0.417,
+     0.857
+    ]
+   },
+   "0.9": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 44,
+    "tn": 16,
+    "precision": null,
+    "recall": 0.0,
+    "specificity": 1.0,
+    "fpr": 0.0,
+    "precision_ci": [
+     null,
+     null
+    ],
+    "recall_ci": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  "claude_agreement": {
+   "reviewed": 84,
+   "agree": 84
+  },
+  "random_clean": {
+   "reviewed": 30,
+   "violations": 0
+  }
+ },
+ "splits": {
+  "train": {
+   "files": 50,
+   "0.5": {
+    "tp": 36,
+    "fp": 15,
+    "fn": 0,
+    "tn": 3085,
+    "precision": 0.7058823529411765,
+    "recall": 1.0,
+    "specificity": 0.9951612903225806,
+    "fpr": 0.004838709677419355,
+    "precision_ci": [
+     0.531,
+     0.857
+    ],
+    "recall_ci": [
+     1.0,
+     1.0
+    ]
+   },
+   "0.7": {
+    "tp": 24,
+    "fp": 0,
+    "fn": 12,
+    "tn": 3100,
+    "precision": 1.0,
+    "recall": 0.6666666666666666,
+    "specificity": 1.0,
+    "fpr": 0.0,
+    "precision_ci": [
+     1.0,
+     1.0
+    ],
+    "recall_ci": [
+     0.429,
+     0.895
+    ]
+   },
+   "0.9": {
+    "tp": 6,
+    "fp": 0,
+    "fn": 30,
+    "tn": 3100,
+    "precision": 1.0,
+    "recall": 0.16666666666666666,
+    "specificity": 1.0,
+    "fpr": 0.0,
+    "precision_ci": [
+     1.0,
+     1.0
+    ],
+    "recall_ci": [
+     0.0,
+     0.368
+    ]
+   }
+  },
+  "test": {
+   "files": 50,
+   "0.5": {
+    "tp": 32,
+    "fp": 21,
+    "fn": 4,
+    "tn": 3077,
+    "precision": 0.6037735849056604,
+    "recall": 0.8888888888888888,
+    "specificity": 0.9932214331826985,
+    "fpr": 0.006778566817301485,
+    "precision_ci": [
+     0.364,
+     0.882
+    ],
+    "recall_ci": [
+     0.714,
+     1.0
+    ]
+   },
+   "0.7": {
+    "tp": 26,
+    "fp": 1,
+    "fn": 10,
+    "tn": 3097,
+    "precision": 0.9629629629629629,
+    "recall": 0.7222222222222222,
+    "specificity": 0.999677211103938,
+    "fpr": 0.00032278889606197545,
+    "precision_ci": [
+     0.857,
+     1.0
+    ],
+    "recall_ci": [
+     0.524,
+     0.923
+    ]
+   },
+   "0.9": {
+    "tp": 2,
+    "fp": 0,
+    "fn": 34,
+    "tn": 3098,
+    "precision": 1.0,
+    "recall": 0.05555555555555555,
+    "specificity": 1.0,
+    "fpr": 0.0,
+    "precision_ci": [
+     1.0,
+     1.0
+    ],
+    "recall_ci": [
+     0.0,
+     0.188
+    ]
+   }
+  }
+ },
+ "fingerprint": {
+  "commit": "32765bb",
+  "app_sha": "b08fc23a46f083c6"
+ }
+}
