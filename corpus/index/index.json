@@ -1,5 +1,5 @@
 {
-  "corpus_hash": "f031cf32e8803ff3",
+  "corpus_hash": "e6d7c6cbab4b5094",
   "counts": {
     "domains": 11,
     "rfcs": 12,
@@ -205,7 +205,7 @@
       "title": "HTTP API design"
     },
     {
-      "applies_when": "The content writes log lines, error messages, traces or metric attributes, or configures a logger.",
+      "applies_when": "The content is code of a service (a backend, API, worker or job that runs in production) and writes log lines, error messages, traces or metric attributes, or configures a logger.",
       "artifacts": [
         "diff",
         "code",
@@ -217,7 +217,7 @@
         "any"
       ],
       "layer": "local",
-      "not_applies_when": "No logging, tracing, metrics or telemetry is written or configured.",
+      "not_applies_when": "No logging, tracing, metrics or telemetry is written or configured, or the code is not a service: a command-line tool, a script, a benchmark, a build or test helper, or a developer tool that runs on a laptop.",
       "owner": "sre",
       "path": "corpus/rfcs/JRFC-0003-logging-personal-data.md",
       "retired": [],
@@ -751,7 +751,7 @@
       "title": "Versioning of breaking changes"
     },
     {
-      "applies_when": "a log, print, logger, span attribute or metric label call includes fields of a user, customer, guest, reservation or payment.",
+      "applies_when": "service code has a log, print, logger, span attribute or metric label call that includes fields of a user, customer, guest, reservation or payment.",
       "artifacts": [
         "diff",
         "code",
@@ -766,15 +766,15 @@
       ],
       "layer": "local",
       "level": "MUST",
-      "not_applies_when": "No logging, tracing, metrics or telemetry is written or configured.",
+      "not_applies_when": "the code is a command-line tool, script, benchmark or local developer tool, not a service.",
       "rfc": "JRFC-0003",
-      "source": "corpus/rfcs/JRFC-0003-logging-personal-data.md#L31",
+      "source": "corpus/rfcs/JRFC-0003-logging-personal-data.md#L33",
       "status": "enforced",
       "text": "Services MUST NOT write personal data — names, email addresses, phone numbers, postal addresses, payment card data, or free-text messages written by customers — to logs, traces or metric attributes; use an opaque identifier such as the customer id instead.",
       "title": "No personal data in logs"
     },
     {
-      "applies_when": "the content adds or changes a log call.",
+      "applies_when": "service code adds or changes a log call.",
       "artifacts": [
         "diff",
         "code",
@@ -789,9 +789,9 @@
       ],
       "layer": "local",
       "level": "MUST",
-      "not_applies_when": "the content only changes logger configuration.",
+      "not_applies_when": "the content only changes logger configuration, or the code is a command-line tool, script, benchmark or local developer tool, not a service.",
       "rfc": "JRFC-0003",
-      "source": "corpus/rfcs/JRFC-0003-logging-personal-data.md#L39",
+      "source": "corpus/rfcs/JRFC-0003-logging-personal-data.md#L42",
       "status": "enforced",
       "text": "Services MUST emit logs as structured key-value records through the shared logger, not as interpolated free-text strings built by concatenation.",
       "title": "Structured logs"
@@ -812,15 +812,15 @@
       ],
       "layer": "local",
       "level": "MUST",
-      "not_applies_when": "No logging, tracing, metrics or telemetry is written or configured.",
+      "not_applies_when": "No logging, tracing, metrics or telemetry is written or configured, or the code is not a service: a command-line tool, a script, a benchmark, a build or test helper, or a developer tool that runs on a laptop.",
       "rfc": "JRFC-0003",
-      "source": "corpus/rfcs/JRFC-0003-logging-personal-data.md#L47",
+      "source": "corpus/rfcs/JRFC-0003-logging-personal-data.md#L50",
       "status": "enforced",
       "text": "Every log record written while handling a request or message MUST include the correlation id of that request or message.",
       "title": "Correlation identifier"
     },
     {
-      "applies_when": "the content adds or changes a log call with a level.",
+      "applies_when": "service code adds or changes a log call with a level.",
       "artifacts": [
         "diff",
         "code",
@@ -835,9 +835,9 @@
       ],
       "layer": "local",
       "level": "SHOULD",
-      "not_applies_when": "No logging, tracing, metrics or telemetry is written or configured.",
+      "not_applies_when": "the code is a command-line tool, script, benchmark or local developer tool, not a service.",
       "rfc": "JRFC-0003",
-      "source": "corpus/rfcs/JRFC-0003-logging-personal-data.md#L54",
+      "source": "corpus/rfcs/JRFC-0003-logging-personal-data.md#L57",
       "status": "enforced",
       "text": "Log levels SHOULD be used as follows: `error` for failures that need human action, `warn` for degraded but handled situations, `info` for business events, and `debug` for diagnostic detail that is off in production.",
       "title": "Meaningful levels"

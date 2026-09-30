@@ -1,0 +1,48 @@
+diff --git a/corpus/rfcs/JRFC-0003-logging-personal-data.md b/corpus/rfcs/JRFC-0003-logging-personal-data.md
+index 874ddf3..adac7f6 100644
+--- a/corpus/rfcs/JRFC-0003-logging-personal-data.md
++++ b/corpus/rfcs/JRFC-0003-logging-personal-data.md
+@@ -12,10 +12,12 @@ summary: >
+   How services write logs so that they are searchable, correlated and free of personal
+   data.
+ applies_when: >
+-  The content writes log lines, error messages, traces or metric attributes, or configures
+-  a logger.
++  The content is code of a service (a backend, API, worker or job that runs in production)
++  and writes log lines, error messages, traces or metric attributes, or configures a logger.
+ not_applies_when: >
+-  No logging, tracing, metrics or telemetry is written or configured.
++  No logging, tracing, metrics or telemetry is written or configured, or the code is not a
++  service: a command-line tool, a script, a benchmark, a build or test helper, or a developer
++  tool that runs on a laptop.
+ ---
+ 
+ # JRFC-0003: Logging and personal data
+@@ -33,15 +35,16 @@ Services MUST NOT write personal data — names, email addresses, phone numbers,
+ addresses, payment card data, or free-text messages written by customers — to logs,
+ traces or metric attributes; use an opaque identifier such as the customer id instead.
+ 
+-- Applies when: a log, print, logger, span attribute or metric label call includes fields of a user, customer, guest, reservation or payment.
++- Applies when: service code has a log, print, logger, span attribute or metric label call that includes fields of a user, customer, guest, reservation or payment.
++- Not applies when: the code is a command-line tool, script, benchmark or local developer tool, not a service.
+ - Enforcement: agent
+ 
+ ### JRFC-0003.2 Structured logs
+ Services MUST emit logs as structured key-value records through the shared logger, not
+ as interpolated free-text strings built by concatenation.
+ 
+-- Applies when: the content adds or changes a log call.
+-- Not applies when: the content only changes logger configuration.
++- Applies when: service code adds or changes a log call.
++- Not applies when: the content only changes logger configuration, or the code is a command-line tool, script, benchmark or local developer tool, not a service.
+ - Enforcement: agent
+ 
+ ### JRFC-0003.3 Correlation identifier
+@@ -56,5 +59,6 @@ Log levels SHOULD be used as follows: `error` for failures that need human actio
+ `warn` for degraded but handled situations, `info` for business events, and `debug` for
+ diagnostic detail that is off in production.
+ 
+-- Applies when: the content adds or changes a log call with a level.
++- Applies when: service code adds or changes a log call with a level.
++- Not applies when: the code is a command-line tool, script, benchmark or local developer tool, not a service.
+ - Enforcement: agent
