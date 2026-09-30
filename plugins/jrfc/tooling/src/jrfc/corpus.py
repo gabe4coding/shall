@@ -24,7 +24,7 @@ STATEMENT_HEAD_RE = re.compile(r"^###\s+([A-Z][A-Z0-9]{1,9}-\d{4}\.\d+)\s+(.+?)\
 LOOSE_HEAD_RE = re.compile(r"^###\s+[A-Z][A-Z0-9]{1,9}-\d")
 SECTION_HEAD_RE = re.compile(r"^#{1,3}\s")
 META_RE = re.compile(
-    r"^-\s+(Applies when|Not applies when|Enforcement|Artifacts|Tools|Violated when):\s*(.*)$", re.I)
+    r"^-\s+(Applies when|Not applies when|Enforcement|Artifacts|Tools|Violated when|Pattern):\s*(.*)$", re.I)
 # Longest alternatives first so "MUST NOT" wins over "MUST".
 KEYWORD_RE = re.compile(
     r"\b(MUST NOT|SHALL NOT|SHOULD NOT|NOT RECOMMENDED|MUST|SHALL|REQUIRED|SHOULD|RECOMMENDED|MAY|OPTIONAL)\b"
@@ -78,6 +78,7 @@ class Statement:
     artifacts: list[str] | None = None  # narrower than the RFC's, e.g. [spec]
     tools: str | None = None            # tool-name regex for `tool` statements, e.g. Bash|mcp__.*
     violated_when: str | None = None    # hook Jev criterion: what a violating tool call looks like
+    pattern: str | None = None          # linter `tool` statements: regex searched in the command
 
 
 @dataclass
@@ -247,6 +248,7 @@ def _parse_statements(rfc_id: str, body: list[str], offset: int, rel: str, issue
             artifacts=[a.strip() for a in meta["artifacts"].split(",")] if meta.get("artifacts") else None,
             tools=meta.get("tools") or None,
             violated_when=meta.get("violated when") or None,
+            pattern=meta.get("pattern") or None,
         ))
         # lint per statement
         line = offset + start + 1
@@ -269,7 +271,15 @@ def _parse_statements(rfc_id: str, body: list[str], offset: int, rel: str, issue
                 re.compile(meta["tools"])
             except re.error as err:
                 issues.append(Issue(rel, line, "error", "tools", f"{sid} Tools is not a valid regex: {err}"))
+        if meta.get("pattern"):
+            try:
+                re.compile(meta["pattern"])
+            except re.error as err:
+                issues.append(Issue(rel, line, "error", "pattern", f"{sid} Pattern is not a valid regex: {err}"))
         enf = (meta.get("enforcement") or "agent").lower()
+        if meta.get("pattern") and enf != "linter":
+            issues.append(Issue(rel, line, "error", "pattern-enforcement",
+                                f"{sid} has a Pattern, so it is checked by code: use 'Enforcement: linter'"))
         if enf not in ENFORCEMENTS:
             issues.append(Issue(rel, line, "error", "enforcement", f"{sid} has unknown enforcement '{enf}'"))
     return statements

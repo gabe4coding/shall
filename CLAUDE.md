@@ -69,8 +69,10 @@ comments with the same selection and verification evidence (`verify.gather_evide
   it records parse/download problems in `index.events`.
 - **health.py**: `health.json` + summary warnings for silent failures.
 - **hooks.py**: Claude Code hooks (`jrfc hook` command transport, `jrfc hookd` localhost HTTP
-  server, `jrfc hook-config`). Jev judges tool calls against `tool` statements (`Tools:`,
-  `Violated when:`) and written lines against code statements, p = min(applies, violates);
+  server, `jrfc hook-config`). `Enforcement: linter` tool statements are checked by code
+  (`Pattern:` regex on the command with quotes masked, or the secret scanner); Jev judges the
+  other `tool` statements (`Tools:`, `Violated when:`) and written lines against code
+  statements, p = min(applies, violates);
   `hooks.actions[status][level]` maps p to deny/ask/warn/log; writes only warn; Stop runs
   `jrfc review`. Secret scanner redacts before Jev. Fail-open on Jev timeout/error.
   The plugin ships them: `plugins/jrfc/hooks/hooks.json` → `bin/jrfc-hook` (no-op outside a

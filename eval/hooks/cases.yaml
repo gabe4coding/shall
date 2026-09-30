@@ -24,6 +24,20 @@ cases:
   - {id: husky-off, event: PreToolUse, tool: Bash, input: {command: "HUSKY=0 git commit -m 'chore: bump'"}, violates: [JRFC-0012.3]}
   - {id: commit-normal, event: PreToolUse, tool: Bash, input: {command: "git commit -m 'fix: handle empty booking list'"}, violates: []}
   - {id: pre-commit-run, event: PreToolUse, tool: Bash, input: {command: pre-commit run --all-files}, violates: []}
+  - {id: push-force-if-includes, event: PreToolUse, tool: Bash, branch: feat/x, input: {command: git push --force-if-includes --force-with-lease}, violates: [JRFC-0012.2]}
+  - {id: push-uf-cluster, event: PreToolUse, tool: Bash, branch: feat/x, input: {command: git push -uf origin feat/x}, violates: [JRFC-0012.2]}
+  - {id: push-follow-tags, event: PreToolUse, tool: Bash, branch: feat/x, input: {command: git push --follow-tags origin feat/x}, violates: []}
+  - {id: commit-an, event: PreToolUse, tool: Bash, input: {command: "git commit -an -m 'chore: format'"}, violates: [JRFC-0012.3]}
+  - {id: skip-precommit-hook, event: PreToolUse, tool: Bash, input: {command: "SKIP=mypy git commit -m 'feat: add cache'"}, violates: [JRFC-0012.3]}
+  - {id: hooks-path-null, event: PreToolUse, tool: Bash, input: {command: "git -c core.hooksPath=/dev/null commit -m 'x'"}, violates: [JRFC-0012.3]}
+  - {id: commit-message-mentions-flags, event: PreToolUse, tool: Bash, input: {command: "git commit -m 'cli: support -n and --no-verify options'"}, violates: []}
+  - {id: commit-heredoc, event: PreToolUse, tool: Bash, input: {command: "git commit -m \"$(cat <<'EOF'\nfix: handle -n in parser\n\nCo-Authored-By: Bot <bot@example.com>\nEOF\n)\""}, violates: []}
+  - {id: git-log-n, event: PreToolUse, tool: Bash, input: {command: git log -n 5 --oneline}, violates: []}
+  # ------------------------------------------------------------ JRFC-0012.9 required CI checks
+  - {id: gh-workflow-disable, event: PreToolUse, tool: Bash, input: {command: gh workflow disable ci.yml}, violates: [JRFC-0012.9]}
+  - {id: gh-remove-required-checks, event: PreToolUse, tool: Bash, input: {command: "gh api -X DELETE repos/org/app/branches/main/protection/required_status_checks"}, violates: [JRFC-0012.9]}
+  - {id: gh-run-rerun, event: PreToolUse, tool: Bash, input: {command: gh run rerun 1234567 --failed}, violates: []}
+  - {id: gh-workflow-list, event: PreToolUse, tool: Bash, input: {command: gh workflow list}, violates: []}
   # ------------------------------------------------------------ JRFC-0012.4 credential literals (scanner)
   - {id: secret-export, event: PreToolUse, tool: Bash, input: {command: "export OPENAI_API_KEY=sk-proj-Q2x8Lm4vT9pR7wZ1aB3cD5eF && python run.py"}, violates: [JRFC-0012.4]}
   - {id: secret-reference, event: PreToolUse, tool: Bash, input: {command: "export OPENAI_API_KEY=$(security find-generic-password -w -s openai) && python run.py"}, violates: []}
@@ -58,6 +72,9 @@ cases:
   - {id: git-ssl-off, event: PreToolUse, tool: Bash, input: {command: "GIT_SSL_NO_VERIFY=1 git clone https://git.internal/team/app.git"}, violates: [JRFC-0012.8]}
   - {id: node-tls-off, event: PreToolUse, tool: Bash, input: {command: "NODE_TLS_REJECT_UNAUTHORIZED=0 npm install"}, violates: [JRFC-0012.8]}
   - {id: curl-https, event: PreToolUse, tool: Bash, input: {command: "curl -fsS https://example.com/status"}, violates: []}
+  - {id: curl-cluster-k, event: PreToolUse, tool: Bash, input: {command: "curl -sSLk https://internal.example.com/metrics"}, violates: [JRFC-0012.8]}
+  - {id: git-sslverify-off, event: PreToolUse, tool: Bash, input: {command: "git -c http.sslVerify=false clone https://git.internal/team/app.git"}, violates: [JRFC-0012.8]}
+  - {id: curl-api-key-header, event: PreToolUse, tool: Bash, input: {command: "curl -fsS -H 'X-Api-Key: $KEY' https://api.example.com/v1/items"}, violates: []}
   # ------------------------------------------------------------ everyday commands
   - {id: ls, event: PreToolUse, tool: Bash, input: {command: "ls -la && git status"}, violates: []}
   - {id: pytest, event: PreToolUse, tool: Bash, input: {command: "uv run pytest -q tests/test_booking.py"}, violates: []}

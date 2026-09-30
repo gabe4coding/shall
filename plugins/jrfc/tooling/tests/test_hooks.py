@@ -119,7 +119,7 @@ def test_action_tables(org):
     assert [action_for(actions, rfc, st, p) for p in (0.95, 0.6, 0.3)] == ["deny", "ask", None]
     # after a write: at most a warning, and only above code_warn
     assert [code_action(actions, 0.7, rfc, st, p) for p in (0.95, 0.6, 0.3)] == ["warn", "log", None]
-    rfc, st = corpus.statement("JRFC-0012.1")  # draft: no table, not checked
+    rfc, st = corpus.statement("JRFC-0011.1")  # draft: no table, not checked
     assert action_for(actions, rfc, st, 0.99) is None
 
 
@@ -131,9 +131,10 @@ def test_tool_candidates_follow_tools_status_and_enforcement(org):
     bash = {st.id for _, st in hooks.tool_candidates("Bash")}
     assert "JRFC-0012.1" in bash and "JRFC-0012.7" in bash
     assert "JRFC-0012.4" not in bash  # Enforcement: linter -> the secret scanner owns it
+    assert not bash & {"JRFC-0012.2", "JRFC-0012.3", "JRFC-0012.8"}  # Pattern: checked by code
     mcp = {st.id for _, st in hooks.tool_candidates("mcp__db__query")}
     assert mcp == {"JRFC-0012.7"}
-    assert not hooks_for(org, FakeJev(), draft_as_enforced=False).tool_candidates("Bash")
+    assert not hooks_for(org, FakeJev(), statuses=["deprecated"]).tool_candidates("Bash")
 
 
 def test_pre_denies_asks_warns_by_level_and_score(org):
@@ -155,9 +156,15 @@ def test_pre_off_topic_rule_stays_quiet(org):
 
 
 def test_pre_redacts_before_jev_and_scanner_denies(org):
+    token = "export GITHUB_TOKEN=ghp_8fK2mQ9xLpR4tV7wZ1aB3cD5eF6gH0iJ2kL4"
     jev = FakeJev()
-    out = pre(hooks_for(org, jev), "Bash", {"command": "export GITHUB_TOKEN=ghp_8fK2mQ9xLpR4tV7wZ1aB3cD5eF6gH0iJ2kL4"})
+    out = pre(hooks_for(org, jev), "Bash", {"command": token})
     assert out["hookSpecificOutput"]["permissionDecision"] == "deny"  # JRFC-0012.4 via the scanner
+    assert not jev.states  # denied by code: Jev is not asked
+    # with no rule for scanner hits the call reaches Jev, redacted
+    unmapped = hooks_for(org, jev)
+    unmapped.secret_rules = []
+    pre(unmapped, "Bash", {"command": token})
     assert "ghp_" not in str(jev.states) and "[REDACTED:github-token]" in str(jev.states)
     assert jev.states[0]["git_branch"] == "feat/x"
     # a Write with a secret: JRFC-0004.1 (enforced) even without trial settings
@@ -295,3 +302,59 @@ def test_disabled_flag_and_stop_lock(org, tmp_path, monkeypatch):
     record = {}
     out = asyncio.run(hooks.stop({"hook_event_name": "Stop", "session_id": "s", "cwd": str(tmp_path)}, record))
     assert out == {} and record["skip"] == "same change is being reviewed"
+
+
+# ---------------------------------------------------------------- Pattern (linter tool statements)
+
+
+@pytest.mark.parametrize("command,sid", [
+    ("git push --force origin feat/x", "JRFC-0012.2"),
+    ("git push -uf origin feat/x", "JRFC-0012.2"),
+    ("git push origin +feat/x", "JRFC-0012.2"),
+    ("git commit -nm 'quick fix'", "JRFC-0012.3"),
+    ("SKIP=flake8 git commit -m 'x'", "JRFC-0012.3"),
+    ("curl -sSLk https://internal.example.com", "JRFC-0012.8"),
+    ("git -c http.sslVerify=false clone https://git.internal/x.git", "JRFC-0012.8"),
+])
+def test_patterns_decide_without_jev(org, command, sid):
+    jev = FakeJev()
+    hooks = hooks_for(org, jev, draft_as_enforced=False)  # JRFC-0012 is enforced
+    record = {}
+    hooks.git_branch = lambda cwd: "feat/x"
+    event = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": command}, "cwd": "/r"}
+    out = asyncio.run(hooks.pre(event, record))
+    assert record["patterns"] == [sid]
+    level = hooks.corpus.statement(sid)[1].level
+    if level == "MUST":
+        assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert "pattern]" in out["hookSpecificOutput"]["permissionDecisionReason"]
+        assert not jev.states  # already denied by code: no Jev wait
+    else:
+        assert sid in out["hookSpecificOutput"]["additionalContext"]
+
+
+@pytest.mark.parametrize("command", [
+    "git commit -m 'support -n and --no-verify in the CLI'",
+    "git push -u origin feat/login",
+    "git push --follow-tags",
+    "git fetch --force origin",
+    "git log -n 5",
+    "curl -fsS -H 'X-Api-Key: k' https://example.com",
+    "GIT_SSL_NO_VERIFY=0 git fetch",
+])
+def test_patterns_ignore_quoted_text_and_near_misses(org, command):
+    hooks = hooks_for(org, FakeJev(), draft_as_enforced=False)
+    record = {}
+    hooks.git_branch = lambda cwd: "feat/x"
+    event = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": command}, "cwd": "/r"}
+    assert asyncio.run(hooks.pre(event, record)) == {} and record["patterns"] == []
+
+
+def test_lint_checks_patterns(tmp_path):
+    from jrfc.corpus import _parse_statements
+    body = ["### XY-0001.1 One", "Agents MUST NOT do it.", "- Pattern: (unclosed", "- Enforcement: linter", "",
+            "### XY-0001.2 Two", "Agents MUST NOT do that.", "- Pattern: that", "- Enforcement: agent"]
+    issues = []
+    sts = _parse_statements("XY-0001", body, 0, "x.md", issues)
+    codes = {i.code for i in issues}
+    assert {"pattern", "pattern-enforcement"} <= codes and sts[1].pattern == "that"

@@ -132,7 +132,21 @@ and 25 writes (Python, TypeScript, an API router, a migration, README and YAML e
 | code writes, min(applies, violates) | 0.57 / 1.00 | 0.76 / 1.00 | 0.92 / 0.75 | 318 / 412 ms |
 | code writes, violation question only | 0.29 / 1.00 | 0.55 / 1.00 | 0.80 / 0.75 | 288 / 309 ms |
 
-Actions the user would see, with the draft JRFC-0012 trialled as enforced:
+After JRFC-0012.2, .3 and .8 became regex rules (`Pattern:`, no Jev) and .9 (required CI
+checks) was split from .3, with 16 more tool cases (flag clusters such as `-uf` and `-an`,
+`SKIP=`, `core.hooksPath`, `http.sslVerify=false`, commit messages and heredocs that mention
+`--no-verify`, `gh workflow disable`): 91 cases.
+
+| | precision / recall at p ≥ 0.5 | at 0.7 | at 0.9 | Jev latency p50 / p95 |
+| --- | --- | --- | --- | --- |
+| tool calls (66), patterns + Jev | 0.95 / 1.00 | 1.00 / 1.00 | 1.00 / 1.00 | 250 / 310 ms |
+
+Actions: deny 30 right / 0 wrong, ask 0 right / 1–2 wrong over two fresh runs (the same
+JRFC-0012.6 on `curl | sh` and `wget | bash`), warn 8 right / 0 wrong, 0 missed. `git commit
+-nm` is now denied (it was an ask at 0.66). When a pattern or the scanner already denies a
+call, the hook does not wait for Jev (0 ms instead of ~0.35 s).
+
+Actions the user would see before that change, with JRFC-0012 trialled as enforced:
 
 | | deny | ask | warn | missed |
 | --- | --- | --- | --- | --- |
