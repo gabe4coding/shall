@@ -60,7 +60,7 @@ no key and make no network call.
 ## Try it in 5 minutes
 
 ```bash
-git clone https://github.com/gabe4coding/jrfc.git
+git clone https://github.com/gabe4coding/shall.git
 cd shall
 make check                                  # lint the example corpus and check its index (no key needed)
 make test                                   # unit tests (no network)
@@ -104,7 +104,7 @@ repositories with a shall workspace, and four skills:
 | `shall-index` | change the corpus and the index must be rebuilt |
 
 ```bash
-claude plugin marketplace add gabe4coding/jrfc     # or a local path to a clone
+claude plugin marketplace add gabe4coding/shall     # or a local path to a clone
 claude plugin install shall@shall
 ```
 
@@ -124,7 +124,7 @@ git diff origin/main...HEAD > /tmp/pr.diff
 shall review /tmp/pr.diff --out-dir .shall-out/pr
 ```
 
-To try it with the example corpus in this repository, use `SHALL_EXTENDS=gabe4coding/jrfc@main`.
+To try it with the example corpus in this repository, use `SHALL_EXTENDS=gabe4coding/shall@main`.
 
 ### B. Organisation rules plus your repository's own rules
 
