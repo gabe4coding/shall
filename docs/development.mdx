@@ -1,0 +1,146 @@
+---
+title: Development
+description: Repository layout, code map, tests, evals, the rules of this repository and how to release plugin changes.
+---
+
+# Development
+
+## Repository layout
+
+| Path | Content |
+| --- | --- |
+| `corpus/` | The example organisation corpus: `rfcs/`, `domains.yaml`, `effects.yaml`, the generated `index/` |
+| `jrfc.yaml` | The configuration of the example organisation corpus |
+| `.jrfc/` | The rules of this repository for its own code (prefix `JTOOL-`) |
+| `plugins/jrfc/` | The Claude Code plugin: `skills/`, `agents/`, `hooks/hooks.json`, `bin/` |
+| `plugins/jrfc/tooling/` | The Python package of the CLI (`uv` project, Python 3.11+, tests) |
+| `ci/github/` | Workflow templates for a corpus repository and for application repositories |
+| `examples/booking-service/.jrfc/` | The local rules of an example application repository (`BOOK-`) |
+| `eval/` | Labelled cases: `cases/`, `scale/`, `facts/` (selection), `verify/`, `triage/`, `hooks/`, `scan/` |
+| `docs/` | This documentation |
+
+## Three workspaces
+
+Three jrfc workspaces are in this repository. Select the correct one:
+
+| Workspace | How to select it | Prefix |
+| --- | --- | --- |
+| The rules of this repository | `jrfc` without options (`.jrfc/`) | `JTOOL-` |
+| The example organisation corpus | `jrfc --config jrfc.yaml` (the Makefile does this) | `JRFC-` |
+| The scale eval corpus | `jrfc --config eval/scale/.jrfc/jrfc.yaml` | |
+
+`.jrfc/` extends the example corpus with `path: ..`.
+
+## Code map
+
+The code is in `plugins/jrfc/tooling/src/jrfc/`. The flow of `jrfc review`:
+
+```
+cli.py → config.py → corpus.py → artifact.py → effects.py → select.py → review.py
+       → verify.py (+ codegraph.py) → health.py → outputs
+```
+
+| Module | What it does |
+| --- | --- |
+| `config.py` | Finds the configuration, loads one optional parent layer (`extends`, downloaded by `fetch.py`), merges the settings. The defaults are in `DEFAULTS`. |
+| `corpus.py` | Parses the RFC files, runs the lint rules, merges the layers, loads `effects.yaml` of each layer |
+| `index.py` | Writes `index.json` and `catalog.md`, byte for byte the same for the same input |
+| `artifact.py` | Splits the input into `Chunk`s: one for each file of a diff, split by size. `Chunk.state()` is the Jev state. |
+| `effects.py` | Finds the known side effects of library calls, direct and through `codegraph.expand` |
+| `select.py` | The prefilter in code, then one Jev Noul for each statement (`flat`) or domain → RFC → statement (`layered`) |
+| `jev.py` | The only access point to TypeSafe: cache, request packing, retries, usage |
+| `review.py` | The reviewer prompt, `run_claude` (`claude -p` without tools), `validate_findings`, the rendering |
+| `verify.py`, `codegraph.py` | Evidence for blocking findings (tree-sitter, imports, `git grep`), the verifier agent, `apply_verdict` |
+| `health.py` | `health.json` and the warnings about silent failures |
+| `publish.py` | Posts to GitHub. Deterministic, with `--dry-run`. |
+| `triage.py` | Sorts the comments of other AI reviewers |
+| `hooks.py` | The Claude Code hooks: `jrfc hook`, `jrfc hookd`, `jrfc hook-config` |
+| `scan.py` | Lints whole files with `Hooks.judge_code` |
+| `conflicts.py` | Compares pairs of statements with Jev |
+| `evaluate.py` | The selection eval and the verification eval |
+
+[Architecture](./architecture.mdx) tells why the code works this way.
+
+## Tests and checks
+
+```bash
+make test                     # unit tests, no network
+make check                    # example corpus: lint and index are current (no model calls)
+make self-check               # rules of this repository: lint and index
+make build                    # write corpus/index/ again after a change to corpus/
+```
+
+To run one test:
+
+```bash
+uv run --quiet --project plugins/jrfc/tooling pytest -q plugins/jrfc/tooling/tests/test_effects.py -k fetch
+```
+
+## Evals
+
+Before you change a threshold, the wording of a question, a prompt or the selection logic, run the
+related eval before and after the change. Compare the results.
+
+```bash
+make eval          # selection on 11 cases (needs TYPESAFE_API_KEY)
+make eval-scale    # selection with ~540 rules, 20 cases
+make eval-facts    # known effects on and off, 19 files in 9 languages
+make eval-triage   # triage, 24 labelled comments (needs TYPESAFE_API_KEY and claude)
+make eval-hooks    # hook judge, 75 labelled tool calls and writes (--no-cache to measure latency)
+plugins/jrfc/bin/jrfc --config jrfc.yaml eval-verify --retrieval treesitter   # verification (needs claude)
+```
+
+The caches in `.jrfc-cache/` keep the answers. A second run pays only for the questions that
+changed. To measure the behavior of a model, use `--no-cache`.
+
+Know these facts about the eval data:
+
+- In `eval/scale/labels.yaml`, most labels were accepted automatically where Claude and Jev-flat
+  agreed. Thus the flat recall there is too high. The subset that a person reviewed is the unbiased
+  measure.
+- The eval copies the `eval/verify/*` fixtures to a temporary folder and runs `git init` there. The
+  code graph needs `git grep`.
+
+The current numbers are in [Results](./results.mdx).
+
+## The rules of this repository
+
+This repository applies its own standards. The rules are in `.jrfc/rfcs/JTOOL-*.md`:
+
+| RFC | Topic |
+| --- | --- |
+| [JTOOL-0001](../.jrfc/rfcs/JTOOL-0001-jev-usage.md) | Use of Jev: only through `jrfc.jev.Jev`, small state, absolute Nouls, pinned model ids |
+| [JTOOL-0002](../.jrfc/rfcs/JTOOL-0002-agent-boundaries.md) | Agents: no tools, code validates each output, agents can only lower severity, deterministic writes with `--dry-run` |
+| [JTOOL-0003](../.jrfc/rfcs/JTOOL-0003-cli-contract.md) | CLI: exit codes, deterministic commands never call a model, reproducible generated files |
+| [JTOOL-0004](../.jrfc/rfcs/JTOOL-0004-plugin-content.md) | Plugin skills and agents |
+
+To review your changes against these rules and the rules of the example corpus:
+
+```bash
+make self-review
+```
+
+## Change the corpus
+
+- Use one RFC 2119 level for each statement. Write the keywords in UPPERCASE only.
+- Never renumber or reuse a statement id. Retire it.
+- Agents make `status: draft` only. The domain owner decides about a promotion.
+- After a change to `corpus/`, run `make build` and `make check`. After a change to `.jrfc/`, run
+  `jrfc build`.
+
+[Standards](./standards.mdx) has all the rules.
+
+## Release plugin changes
+
+When you change `plugins/jrfc/skills/`, `agents/` or `hooks/`, increase `version` in
+`plugins/jrfc/.claude-plugin/plugin.json`. Claude Code keeps a cache of each plugin version.
+
+The prompts in `plugins/jrfc/agents/*.md` are also the system prompts of `jrfc review` in CI. A
+change to a prompt changes the cache keys and the behavior. Run the related eval before and after.
+
+## Contribute
+
+1. Open an issue or a draft pull request that tells the problem.
+2. Run `make test`, `make check` and `make self-check`.
+3. For a change to selection, prompts or thresholds, add the eval results to the pull request.
+4. Do not put real company code, names or secrets in tests, evals or docs. This repository is public.

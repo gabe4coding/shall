@@ -811,7 +811,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("triage", help="triage other AI reviewers' PR comments: relevant, unverified, noise (Jev + agent)")
     s.add_argument("path", help="the PR diff the comments were made on")
-    s.add_argument("--comments", help="review threads as JSON (shape of `jrfc triage --pr`, see README)")
+    s.add_argument("--comments", help="review threads as JSON (shape of `jrfc triage --pr`, see docs/triage.mdx)")
     s.add_argument("--pr", type=int, help="read the review threads of this PR with gh (read only)")
     s.add_argument("--repo", help="owner/name (default: $GITHUB_REPOSITORY)")
     s.add_argument("--findings", help="jrfc findings.json: bot comments repeating a finding are noise")

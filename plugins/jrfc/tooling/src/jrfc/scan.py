@@ -9,7 +9,7 @@
              at p >= threshold, never blocking: one file is not evidence (JTOOL-0002.6)
 
 Jev answers are cached like everywhere else, so a second scan of unchanged files is free.
-Measured on 100 real files (eval/scan, docs/results.md): ~$0.0005 and ~0.4 s per file.
+Measured on 100 real files (eval/scan, docs/results.mdx): ~$0.0005 and ~0.4 s per file.
 """
 
 from __future__ import annotations
