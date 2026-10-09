@@ -1,0 +1,9 @@
+# shall workspace: repository-specific standards on top of the organisation corpus.
+# Local rules may add or tighten requirements; they must not weaken organisation rules
+# (`shall conflicts --local` fails CI when one does).
+prefix: BOOK
+extends:
+  path: ../../..
+  name: shall              # layer label in indexes; without it the checkout folder name is used
+# settings (jev, selection, review) are inherited from the organisation corpus;
+# override them here only when this repository needs it.

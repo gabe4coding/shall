@@ -1,14 +1,14 @@
 {
-  "name": "jrfc",
+  "name": "shall",
   "owner": {
     "name": "gpavanello"
   },
   "plugins": [
     {
-      "name": "jrfc",
-      "source": "./plugins/jrfc",
+      "name": "shall",
+      "source": "./plugins/shall",
       "description": "Engineering standards corpus tooling and review agent (PoC)."
     }
   ],
-  "description": "jrfc engineering standards: corpus authoring, deterministic index, Jev-based applicability selection and agent review."
+  "description": "shall engineering standards: corpus authoring, deterministic index, Jev-based applicability selection and agent review."
 }

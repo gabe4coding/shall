@@ -1,6 +1,6 @@
 ---
 title: Standards
-description: Write and maintain jrfc standards, add known effects of libraries, and create the standards corpus of your organisation.
+description: Write and maintain shall standards, add known effects of libraries, and create the standards corpus of your organisation.
 ---
 
 # Standards
@@ -47,7 +47,7 @@ The full format is in [JRFC-0001](../corpus/rfcs/JRFC-0001-rfc-format.md).
 | `Applies when:` | The criterion for Jev. Write it literally. |
 | `Not applies when:` | Content that looks similar but is out of scope |
 | `Artifacts:` | Optional. Narrower than the `artifacts` of the RFC, for example `spec` for a rule about design documents. |
-| `Enforcement:` | `agent`, `linter` or `human`. jrfc never sends a `linter` statement to a model. |
+| `Enforcement:` | `agent`, `linter` or `human`. shall never sends a `linter` statement to a model. |
 | `Tools:`, `Violated when:`, `Pattern:` | For `tool` rules that the [hooks](./hooks.mdx#tool-rules) check |
 
 ## Write statements that work
@@ -66,7 +66,7 @@ The full format is in [JRFC-0001](../corpus/rfcs/JRFC-0001-rfc-format.md).
 
 | Status | Effect in a review |
 | --- | --- |
-| `draft` | A proposal. jrfc does not use it in reviews unless you use `--include-draft`. |
+| `draft` | A proposal. shall does not use it in reviews unless you use `--include-draft`. |
 | `approved` | Advisory comments |
 | `enforced` | A MUST statement blocks merges. Other levels give advisory comments. |
 | `deprecated` | Not used. `superseded_by:` names the replacement. |
@@ -78,33 +78,33 @@ These rules apply to all changes:
 - **Never renumber or reuse an id.** To change the meaning of a statement, add a new statement. Put
   the old id in the `retired:` list of the front matter. Past review comments then still point to
   the text that they quoted.
-- **Keep standards current.** Each RFC has an `owner` and a `review_by` date. `jrfc lint` gives a
+- **Keep standards current.** Each RFC has an `owner` and a `review_by` date. `shall lint` gives a
   warning when the date is in the past.
 
 ## Workflow
 
 ```bash
-jrfc new --domain reliability --title "Idempotent retries"   # the next free id, status: draft
-jrfc lint                                  # format, levels, ids
-jrfc conflicts corpus/rfcs/JRFC-0012-*.md  # duplicates and conflicts with existing rules (Jev)
-jrfc build                                 # write the index again, then commit it
+shall new --domain reliability --title "Idempotent retries"   # the next free id, status: draft
+shall lint                                  # format, levels, ids
+shall conflicts corpus/rfcs/JRFC-0012-*.md  # duplicates and conflicts with existing rules (Jev)
+shall build                                 # write the index again, then commit it
 ```
 
-With the plugin, ask Claude: *"write a standard for idempotent retries"*. The skill `jrfc-author`
+With the plugin, ask Claude: *"write a standard for idempotent retries"*. The skill `shall-author`
 follows these rules.
 
 ## The index
 
-`jrfc build` writes `corpus/index/index.json` and `corpus/index/catalog.md` from the RFC files. No
+`shall build` writes `corpus/index/index.json` and `corpus/index/catalog.md` from the RFC files. No
 model runs. The output is the same, byte for byte, for the same input. Commit the index together
-with the change to the RFC. `jrfc build --check` fails in CI when the index is not current.
+with the change to the RFC. `shall build --check` fails in CI when the index is not current.
 
 A statement is blocking when its RFC is `enforced` and its level is MUST. The build calculates this
 value. You do not write it.
 
 ## Known effects
 
-A rule about network calls, databases or processes applies only when jrfc can see that the code does
+A rule about network calls, databases or processes applies only when shall can see that the code does
 that. Sometimes a library hides it: `get_parser(lang)` downloads a file, and `db.Query(...)` uses the
 network. Do not make the rule wider. Add an entry to `effects.yaml`:
 
@@ -118,9 +118,9 @@ network. Do not make the rule wider. Add an entry to `effects.yaml`:
 ```
 
 - Write `effect` as a literal clause.
-- Use `calls` when possible. A `methods` name matches only when jrfc can trace its receiver to the
+- Use `calls` when possible. A `methods` name matches only when shall can trace its receiver to the
   module. A false fact is worse than no fact.
-- jrfc also follows calls through your repository for 3 hops. It finds a wrapper around `requests`
+- shall also follows calls through your repository for 3 hops. It finds a wrapper around `requests`
   in a different file.
 
 [`corpus/effects.yaml`](../corpus/effects.yaml) has more than 30 entries.
@@ -132,18 +132,18 @@ The corpus in this repository is an example. To make one for your organisation:
 1. Create a repository, for example `your-org/engineering-standards`, with these files:
 
    ```
-   jrfc.yaml               # prefix: JRFC, paths, pinned Jev model, thresholds (copy the one in this repo)
+   shall.yaml               # prefix: JRFC, paths, pinned Jev model, thresholds (copy the one in this repo)
    corpus/domains.yaml     # your areas: api, security, reliability, ... (title, owner, applies_when)
    corpus/rfcs/            # your standards
    corpus/effects.yaml     # optional: known effects of the libraries that you use
-   corpus/index/           # written by `jrfc build`, committed
+   corpus/index/           # written by `shall build`, committed
    ```
 
 2. Give each domain an owner. Add a `CODEOWNERS` rule, so that the owner approves the changes.
-3. Copy [`ci/github/jrfc-corpus.yml`](../ci/github/jrfc-corpus.yml). It runs the lint, the index
+3. Copy [`ci/github/shall-corpus.yml`](../ci/github/shall-corpus.yml). It runs the lint, the index
    check and the id stability check on each pull request. It does not call a model.
 4. Tag the releases, for example `v2026.09`. Application repositories pin a tag in `extends.ref`.
-5. Make sure that Jev selects your rules where they apply. Add cases to `eval/` and run `jrfc eval`.
+5. Make sure that Jev selects your rules where they apply. Add cases to `eval/` and run `shall eval`.
    Read [Development → Evals](./development.mdx#evals).
 
 To add rules for one repository only, read [Review → Local rules](./review.mdx#organisation-rules-and-local-rules).

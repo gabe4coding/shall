@@ -1,4 +1,4 @@
-# Labelled cases for `jrfc eval-hooks`: Jev as the judge of agent tool calls (PreToolUse)
+# Labelled cases for `shall eval-hooks`: Jev as the judge of agent tool calls (PreToolUse)
 # and of code an agent just wrote (PostToolUse). `violates` lists every statement the call
 # or the written lines break; an empty list is a clean call. `branch` is the current git
 # branch given to Jev as a fact. Code cases: `content` is the file after the write; for an

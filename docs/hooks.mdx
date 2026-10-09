@@ -10,12 +10,12 @@ The level of the rule and the status of its standard select the action.
 
 ## What the hooks check
 
-| When | What jrfc checks | Possible actions | Time |
+| When | What shall checks | Possible actions | Time |
 | --- | --- | --- | --- |
 | Before a Bash or MCP call | `tool` rules ([JRFC-0012](../corpus/rfcs/JRFC-0012-agent-tool-use.md)): regex patterns, then Jev | deny, ask, warn | ~0.3 s |
 | Before a Write or Edit | Secret scanner (code, not Jev) | deny | ~1 ms |
 | After a Write or Edit | Code rules on the written lines and the lines around them | warn only | ~0.3 s |
-| End of the turn of the agent (Stop) | The full change, with `jrfc review` | block (verified findings only) | Some seconds. jrfc skips it when nothing changed. |
+| End of the turn of the agent (Stop) | The full change, with `shall review` | block (verified findings only) | Some seconds. shall skips it when nothing changed. |
 
 ## Default actions
 
@@ -35,29 +35,29 @@ can block.
 
 ## Safety
 
-- **Redaction.** The secret scanner removes secrets from each input before jrfc sends it to Jev.
+- **Redaction.** The secret scanner removes secrets from each input before shall sends it to Jev.
 - **Fail-open.** If Jev is slow (more than `hooks.timeout`, 3 s) or not available, the call runs.
-- **Log.** jrfc adds each decision to `.jrfc-cache/hooks/decisions.jsonl`.
-- **No loops.** The agents that jrfc starts get `JRFC_HOOKS_DISABLED=1`. Their hooks do nothing.
+- **Log.** shall adds each decision to `.shall-cache/hooks/decisions.jsonl`.
+- **No loops.** The agents that shall starts get `SHALL_HOOKS_DISABLED=1`. Their hooks do nothing.
 
 Without `TYPESAFE_API_KEY`, only the secret scanner runs.
 
 ## With the plugin
 
-The plugin turns the hooks on. `hooks/hooks.json` runs `bin/jrfc-hook` for each event:
+The plugin turns the hooks on. `hooks/hooks.json` runs `bin/shall-hook` for each event:
 
-- Outside a jrfc workspace, it stops in a few milliseconds.
-- If `jrfc hookd` runs for the repository, it sends the event to that server (~0.3 s for each call).
-- If not, it runs `jrfc hook` (~0.5 s for each call).
+- Outside a shall workspace, it stops in a few milliseconds.
+- If `shall hookd` runs for the repository, it sends the event to that server (~0.3 s for each call).
+- If not, it runs `shall hook` (~0.5 s for each call).
 
 To keep the Jev connection open, start the server. It is optional:
 
 ```bash
-jrfc hookd &                  # port: hooks.port, 8765
+shall hookd &                  # port: hooks.port, 8765
 ```
 
 To turn off the hooks in a workspace, set `hooks: {enabled: false}`. To turn off only the review at
-the end of the turn, set `hooks: {stop: {enabled: false}}`. This review runs `jrfc review` with
+the end of the turn, set `hooks: {stop: {enabled: false}}`. This review runs `shall review` with
 Claude when the change is new.
 
 ## Without the plugin
@@ -66,14 +66,14 @@ Print a settings block. Merge it into `.claude/settings.json` (project) or `~/.c
 (user). Do not use the plugin and this block together: if you do, each hook runs two times.
 
 ```bash
-jrfc hook-config                      # http hooks to `jrfc hookd` (you start the server)
-jrfc hook-config --transport command  # no server: one process for each call
-jrfc hook-config --no-stop            # without the review at the end of the turn
+shall hook-config                      # http hooks to `shall hookd` (you start the server)
+shall hook-config --transport command  # no server: one process for each call
+shall hook-config --no-stop            # without the review at the end of the turn
 ```
 
-`jrfc hookd` checks only events whose working directory is in its repository. Other events get the
-status 421. Run one server for each repository with `--port` (`JRFC_HOOKD_PORT` for the plugin). To
-require a bearer token, set `JRFC_HOOK_TOKEN` before you start `hookd` and the hooks.
+`shall hookd` checks only events whose working directory is in its repository. Other events get the
+status 421. Run one server for each repository with `--port` (`SHALL_HOOKD_PORT` for the plugin). To
+require a bearer token, set `SHALL_HOOK_TOKEN` before you start `hookd` and the hooks.
 
 ## Tool rules
 
@@ -83,7 +83,7 @@ that must match the full tool name.
 
 Code checks the rules with `Enforcement: linter` exactly, without Jev:
 
-- **With a `Pattern:`.** jrfc searches the command for a regular expression. It masks quoted
+- **With a `Pattern:`.** shall searches the command for a regular expression. It masks quoted
   strings first, so a commit message that contains `--no-verify` does not match. Examples:
   JRFC-0012.2 (force push), JRFC-0012.3 (skipped git hooks), JRFC-0012.8 (TLS verification off). A
   match counts as p = 1.
@@ -98,7 +98,7 @@ To try the tool rules of a draft standard before its owner approves them, add a 
 table in a workspace:
 
 ```yaml
-# .jrfc/jrfc.yaml
+# .shall/shall.yaml
 hooks:
   actions:
     draft: {MUST: [[0.9, deny], [0.5, ask]], SHOULD: [[0.7, warn]], MAY: [[0.7, log]]}
@@ -107,7 +107,7 @@ hooks:
 ## Limits
 
 The hooks see one call at a time. A violation can be split over many calls, for example "write a
-script, then run it". jrfc judges each call alone. The Stop review sees the files that result, not
+script, then run it". shall judges each call alone. The Stop review sees the files that result, not
 the commands. After a write, Jev judges the written lines and 15 lines around them only.
 
 The settings are in [Configuration](./configuration.mdx#hooks). The design and the measurements are

@@ -7,21 +7,21 @@ description: Review each pull request in GitHub Actions or another CI system, bl
 
 ## GitHub Actions
 
-1. Copy [`ci/github/jrfc-review.yml`](../ci/github/jrfc-review.yml) to `.github/workflows/` in
+1. Copy [`ci/github/shall-review.yml`](../ci/github/shall-review.yml) to `.github/workflows/` in
    your repository.
-2. Change the lines with `TODO`: the tooling repository and its ref, and `JRFC_EXTENDS` if your
-   repository has no `.jrfc/` folder.
+2. Change the lines with `TODO`: the tooling repository and its ref, and `SHALL_EXTENDS` if your
+   repository has no `.shall/` folder.
 3. Add these repository secrets:
 
    | Secret | Necessary for |
    | --- | --- |
    | `TYPESAFE_API_KEY` | Selection of the rules (Jev) |
    | `ANTHROPIC_API_KEY` | The review (`claude -p`) |
-   | `JRFC_GIT_TOKEN` | Read access to the tooling and corpus repositories, if they are private |
+   | `SHALL_GIT_TOKEN` | Read access to the tooling and corpus repositories, if they are private |
 
 4. Open a pull request. The job posts inline comments and one summary comment. It uploads
-   `.jrfc-out/pr` as an artifact.
-5. To block merges on enforced rules, make the `jrfc / review` job a **required check**. The job
+   `.shall-out/pr` as an artifact.
+5. To block merges on enforced rules, make the `shall / review` job a **required check**. The job
    exits with code 2 when a blocking finding stays after verification.
 
 ## Other CI systems
@@ -29,25 +29,25 @@ description: Review each pull request in GitHub Actions or another CI system, bl
 Run this command from the root of the repository:
 
 ```bash
-plugins/jrfc/bin/jrfc-pr-review --base origin/main --post 123 --fail-on-blocking
+plugins/shall/bin/shall-pr-review --base origin/main --post 123 --fail-on-blocking
 ```
 
-The header of [`jrfc-pr-review`](../plugins/jrfc/bin/jrfc-pr-review) lists all options. The command
+The header of [`shall-pr-review`](../plugins/shall/bin/shall-pr-review) lists all options. The command
 uses `gh` to post. Add `--dry-run` to see the plan without a change to the pull request.
 
-`jrfc publish` is the only step that writes outside the working directory. It is deterministic code.
-Do not post the comments with `gh api`: `jrfc publish` prevents duplicate comments.
+`shall publish` is the only step that writes outside the working directory. It is deterministic code.
+Do not post the comments with `gh api`: `shall publish` prevents duplicate comments.
 
 ## Runs after each push
 
 You can run the review after each push. It is safe, and it costs little:
 
-- Each comment has a key from its rule and the content of its line. jrfc does not post the same
-  finding two times. When a line is fixed, jrfc resolves its thread. A thread that a person resolved
+- Each comment has a key from its rule and the content of its line. shall does not post the same
+  finding two times. When a line is fixed, shall resolves its thread. A thread that a person resolved
   stays resolved.
-- jrfc reviews a file again only when its diff, its rules or its known effects changed. It checks a
+- shall reviews a file again only when its diff, its rules or its known effects changed. It checks a
   blocking finding again only when its evidence changed. The answers stay in
-  `.jrfc-cache/review.json`. The workflow keeps this cache for each pull request.
+  `.shall-cache/review.json`. The workflow keeps this cache for each pull request.
 
 Example: a push that changed one file of a pull request with two files cost $0.15 instead of $0.39.
 A run on an unchanged push cost $0.
@@ -71,11 +71,11 @@ These are estimates for one review run, from measured unit costs:
 | Medium | 5–10 | ~$0.30–0.60 | Only the files that changed |
 | Large | 20–40 | ~$1.20–2.50 | Only the files that changed |
 
-jrfc does not send a file to Claude when no rule applies to it, for example a style sheet.
+shall does not send a file to Claude when no rule applies to it, for example a style sheet.
 
 ## The corpus repository
 
 The repository of your standards needs its own checks. Copy
-[`ci/github/jrfc-corpus.yml`](../ci/github/jrfc-corpus.yml). It runs the lint, the index check and
+[`ci/github/shall-corpus.yml`](../ci/github/shall-corpus.yml). It runs the lint, the index check and
 the id stability check on each pull request. It does not call a model. Read
 [Standards → Create a corpus](./standards.mdx#create-the-corpus-of-your-organisation).

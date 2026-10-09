@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# shall CLI wrapper. On PATH when the shall plugin is enabled; CI calls it directly.
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export SHALL_PLUGIN_ROOT="${SHALL_PLUGIN_ROOT:-$(dirname "$here")}"
+exec uv run --quiet --project "$SHALL_PLUGIN_ROOT/tooling" shall "$@"

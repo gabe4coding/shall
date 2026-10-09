@@ -5,31 +5,31 @@ description: Lint whole files against the code rules with the judgment of the po
 
 # Scan
 
-`jrfc scan` applies the code rules to whole files. It uses the same judgment as the hook that runs
+`shall scan` applies the code rules to whole files. It uses the same judgment as the hook that runs
 after a write:
 
 1. The secret scanner checks the raw text.
-2. jrfc removes the secrets from the text.
-3. jrfc sends one Jev request for each file. For each rule, p = min(applies, violates).
+2. shall removes the secrets from the text.
+3. shall sends one Jev request for each file. For each rule, p = min(applies, violates).
 
 No agent runs.
 
 ## Run a scan
 
 ```bash
-jrfc scan                          # the current folder: tracked and untracked files, not ignored files
-jrfc scan src/ lib/client.py       # files or folders
-jrfc scan --fail-on-blocking       # CI: exit 2 on a secret-scanner hit on an enforced MUST rule
-jrfc scan --threshold 0.5          # more warnings: higher recall, more noise
+shall scan                          # the current folder: tracked and untracked files, not ignored files
+shall scan src/ lib/client.py       # files or folders
+shall scan --fail-on-blocking       # CI: exit 2 on a secret-scanner hit on an enforced MUST rule
+shall scan --threshold 0.5          # more warnings: higher recall, more noise
 ```
 
 The scan prints one line for each warning: `path[:line]: ID [level, p] title`. It writes `scan.md`
-and `scan.json` to `--out-dir` (default `.jrfc-out`).
+and `scan.json` to `--out-dir` (default `.shall-out`).
 
 ## Read the warnings
 
 A Jev warning never blocks. One file is not sufficient evidence. Read the code before you change it,
-or run `jrfc review` on the change to get verified findings. Only secret-scanner hits can block.
+or run `shall review` on the change to get verified findings. Only secret-scanner hits can block.
 
 ## What the scan skips
 
@@ -38,7 +38,7 @@ or run `jrfc review` on the change to get verified findings. Only secret-scanner
 - Files larger than `scan.max_file_chars`
 
 The scan uses the statuses in `selection.include_status`. To try draft rules, use
-`--status draft,approved,enforced`. jrfc keeps the answers in a cache, so a second scan pays only for
+`--status draft,approved,enforced`. shall keeps the answers in a cache, so a second scan pays only for
 the files that changed.
 
 ## Outputs and exit codes
@@ -52,7 +52,7 @@ the files that changed.
 | --- | --- |
 | 0 | Done |
 | 2 | Only with `--fail-on-blocking` (secret-scanner hits) or `--fail-on-warn` (any warning) |
-| 3 | Jev failed for a file. A scan that skips files silently looks clean, so jrfc does not fail open here. |
+| 3 | Jev failed for a file. A scan that skips files silently looks clean, so shall does not fail open here. |
 
 ## Measurements
 
@@ -63,4 +63,4 @@ Measured on 100 real files (`eval/scan`, [Results](./results.mdx#whole-file-scan
   eval found.
 
 Rules that a linter can check exactly, for example type hints or formatting, belong to a linter.
-Mark them `Enforcement: linter`. jrfc does not send them to Jev.
+Mark them `Enforcement: linter`. shall does not send them to Jev.
