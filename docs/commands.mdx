@@ -1,0 +1,65 @@
+---
+title: Commands
+description: Every shall command, whether it calls a model, and what it does.
+---
+
+# Commands
+
+Run `shall --help` to see all the commands. To see the options of a command, run
+`shall <command> --help`.
+
+Commands without a model call are deterministic. They do not need a key.
+
+## Corpus
+
+| Command | Calls a model? | What it does |
+| --- | --- | --- |
+| `shall lint [--against base-index.json]` | No | Checks the files, the levels, the ids and the id stability |
+| `shall build [--check]` | No | Writes the index again. `--check` fails when the index is not current. |
+| `shall list`, `shall show ID…` | No | Shows the RFCs and the statements |
+| `shall catalog` | No | Shows one line for each statement of all layers |
+| `shall new --domain D --title T` | No | Makes a new draft with the next free id |
+| `shall init --prefix P --repo R --ref T` | No | Makes a `.shall/` folder in a repository |
+| `shall fetch [--update]` | No (git) | Downloads the pinned organisation corpus |
+| `shall conflicts FILE` / `--local` | Jev | Finds duplicates, weaker rules and conflicts between rules |
+
+## Review
+
+| Command | Calls a model? | What it does |
+| --- | --- | --- |
+| `shall select PATH \| --text T` | Jev | Shows the rules that apply, with probabilities |
+| `shall review PATH` | Jev and Claude | Select → review → validate → verify → reports |
+| `shall bundle`, `validate`, `verify` | It changes | The review in separate steps. The skill `shall-review` uses them. |
+| `shall publish --pr N [--dry-run] [--resolve-noise]` | No | Posts a review to a GitHub pull request. With `triage.json`, it adds the triage and can resolve the noise threads. |
+| `shall triage DIFF --pr N \| --comments F` | Jev and Claude | Sorts the comments of other AI reviewers: relevant, unverified, noise, outdated |
+| `shall scan [PATHS…]` | Jev | Lints whole files: secret scanner and one Jev request for each file |
+| `shall prefetch` | No (download) | Downloads the parser grammars for the languages of the repository (CI) |
+
+## Hooks
+
+| Command | Calls a model? | What it does |
+| --- | --- | --- |
+| `shall hook` | Jev (and Claude on Stop) | Handles one Claude Code hook event from stdin |
+| `shall hookd [--port P]` | Jev (and Claude on Stop) | Serves hook events on localhost for `type: http` hooks |
+| `shall hook-config [--transport http\|command] [--no-stop]` | No | Prints the `hooks` block for `.claude/settings.json` |
+
+## Evals
+
+| Command | Calls a model? | What it does |
+| --- | --- | --- |
+| `shall eval` | Jev | Measures the selection on labelled cases |
+| `shall eval-verify` | Claude | Measures the verification |
+| `shall eval-triage` | Jev and Claude | Measures the triage |
+| `shall eval-hooks` | Jev | Measures the hook judge |
+
+Read [Development → Evals](./development.mdx#evals).
+
+## Scripts
+
+| Script | What it does |
+| --- | --- |
+| `plugins/shall/bin/shall` | The CLI. A wrapper around `uv run`. |
+| `plugins/shall/bin/shall-pr-review` | The review of a pull request for any CI system. See [CI](./ci.mdx). |
+| `plugins/shall/bin/shall-hook` | The entry point of the plugin hooks. See [Hooks](./hooks.mdx). |
+
+The exit codes are in [Review → Exit codes](./review.mdx#exit-codes).

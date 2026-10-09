@@ -1,5 +1,5 @@
 {
-  "description": "shall: apply the engineering standards to an agent's tool calls (Jev) and review the change when the agent stops. Active only in repositories with a shall workspace; see README 'While an agent works'.",
+  "description": "shall: apply the engineering standards to an agent's tool calls (Jev) and review the change when the agent stops. Active only in repositories with a shall workspace; see docs/hooks.mdx in the shall repository.",
   "hooks": {
     "PreToolUse": [
       {

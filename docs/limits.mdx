@@ -1,0 +1,24 @@
+---
+title: Known limits
+description: What shall does not do yet, and what to know before you use it on real code.
+---
+
+# Known limits
+
+- **Proof of concept.** We measured shall on cases that we wrote for it, not on real pull requests.
+  Read [Results](./results.mdx).
+- **Recall is not perfect.** On difficult cases, Jev does not select approximately 1 in 4 rules that
+  apply. `health.json` lists the rules with a score just below the threshold.
+- **The code graph uses imports and names, not types.** It does not follow dependency injection,
+  reflection, or clients that YAML files or environment variables configure.
+- **shall verifies only blocking findings.** It does not check advisory comments against the rest of
+  the repository.
+- **Triage sees the bot comments that exist when the job runs.** If a bot comments after the shall
+  job, shall sorts the comment on the next push. shall reads only inline review threads, not the
+  comments on the full pull request.
+- **Two external services.** If TypeSafe or Anthropic is not available, the job fails with exit
+  code 3.
+- **Data goes out of your machine.** shall sends diffs to TypeSafe and Anthropic.
+- **Hooks see one call at a time.** A violation can be split over many calls, for example "write a
+  script, then run it". shall judges each call alone. The Stop review sees the files that result, not
+  the commands. After a write, Jev judges the written lines and 15 lines around them only.

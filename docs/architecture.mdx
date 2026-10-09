@@ -1,0 +1,245 @@
+---
+title: Architecture
+description: shall selects the standards that apply to an artifact, reviews it against them, verifies each finding with evidence, and publishes the result to a pull request.
+---
+
+# shall architecture
+
+This page explains how shall selects the standards that apply, reviews against them, and keeps the result trustworthy. For setup and usage, see the [README](../README.md). For measurements, see [results](./results.mdx).
+
+## Pipeline
+
+```
+artifact (diff | spec | doc | code | task)
+   │
+   ├─ code   split into chunks (one per file; large files by size)
+   ├─ code   prefilter: RFC status, artifact kind, language, Enforcement: linter
+   ├─ code   known effects: library calls in the chunk, or reached from it through the
+   │         repository, matched against effects.yaml → `known_effects` facts
+   ├─ Jev    one Noul per remaining statement: "is this requirement relevant to the content?"
+   │         (packed into as few requests as the token budget allows)
+   ├─ agent  shall-reviewer sees one chunk + only its selected statements (claude -p, no tools)
+   ├─ code   validate: statement was selected for the chunk, line is a changed line
+   │         (quote relocates), dedupe, blocking recomputed from the corpus, comment cap
+   ├─ verify every blocking finding (+ those with depends_on): code graph + keyword search
+   │         gather evidence, Jev filters excerpts, shall-verifier → confirmed | refuted | unknown
+   └─ out    review.md · findings.json · github-review.json · health.json · exit 2 on blocking
+```
+
+The split of work is deliberate. **Code** decides everything that it can decide exactly. **Jev** answers narrow semantic questions with calibrated probabilities. The **LLM agent** judges violations. **Code** then validates every agent output and applies it.
+
+## Selection: which statements apply
+
+1. **Prefilter (code).** Code drops a statement in these cases:
+   - Its RFC is not in `selection.include_status`.
+   - It does not cover the artifact kind (`artifacts:` on the RFC, `- Artifacts:` on the statement).
+   - Its RFC is for other languages.
+   - It is `Enforcement: linter` (a linter owns it).
+2. **Jev (flat, default).** Each remaining statement becomes one Noul. The state of the Noul is the chunk (plus `known_effects`). The criteria are the `Applies when:` and `Not applies when:` lines of the statement. A Noul gives an absolute yes or no, so several statements can apply at the same time. Jev selects the statements at p ≥ `selection.thresholds.statement` (0.50).
+3. **Layered (optional).** `strategy: layered` asks domain Nouls first, then RFC Nouls. It asks statement Nouls only inside what it kept. It uses fewer tokens. But if the description of a domain or an RFC does not cover all of its rules, the strategy drops those rules without a warning. At ~540 statements, it lost 11 points of recall (see [results](./results.mdx)).
+4. **Tasks** ("add an endpoint to refund a payment") use different wording: "will the work have to follow this requirement?". shall checks tasks against code-level statements.
+
+Before selection, one Jev Choice classifies each document as `spec` or `doc`.
+
+## Known effects: facts Jev cannot read in the text
+
+Jev judges the text that it gets. `requests.post(...)` looks like a network call. `get_parser(lang)`, `h.DB.Query(...)` or `provider.charge(...)` (a wrapper two files away) do not look like network calls. For this reason, shall did not select the timeout rule. Now code supplies the fact and Jev judges it:
+
+- `effects.yaml` in each corpus layer lists what library calls do. It has these keys: `module` (import spec, prefix match), `calls` (called through the import), `methods` (called on a receiver that is traceably from the module) and `languages` (built-ins such as `fetch`). `shall lint` checks the file.
+- **Direct**: shall matches the imports and calls in the chunk text. It does not need a repository. A `methods` hit needs a receiver from the module (`DB *sql.DB`, `c = Consumer(...)`). For this reason, shall does not report `r.URL.Query()` as a database query. A false fact misleads more than a missing fact.
+- **Indirect**: with the repository, shall follows the calls on changed lines through the code graph (3 hops) to a listed call:
+  `` `provider.charge -> _session.post -> make_session` reaches `requests.Session` in payments/http.py:8 ``.
+- shall puts the facts into the Jev state as `known_effects`. It does this only when facts exist, so other cached answers stay valid. It also puts the facts into the reviewer prompt.
+
+## Review and validation
+
+The reviewer (`plugins/shall/agents/shall-reviewer.md`) runs as `claude -p` with no tools, a fixed system prompt and a JSON schema. It sees one chunk, the known effects of the chunk and only the selected statements. Then code drops a finding in these cases:
+
+- The statement of the finding was not selected for that chunk.
+- The line of the finding is not a changed line (the quote can move the line).
+
+Code also removes duplicates. It recomputes `blocking` from the corpus (enforced RFC + MUST level). It caps the number of comments.
+
+## Verification: a finding blocks only if its evidence was seen
+
+The reviewer sees one chunk. A finding can be wrong because of code in another place (a wrapper adds the missing flag) or because of a library default. We rejected the option to give tools to the reviewer. The reasons are:
+
+- Every chunk would pay for exploration.
+- shall would not record the evidence.
+- Reruns would read different files, and the comments would flap.
+- CI would expose more of the runner to PR code.
+
+1. **Code picks what to verify**: every blocking finding, and the advisory findings where the reviewer filled `depends_on`.
+2. **Code gathers evidence** with a language-generic code graph (`codegraph.py`). It starts from the calls on the flagged line. It follows definitions → calls, base classes, decorators and imports, up to 3 hops. It uses these methods:
+   - tree-sitter grammars and their standard *tags* queries;
+   - generic tree rules for what tags miss (`this.x =` / `self.x =` members, top-level constants, nested declarators, base-class nodes);
+   - import resolution by path suffix. A package listed in a dependency manifest is external.
+
+   shall parses files lazily (`git grep` first). It marks hops that it resolved only by name with "(by name)". A keyword search runs at the same time. The search uses the YAML key path, `depends_on`, code spans of the statement and identifiers of the quote (code before docs). The search also covers files that have no grammar.
+3. **Jev filters the excerpts** when there are more than 6 (one Noul per excerpt).
+4. **The `shall-verifier` agent** (no tools) answers confirmed / refuted / unknown. It must cite excerpt ids.
+5. **Code applies the verdict. Severity only goes down.** Refuted → code drops the finding only if the cited evidence exists. Unknown or confirmed-without-evidence → advisory. Confirmed → unchanged.
+
+Limits: shall resolves by imports and names, not by types. A language server or a SCIP index would resolve `this.partner.notify` by type. The graph cannot see dependency injection, reflection, and clients configured in YAML or environment variables.
+
+## Incremental re-review
+
+Every agent call goes through `run_claude`. It can reuse an earlier answer. The key of the answer is `hash(model, system prompt, schema, prompt)` (`AnswerCache`, `.shall-cache/review.json`):
+
+- A review prompt contains the diff of the chunk, its selected statements and its known effects. Thus shall reviews a file again exactly when one of these items changes.
+- A verification prompt contains the finding and the evidence excerpts. Thus shall checks a finding again when the code that it depends on changes, even in another file.
+- shall stores only successful answers. It drops entries that were unused for 30 days. It saves the file even when the run fails, so the answers that were already paid for are kept.
+
+Trade-off: an answer is stable until its input changes. A wrong finding on an unchanged file does not disappear by chance on the next push (it also cannot flap). `--no-cache` forces fresh calls. The PR workflow restores the cache for each pull request.
+
+## Triage of other AI reviewers' comments
+
+`shall triage` uses the same split of work for the comments that Copilot, CodeRabbit and similar bots left on the pull request. The goal is the opposite of a review. It does not find problems. It keeps the real problems of the bots, sets the noise aside, and gives a reason for each. For usage, see [triage](./triage.mdx).
+
+```
+open review threads (gh, read only) or a JSON file
+   ├─ code   keep threads started by a bot (GraphQL type Bot, triage.authors), not shall's own,
+   │         not resolved; strip folded extras (<details>, HTML comments); anchor on the diff
+   │         → outdated when the file or the line is gone
+   ├─ Jev    selection of the commented chunk (the review's questions, shared cache)
+   ├─ Jev    per comment: actionable? + one Noul per selected statement: does it cover the concern?
+   ├─ Jev    per pair on nearby lines (shall findings first, then earlier comments): same problem?
+   ├─ agent  shall-comment-verifier (no tools) with the verification evidence: confirmed | refuted | unknown
+   └─ code   relevant (confirmed + cited) · unverified (kept) · noise (not actionable, duplicate,
+             or refuted + cited evidence that exists) · outdated → triage.json, triage.md
+```
+
+- **Noise needs a reason that code can show.** If the verdict is unknown, or the verdict has no valid citations, shall keeps the comment as unverified. A dropped real problem costs more than one extra comment.
+- **The verifier judges truth, not importance.** "Also log the amount" is literally true. Importance is the "actionable" question of Jev, and Jev answers it before the agent.
+- **Never blocking.** A bot comment has no corpus severity. Blocking stays with the review of shall.
+- **Publishing.** `shall publish` adds the triage to the summary comment. With `--resolve-noise`, it reads the threads again. It acts on each noise thread that meets all these conditions: the thread is still open, no person replied, and shall did not reply earlier. For such a thread, shall posts the reason (with a hidden `shall:triage` key) and resolves the thread. A person who reopens the thread wins: shall replied once and does not resolve the thread again. `--dry-run` writes `triage-plan.json` only.
+
+## Run health
+
+A missed rule, a file that shall could not parse, and evidence that shall did not find all look the same on a PR: fewer comments. `shall review` writes `health.json` and a health line in the summary. They show warnings for:
+
+- review calls that failed (chunks not reviewed);
+- blocking findings that shall downgraded because it did not find their evidence, and a high `unknown` rate in verification;
+- code graph problems: parse errors, tags-query errors, grammars downloaded during the run (a network call; `shall prefetch` prevents it) or missing grammars (`codegraph.download_grammars: false`).
+
+shall lists the statements that scored just below the threshold as information. `shall publish` counts the threads that reviewers resolve without a fix ("dismissed").
+
+## Publishing to a pull request
+
+Deterministic code posts to the pull request. The agent never posts. `shall publish` (called by `shall-pr-review --post N`) makes each push safe to run again:
+
+- Every inline comment has a hidden key `hash(statement, path, line content)`. The key uses the line content and not the line number, so a finding keeps its key when code above it moves.
+- shall posts only the findings that have no existing thread. It posts them as one `COMMENT` review.
+- shall resolves an open shall thread when its line is **no longer in the PR diff** (fixed). If the agent only did not repeat a finding, the thread stays open. Thus model variance cannot make it flap.
+- shall reopens a thread that it resolved if the finding comes back.
+- shall does not change a thread that a **person** resolved. It writes the thread to `dismissed.json` (feedback).
+- shall updates one summary comment for each PR in place (`<!-- shall:summary -->`).
+
+Blocking is the exit code of the job (`--fail-on-blocking`, exit 2) on a required check. It is not a "changes requested" review from a bot. `--dry-run` reads the PR and writes `publish-plan.json`. It does not write to GitHub.
+
+## Corpus layers
+
+```
+engineering-standards/          organisation corpus, prefix JRFC
+  shall.yaml  corpus/rfcs/  corpus/domains.yaml  corpus/effects.yaml  corpus/index/
+
+booking-service/                an application repository
+  .shall/shall.yaml               prefix: BOOK · extends: {repo: your-org/engineering-standards, ref: v2026.09}
+  .shall/rfcs/BOOK-0001-*.md     rules only this repository follows
+  .shall/domains.yaml            optional: local domains (cannot redefine org domains)
+  .shall/effects.yaml            optional: local known effects
+  .shall/index/                  generated, local layer only
+```
+
+- **Discovery** (first match): `--config` / `$SHALL_CONFIG`. Then `.shall/shall.yaml` or `shall.yaml`, searched upward from the cwd. Then `$SHALL_EXTENDS=owner/name@ref` (org corpus only). Then `~/.config/shall/config.yaml`.
+- **Pinned**: `extends.ref` is a tag or a commit sha. shall fetches it once into `~/.cache/shall` (`$SHALL_CACHE_DIR`; private repositories use `$SHALL_GIT_TOKEN`). Thus a PR is reviewed against the same org rules on every run. A repository upgrades when its owner changes the ref. `extends.path` points at a local checkout instead.
+- **One prefix for each layer**: org `JRFC-`, local for example `BOOK-`. Comments show the layer that a rule comes from. Org sources are GitHub permalinks at the pinned commit.
+- **Add, never weaken**: `shall conflicts --local` compares each local statement with every org statement. It sends one Jev request for each pair: a Choice for the relation plus two Nouls, "does it permit what the org rule forbids?" and "would following it violate the org rule?". If duplicate / weakens / conflict is ≥ `conflicts.fail_threshold` (0.75), CI fails. A local RFC cannot supersede an org RFC. There are no waivers. If a rule must not apply to a repository, the domain owner changes it upstream.
+- **Settings** (`jev`, `selection`, `conflicts`, `review`, `codegraph`): the org `shall.yaml` sets them, and a local layer can override them. For all settings, see [configuration](./configuration.mdx). For how to write standards, see [standards](./standards.mdx).
+
+## This repository applies its own standards
+
+This repository is an organisation corpus (root `shall.yaml`, `JRFC-`). It is also a consumer of that corpus: `.shall/` extends `path: ..` and adds `JTOOL-` rules for the tooling.
+
+| RFC | Rules |
+| --- | --- |
+| JTOOL-0001 Using Jev | Use Jev only through `shall.jev.Jev`. Keep the state small, with no `existing[i]` indirection. Gate on Nouls or summed failing classes. Pin model ids. |
+| JTOOL-0002 Agent boundaries | The reviewer runs without tools. Code validates agent output before use. External writes are deterministic, with `--dry-run`. Blocking comes from the corpus and verification. Agents only lower it. Blocking needs seen evidence. |
+| JTOOL-0003 CLI contract | Exit codes are 0/1/2/3. Deterministic commands never call a model. Generated files are reproducible. |
+| JTOOL-0004 Plugin content (approved) | Descriptions say when to use. One reviewer prompt. Commands in skills exist. |
+
+At the root, plain `shall` resolves to `.shall/` (shall prints a note). Commands for the organisation corpus use `--config shall.yaml` (the Makefile does this).
+
+## Hooks: standards on an agent's tool calls
+
+`hooks.py` applies the corpus to Claude Code hook events while an agent works. In a review, Jev only selects and Claude judges. A hook has no time for Claude, so **Jev is the judge**. Claude runs only at the end of the turn. For usage, see [hooks](./hooks.mdx).
+
+```
+PreToolUse   (Bash | Write | Edit | … | mcp__.*)
+   ├─ code   secret scanner on the text the call writes (not `old_string`): a hit breaks
+   │         the rule `hooks.secrets` maps to the tool (JRFC-0004.1 for writes, JRFC-0012.4 else)
+   ├─ code   `Pattern:` of `Enforcement: linter` tool statements, searched in the command with
+   │         quoted strings masked: a match is p = 1 (force push, skipped git hooks, TLS off)
+   ├─ code   candidates: `tool` statements whose `Tools:` regex matches the tool name,
+   │         `Enforcement: agent`, RFC status with an action table
+   ├─ Jev    one request: per candidate "does the call break it?" (criterion: `Violated when:`)
+   │         and "is the call about it?"; p = min(both). State: tool, redacted input, cwd,
+   │         git branch (a plain `git push` pushes the current branch)
+   └─ code   action = hooks.actions[status][level] at p → deny | ask | warn (additionalContext) | log
+PostToolUse  (Write | Edit | MultiEdit)
+   ├─ code   the written lines, found in the file on disk, as a synthetic diff with 15 lines
+   │         of context → the same chunk and prefilter (`Selector.eligible`) as a review
+   ├─ Jev    one request per chunk: "do the added lines break it?" and "does it apply?"
+   └─ code   warn at p ≥ hooks.code_warn, never deny: the lines are not evidence (JTOOL-0002.6)
+Stop
+   └─ shall review of the working tree (tracked diff + untracked files), once per distinct
+      change and session; `decision: block` only for verified blocking findings, at most
+      `stop.max_blocks` times per session
+```
+
+Reasons for these choices:
+
+- **Violation, not relevance.** The selection question ("is this relevant?") is right to choose what the reviewer reads. But a hook must decide alone. Jev gets both questions in the same request. This adds no latency (one round trip for any number of questions). It also keeps off-topic rules quiet: on 25 code writes, false positives at 0.5 fell from 40 to 12.
+- **Regex where a regex is exact.** Flags such as `--force`, `-nm` or `curl -k` are mechanical (JRFC-0001.5). A pattern is instant and is never unsure. Jev scored `git commit -nm` 0.66 (an ask, not a deny). shall masks quoted strings first, so a commit message that mentions a flag is not a violation. shall does not find a flag inside `bash -c "…"`.
+- **The level and the status decide, not the model.** Jev only gives a probability. The action comes from the corpus, as `blocking` does in a review (JTOOL-0002.5). For an enforced MUST in the band 0.5–0.9, the hook asks the user instead of it denying.
+- **Writes only warn.** On an `Edit` of `self.session.get(path)`, Jev said 0.91 that the timeout rule was broken. But the code set the timeout on the session 30 lines above. The agent has that context, so it gets the warning. The Stop review gathers evidence, so it can block.
+- **Fail-open.** Jev gets `hooks.timeout` (3 s). If Jev is slower, or if it returns an error, the call runs and the decision log records `jev: timeout | error`. The answer still goes into the cache. `shall hook` exits 3 on a Jev error (JTOOL-0003.1). Claude Code treats this as a non-blocking error.
+- **Redaction first.** The scanner replaces secrets with `[REDACTED:kind]` (line breaks kept) in everything that shall sends to Jev or writes to the log. Jev can still see that a credential was there.
+- **Plugin wiring.** The `hooks/hooks.json` of the plugin runs `bin/shall-hook`. This is a shell script. It exits in a few milliseconds where no shall workspace exists. It forwards to `shall hookd` when `shall hookd` serves the repository. Otherwise it runs `shall hook`. `hooks.enabled: false` turns everything off in a workspace.
+- **No hook loops.** The Stop review runs `claude -p` agents. If these agents loaded the plugin, their own Stop would start another review. Agents run with `--setting-sources ""` and `SHALL_HOOKS_DISABLED=1` (the hooks answer nothing when it is set). A lock for each change (`stop-running-<sha>`) skips a second review of the same change from another session.
+- **Warm connection.** A new process for each call costs ~0.5 s (Python start, TLS handshake). `shall hookd` keeps one `Jev` (and its HTTP connection) for its lifetime: ~0.3 s for each call, ~20 ms on a cache hit. It binds 127.0.0.1. It answers only `application/json` POSTs (a browser cannot send one cross-origin without a preflight). With `SHALL_HOOK_TOKEN`, it requires a bearer token.
+
+## Scan: whole files, the hook's judgment
+
+`shall scan` (`scan.py`) lists files with `git ls-files` (tracked and untracked, not ignored) or with a directory walk. It keeps known code and config languages (not Markdown). It applies `scan.exclude` and `scan.max_file_chars`. For each file, it does these steps:
+
+1. The secret scanner checks the raw text. This check is exact. A hit on an enforced MUST is the only blocking finding.
+2. shall sends the whole file, redacted, as one added-lines chunk through `Hooks.judge_code`. This is the loop that the post-write hook uses: prefilter, one Jev request, p = min(applies, violates). shall gives a warning at p >= `scan.threshold` (0.7).
+
+shall lists Jev failures and exits 3. It does not fail open, because a scan that silently skipped files would look clean. `eval/scan` measured this path on 100 files before the command existed. Its hill-climb changed only rule criteria (`applies_when`, `Violated when:`), not code.
+
+## Known pain points and how shall handles them
+
+| Pain point | Handling |
+| --- | --- |
+| Agents deciding standards | Agents only draft (`status: draft`). The owner decides promotion (JRFC-0001.4, CI notice). |
+| Unstable statement ids | Ids are in the source. `lint --against` fails on silent removal. `retired:` list. |
+| Duplicates / conflicts | `shall conflicts`: one Jev request for each statement pair. |
+| Rot | `owner` + `review_by` are required. Lint warns when a date is overdue. |
+| Mechanical rules via AI | shall never sends `Enforcement: linter` statements to Jev or the agent. |
+| Index needs an agent | No. `shall build` is deterministic. The semantic text is in the reviewed source. |
+| Jev is not an embedding model | One **Noul for each candidate** (absolute, multi-label). Not Choice-as-similarity. |
+| Size limits (32k/64k tokens) | Chunking + automatic request packing under the token budget. |
+| Literal reading | `applies_when` / `not_applies_when` for each domain, RFC and statement. |
+| Facts not in the text | `effects.yaml` + code graph add `known_effects` to the Jev state and the reviewer prompt. |
+| Applicability ≠ violation | Jev selects. The agent judges violation. Code validates. |
+| Prompt injection | Strict criteria. The reviewer prompt treats content as data. Tested (case 08). |
+| Noise | Blocking is recomputed from the corpus. Comment cap. Dedupe. Advisory for SHOULD/approved. |
+| Hallucinated lines / ids | shall drops findings unless the statement was selected for that chunk and the line is changed. |
+| Unstable reruns | Jev answer cache. Pinned model. `shall publish` dedupes comments by content key. |
+| Repo-specific rules | Local `.shall/` layer with its own prefix, pinned `extends:`, `conflicts --local` gate. |
+| Reviewer sees one file | Verification of blocking findings against repository evidence. |
+| Silent failures | `health.json` + summary warnings. |
+| Noise from other AI reviewers | `shall triage`: Jev (actionable, covering rule, duplicate) + verifier with repository evidence. Noise only with a reason. |
+| Service outages | Jev failures exit 3 (not 2). CI can tell "service down" from "change blocked". |
+| Code leaves the company | **Open.** Diffs go to TypeSafe and Anthropic. Get data-protection approval first. |
