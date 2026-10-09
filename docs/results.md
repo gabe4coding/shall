@@ -1,4 +1,4 @@
-# jrfc results and lessons (PoC)
+# shall results and lessons (PoC)
 
 Measured with `jev-1.13.0` and `claude-sonnet-5`, September 2026. All cases, labels and
 fixtures are in `eval/`; the commands to reproduce each table are given below it. The cases
@@ -21,7 +21,7 @@ in the corpus. Labels are strict, so many "extras" are defensible.
 
 ## Selection at scale
 
-`make eval-scale` · the organisation corpus plus 48 extra RFCs in `eval/scale/.jrfc/`
+`make eval-scale` · the organisation corpus plus 48 extra RFCs in `eval/scale/.shall/`
 (~540 statements, 21 extra domains, many near neighbours of the organisation rules),
 20 cases, 306 labels. Labels = statements that both Claude and Jev flat proposed, plus
 disagreements reviewed by hand (`eval/scale/propose_labels.py`). The 81 hand-reviewed labels
@@ -59,7 +59,7 @@ Every fact produced on the hidden-effects and scale sets (27) was checked by han
 
 ## Verification
 
-`jrfc eval-verify` · 19 fixture repositories (`eval/verify`): two-hop wrappers, decorators,
+`shall eval-verify` · 19 fixture repositories (`eval/verify`): two-hop wrappers, decorators,
 base classes, generic multi-line methods, a third-party default and decoys (an unused
 wrapper with a timeout, two classes with the same `send()`), in Python, TypeScript, Java,
 Go, Kotlin, PHP, Ruby, C#, Rust and YAML. The same finding goes to the verifier with
@@ -108,7 +108,7 @@ The second row is two fresh runs (`--no-cache`) with the same status for every c
 - Matching comments against every eligible rule gave wrong matches (a PR summary matched "no
   personal data in logs"; nits matched rules about writing RFCs). Asking only about the rules
   that the review's selection keeps for the file removed them, and shares cached Jev answers
-  with `jrfc review`.
+  with `shall review`.
 - All 4 false claims were refuted with evidence: two from another file through the code graph
   (`request()` sets `AbortSignal.timeout`; `conn()` commits), one from the helper's return
   value, and "SQL injection" on a parameterized query was scored not actionable by Jev.
@@ -163,18 +163,18 @@ Actions the user would see before that change, with JRFC-0012 trialled as enforc
   *client* that builds a URL (p 0.8), and JRFC-0006.1 on the session with a timeout set
   30 lines above (0.91). This is why writes only warn.
 - **Latency is one round trip.** 1, 20 or 60 questions take the same ~0.25–0.3 s. A new
-  process per call adds ~0.2 s (Python start and TLS handshake); `jrfc hookd` keeps the
+  process per call adds ~0.2 s (Python start and TLS handshake); `shall hookd` keeps the
   connection warm; a cache hit answers in ~20 ms. Numbers vary by ~0.1 s between runs.
 - **End to end with Claude Code** (`claude -p` with the http hooks): the model received the
   deny reason for `git push origin main`, the PreToolUse warning for `curl | sh` (the call
   ran) and the PostToolUse warning for a `requests.get` without a timeout, word for word.
   The Stop hook blocked on the two verified missing timeouts (18 s) and skipped the
   unchanged change on the next stop (0.4 s).
-- **With the plugin** (`claude -p --plugin-dir plugins/jrfc`, no `hookd`): `git push --force
+- **With the plugin** (`claude -p --plugin-dir plugins/shall`, no `hookd`): `git push --force
   origin main` was denied (JRFC-0012.1 and .2, 0.49 s); Stop blocked on two missing timeouts;
   the agent added them; the post-write checks of its edits were clean (0.52 s); the second
-  Stop reviewed the new change (20 s, no findings) and let the agent finish. Outside a jrfc
-  workspace `jrfc-hook` exits in ~10 ms; through `hookd` a call takes 0.38 s (0.06 s cached).
+  Stop reviewed the new change (20 s, no findings) and let the agent finish. Outside a shall
+  workspace `shall-hook` exits in ~10 ms; through `hookd` a call takes 0.38 s (0.06 s cached).
 - Caveat: the cases were written with the rules, by the same author. Real agent sessions
   (the decision log) are the next measurement.
 

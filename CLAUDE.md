@@ -4,48 +4,48 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-jrfc: a corpus of RFC 2119 engineering standards plus tooling that selects which statements
+shall: a corpus of RFC 2119 engineering standards plus tooling that selects which statements
 apply to a diff/spec/doc/code/task (TypeSafe **Jev**), reviews against them (`claude -p`,
 no tools), validates and verifies findings with deterministic code, and posts to GitHub PRs.
 User guide: `README.md`. Design: `docs/architecture.md`. Measurements: `docs/results.md`.
 
 ## Commands
 
-The CLI is `plugins/jrfc/bin/jrfc` (a wrapper around `uv run --project plugins/jrfc/tooling jrfc`).
+The CLI is `plugins/shall/bin/shall` (a wrapper around `uv run --project plugins/shall/tooling shall`).
 
 ```bash
 make test                     # unit tests, no network
-uv run --quiet --project plugins/jrfc/tooling pytest -q plugins/jrfc/tooling/tests/test_effects.py -k fetch   # one test
+uv run --quiet --project plugins/shall/tooling pytest -q plugins/shall/tooling/tests/test_effects.py -k fetch   # one test
 make check                    # org corpus: lint + index up to date (no model calls)
 make build                    # regenerate corpus/index/ after editing corpus/ (the index is committed)
-make self-check               # this repo's own rules (.jrfc/, JTOOL-) lint + index
+make self-check               # this repo's own rules (.shall/, JTOOL-) lint + index
 make eval / eval-scale / eval-facts   # selection evals (need TYPESAFE_API_KEY)
 make eval-hooks               # hook judge on eval/hooks/cases.yaml (--no-cache to measure latency)
 make eval-triage              # triage of AI review comments (needs TYPESAFE_API_KEY and claude)
-plugins/jrfc/bin/jrfc --config jrfc.yaml eval-verify --retrieval treesitter   # verification eval (needs claude)
+plugins/shall/bin/shall --config shall.yaml eval-verify --retrieval treesitter   # verification eval (needs claude)
 ```
 
-**Two workspaces live at the root.** Plain `jrfc` resolves to `.jrfc/` (this repo's own
+**Two workspaces live at the root.** Plain `shall` resolves to `.shall/` (this repo's own
 `JTOOL-` rules, which extend the org corpus via `path: ..`). Anything about the example
-organisation corpus (`corpus/`, prefix `JRFC-`) needs `--config jrfc.yaml` (the Makefile
-does this). The scale eval corpus is a third workspace: `--config eval/scale/.jrfc/jrfc.yaml`.
+organisation corpus (`corpus/`, prefix `JRFC-`) needs `--config shall.yaml` (the Makefile
+does this). The scale eval corpus is a third workspace: `--config eval/scale/.shall/shall.yaml`.
 
-Jev answers are cached in `.jrfc-cache/jev.json` and Claude answers in `.jrfc-cache/review.json`
+Jev answers are cached in `.shall-cache/jev.json` and Claude answers in `.shall-cache/review.json`
 (per workspace, keyed by the exact input: any change to a question, prompt, state or agent
 prompt is a new call). Use `--no-cache` on `select`/`review` to force fresh calls — needed when
 measuring model behavior, since `review` otherwise reuses answers for unchanged chunks.
 
-## Architecture (plugins/jrfc/tooling/src/jrfc/)
+## Architecture (plugins/shall/tooling/src/shall/)
 
-Flow of `jrfc review`: `cli.py` → `config.py` → `corpus.py` → `artifact.py` → `effects.py`
+Flow of `shall review`: `cli.py` → `config.py` → `corpus.py` → `artifact.py` → `effects.py`
 → `select.py` → `review.py` → `verify.py` (+ `codegraph.py`) → `health.py` → outputs;
-`publish.py` posts separately. `jrfc scan` (`scan.py`) lints whole files with the post-write hook's
-judgment (`Hooks.judge_code`): secret scanner + one Jev request per file, warnings only. `jrfc triage` (`triage.py`) sorts other AI reviewers' PR
+`publish.py` posts separately. `shall scan` (`scan.py`) lints whole files with the post-write hook's
+judgment (`Hooks.judge_code`): secret scanner + one Jev request per file, warnings only. `shall triage` (`triage.py`) sorts other AI reviewers' PR
 comments with the same selection and verification evidence (`verify.gather_evidence`).
 
-- **config.py**: layer discovery (`--config`/`JRFC_CONFIG` → `.jrfc/jrfc.yaml` or `jrfc.yaml`
-  walking up → `JRFC_EXTENDS` → `~/.config/jrfc`), one optional parent layer via `extends`
-  (fetched by `fetch.py` into `~/.cache/jrfc`), settings groups in `SETTINGS` inherited from
+- **config.py**: layer discovery (`--config`/`SHALL_CONFIG` → `.shall/shall.yaml` or `shall.yaml`
+  walking up → `SHALL_EXTENDS` → `~/.config/shall`), one optional parent layer via `extends`
+  (fetched by `fetch.py` into `~/.cache/shall`), settings groups in `SETTINGS` inherited from
   the parent and overridden locally. Defaults in `DEFAULTS`.
 - **corpus.py**: parses RFC Markdown (front matter + `### PREFIX-NNNN.n` statements), lint
   rules, merges layers, and loads `effects.yaml` of every layer into `corpus.effects`.
@@ -61,7 +61,7 @@ comments with the same selection and verification evidence (`verify.gather_evide
 - **jev.py**: the only access point to TypeSafe (cache, request packing under the token
   budget, retries, usage incl. cache-independent `est_input_tokens`).
 - **review.py**: reviewer prompt per chunk, `run_claude` (tool-less `claude -p` with JSON
-  schema; system prompt from `plugins/jrfc/agents/*.md`, shared with in-session use;
+  schema; system prompt from `plugins/shall/agents/*.md`, shared with in-session use;
   `AnswerCache` makes re-reviews incremental),
   `validate_findings`, markdown/GitHub rendering with content-hash comment keys.
 - **verify.py / codegraph.py**: evidence for blocking findings (tree-sitter tags + generic
@@ -69,22 +69,22 @@ comments with the same selection and verification evidence (`verify.gather_evide
   agent, `apply_verdict`. One `RepoIndex` per run is shared by facts and verification;
   it records parse/download problems in `index.events`.
 - **health.py**: `health.json` + summary warnings for silent failures.
-- **hooks.py**: Claude Code hooks (`jrfc hook` command transport, `jrfc hookd` localhost HTTP
-  server, `jrfc hook-config`). `Enforcement: linter` tool statements are checked by code
+- **hooks.py**: Claude Code hooks (`shall hook` command transport, `shall hookd` localhost HTTP
+  server, `shall hook-config`). `Enforcement: linter` tool statements are checked by code
   (`Pattern:` regex on the command with quotes masked, or the secret scanner); Jev judges the
   other `tool` statements (`Tools:`, `Violated when:`) and written lines against code
   statements, p = min(applies, violates);
   `hooks.actions[status][level]` maps p to deny/ask/warn/log; writes only warn; Stop runs
-  `jrfc review`. Secret scanner redacts before Jev. Fail-open on Jev timeout/error.
-  The plugin ships them: `plugins/jrfc/hooks/hooks.json` → `bin/jrfc-hook` (no-op outside a
-  workspace, forwards to `hookd`, else `jrfc hook`). Agents jrfc runs get
-  `JRFC_HOOKS_DISABLED=1` so a Stop review never triggers another one.
+  `shall review`. Secret scanner redacts before Jev. Fail-open on Jev timeout/error.
+  The plugin ships them: `plugins/shall/hooks/hooks.json` → `bin/shall-hook` (no-op outside a
+  workspace, forwards to `hookd`, else `shall hook`). Agents shall runs get
+  `SHALL_HOOKS_DISABLED=1` so a Stop review never triggers another one.
 - **evaluate.py**: selection eval (per-strategy cost, layer that dropped each miss,
   `--no-facts` A/B, optional `repo:` fixture per case) and verification eval.
 
-## Invariants (this repo's own rules, `.jrfc/rfcs/JTOOL-*.md`)
+## Invariants (this repo's own rules, `.shall/rfcs/JTOOL-*.md`)
 
-- Jev only through `jrfc.jev.Jev`; small state, no `existing[i]`-style indirection; gate on
+- Jev only through `shall.jev.Jev`; small state, no `existing[i]`-style indirection; gate on
   absolute Nouls (or summed failing Choice classes); pinned model ids (no aliases).
 - Agents run without tools (`--tools ""`); every agent output is validated by code before use;
   agents can only lower severity; a finding blocks only if its evidence was seen.
@@ -98,7 +98,7 @@ comments with the same selection and verification evidence (`verify.gather_evide
 One RFC 2119 level per statement, keywords UPPERCASE only; never renumber or reuse a
 statement id (retire it); agents create `status: draft` only — promotion is the domain
 owner's decision; `Applies when:` lines are Jev criteria, so write them literally. Run
-`make build` (and `make check`) after changing `corpus/`, and `jrfc build` for `.jrfc/`.
+`make build` (and `make check`) after changing `corpus/`, and `shall build` for `.shall/`.
 
 ## Evals
 

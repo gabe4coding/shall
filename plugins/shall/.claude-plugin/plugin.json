@@ -1,0 +1,7 @@
+{
+  "name": "shall",
+  "version": "0.3.0",
+  "description": "shall engineering standards: author and maintain RFC-2119 standards, build the deterministic index, find which statements apply to a diff/spec/doc/task with Jev, review against them, lint whole files (scan), and check an agent's tool calls against them while it works (hooks).",
+  "author": { "name": "gpavanello" },
+  "keywords": ["standards", "rfc", "review", "governance", "jev", "typesafe"]
+}

@@ -22,7 +22,7 @@ not_applies_when: >
 ## Context
 
 Coding agents run shell commands and call tools on behalf of an engineer, often many per
-minute and without a human reading each one. The `jrfc` hooks (`jrfc hookd`, `jrfc hook`)
+minute and without a human reading each one. The `shall` hooks (`shall hookd`, `shall hook`)
 check each tool call against the statements below before it runs. `Tools:` limits a
 statement to some tools (a regular expression on the tool name). A statement with
 `Enforcement: linter` is checked by code: its `Pattern:` (a regular expression searched in

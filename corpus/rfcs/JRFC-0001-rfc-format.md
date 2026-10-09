@@ -1,6 +1,6 @@
 ---
 id: JRFC-0001
-title: Format and lifecycle of jrfc standards
+title: Format and lifecycle of shall standards
 status: enforced
 domain: governance
 artifacts: [doc, diff]
@@ -9,15 +9,15 @@ owner: ai-governance
 review_by: 2027-06-30
 supersedes: []
 summary: >
-  How a jrfc standard is structured so humans can read it and agents can select and
+  How a shall standard is structured so humans can read it and agents can select and
   enforce single statements from it.
 applies_when: >
-  The content is a jrfc RFC file (front matter with an id like JRFC-0000) or a change to one.
+  The content is a shall RFC file (front matter with an id like JRFC-0000) or a change to one.
 not_applies_when: >
-  Any content that is not a jrfc RFC file.
+  Any content that is not a shall RFC file.
 ---
 
-# JRFC-0001: Format and lifecycle of jrfc standards
+# JRFC-0001: Format and lifecycle of shall standards
 
 ## Context
 

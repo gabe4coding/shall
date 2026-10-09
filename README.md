@@ -1,6 +1,6 @@
-# jrfc — engineering standards that agents can apply
+# shall — engineering standards that agents can apply
 
-jrfc keeps your engineering standards as short [RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119)
+shall keeps your engineering standards as short [RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119)
 rules ("Every outbound call MUST set a timeout") and checks work against them: pull
 requests, design specs, documents, or a task an agent is about to start.
 
@@ -35,7 +35,7 @@ How it works in detail: [docs/architecture.md](docs/architecture.md).
 8. [Configuration](#configuration)
 9. [Commands](#commands)
 10. [Outputs and exit codes](#outputs-and-exit-codes)
-11. [Evaluate changes to jrfc](#evaluate-changes-to-jrfc)
+11. [Evaluate changes to shall](#evaluate-changes-to-shall)
 12. [Repository layout](#repository-layout)
 13. [Known limits](#known-limits)
 
@@ -46,7 +46,7 @@ How it works in detail: [docs/architecture.md](docs/architecture.md).
 | Tool | Needed for | Get it |
 | --- | --- | --- |
 | `git`, `make` | everything | your OS package manager |
-| [`uv`](https://docs.astral.sh/uv/) | running the `jrfc` CLI (it installs Python 3.11+ and the dependencies itself) | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| [`uv`](https://docs.astral.sh/uv/) | running the `shall` CLI (it installs Python 3.11+ and the dependencies itself) | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | `TYPESAFE_API_KEY` | choosing which rules apply (Jev) | an API key from [typesafe.ai](https://docs.typesafe.ai) |
 | [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`) | the review itself | `npm install -g @anthropic-ai/claude-code`, then log in (or set `ANTHROPIC_API_KEY`) |
 | [`gh`](https://cli.github.com/) | posting comments to GitHub pull requests | `gh auth login` |
@@ -61,7 +61,7 @@ no key and make no network call.
 
 ```bash
 git clone https://github.com/gabe4coding/jrfc.git
-cd jrfc
+cd shall
 make check                                  # lint the example corpus and check its index (no key needed)
 make test                                   # unit tests (no network)
 ```
@@ -69,43 +69,43 @@ make test                                   # unit tests (no network)
 Add the CLI to your shell (or install the plugin, next section):
 
 ```bash
-export PATH="$PWD/plugins/jrfc/bin:$PATH"
+export PATH="$PWD/plugins/shall/bin:$PATH"
 export TYPESAFE_API_KEY=...                 # needed from here on
 ```
 
 Which rules apply to a change? (Jev, about 2 seconds)
 
 ```bash
-jrfc --config jrfc.yaml select eval/cases/01-booking-endpoint.diff
-jrfc --config jrfc.yaml select --text "add an endpoint to refund a payment"
+shall --config shall.yaml select eval/cases/01-booking-endpoint.diff
+shall --config shall.yaml select --text "add an endpoint to refund a payment"
 ```
 
 Full review of a sample pull request (Jev + Claude, about a minute):
 
 ```bash
-jrfc --config jrfc.yaml review eval/cases/01-booking-endpoint.diff --out-dir .jrfc-out/demo
-cat .jrfc-out/demo/review.md
+shall --config shall.yaml review eval/cases/01-booking-endpoint.diff --out-dir .shall-out/demo
+cat .shall-out/demo/review.md
 ```
 
-`--config jrfc.yaml` selects the example organisation corpus at the root of this
-repository; without it, `jrfc` uses this repository's own rules in `.jrfc/`.
+`--config shall.yaml` selects the example organisation corpus at the root of this
+repository; without it, `shall` uses this repository's own rules in `.shall/`.
 
 ## Install the Claude Code plugin
 
-The plugin gives Claude Code the `jrfc` command, the reviewer and verifier agents, the
+The plugin gives Claude Code the `shall` command, the reviewer and verifier agents, the
 [hooks](#d-while-an-agent-works-claude-code-hooks) that check an agent's tool calls in
-repositories with a jrfc workspace, and four skills:
+repositories with a shall workspace, and four skills:
 
 | Skill | Claude uses it when you… |
 | --- | --- |
-| `jrfc-standards` | start work in a repository with jrfc: it finds the rules that apply before coding |
-| `jrfc-review` | ask "check this PR / spec against our standards" |
-| `jrfc-author` | ask to write, change, split or retire a standard |
-| `jrfc-index` | change the corpus and the index must be rebuilt |
+| `shall-standards` | start work in a repository with shall: it finds the rules that apply before coding |
+| `shall-review` | ask "check this PR / spec against our standards" |
+| `shall-author` | ask to write, change, split or retire a standard |
+| `shall-index` | change the corpus and the index must be rebuilt |
 
 ```bash
 claude plugin marketplace add gabe4coding/jrfc     # or a local path to a clone
-claude plugin install jrfc@jrfc
+claude plugin install shall@shall
 ```
 
 The repository is private: the machine needs git access to it (for example `gh auth login`).
@@ -114,47 +114,47 @@ The repository is private: the machine needs git access to it (for example `gh a
 
 ### A. Only the organisation's rules
 
-Point jrfc at the organisation corpus, pinned to a tag or commit, and review from the root
+Point shall at the organisation corpus, pinned to a tag or commit, and review from the root
 of your repository:
 
 ```bash
-export JRFC_EXTENDS=your-org/engineering-standards@v2026.09   # owner/name@ref, or a local path
-export JRFC_GIT_TOKEN=...                                      # only if that repository is private
+export SHALL_EXTENDS=your-org/engineering-standards@v2026.09   # owner/name@ref, or a local path
+export SHALL_GIT_TOKEN=...                                      # only if that repository is private
 git diff origin/main...HEAD > /tmp/pr.diff
-jrfc review /tmp/pr.diff --out-dir .jrfc-out/pr
+shall review /tmp/pr.diff --out-dir .shall-out/pr
 ```
 
-To try it with the example corpus in this repository, use `JRFC_EXTENDS=gabe4coding/jrfc@main`.
+To try it with the example corpus in this repository, use `SHALL_EXTENDS=gabe4coding/jrfc@main`.
 
 ### B. Organisation rules plus your repository's own rules
 
 ```bash
-jrfc init --prefix BOOK --repo your-org/engineering-standards --ref v2026.09
-jrfc fetch                                    # download the pinned corpus into ~/.cache/jrfc
-jrfc new --domain api --title "Booking events carry a schema version"
-$EDITOR .jrfc/rfcs/BOOK-0001-*.md             # write the rule (see "Write and maintain standards")
-jrfc lint && jrfc build                       # check the file, regenerate .jrfc/index/
-jrfc conflicts --local                        # your rules must not duplicate, weaken or contradict org rules
-git add .jrfc && git commit -m "Add BOOK-0001"
+shall init --prefix BOOK --repo your-org/engineering-standards --ref v2026.09
+shall fetch                                    # download the pinned corpus into ~/.cache/shall
+shall new --domain api --title "Booking events carry a schema version"
+$EDITOR .shall/rfcs/BOOK-0001-*.md             # write the rule (see "Write and maintain standards")
+shall lint && shall build                       # check the file, regenerate .shall/index/
+shall conflicts --local                        # your rules must not duplicate, weaken or contradict org rules
+git add .shall && git commit -m "Add BOOK-0001"
 ```
 
 Rules:
 - your rules use your own prefix (`BOOK-`), and may only **add or tighten** requirements;
 - a rule that should not apply to your repository is changed in the organisation corpus by
   its owner. There are no local waivers;
-- to take new organisation rules, bump `extends.ref` in `.jrfc/jrfc.yaml` and run
-  `jrfc fetch --update`.
+- to take new organisation rules, bump `extends.ref` in `.shall/shall.yaml` and run
+  `shall fetch --update`.
 
-A complete example is in [`examples/booking-service/.jrfc/`](examples/booking-service/.jrfc/).
+A complete example is in [`examples/booking-service/.shall/`](examples/booking-service/.shall/).
 
 ### C. Before you write code (agents)
 
-With the plugin installed, Claude Code uses the `jrfc-standards` skill on its own. Without
+With the plugin installed, Claude Code uses the `shall-standards` skill on its own. Without
 the plugin:
 
 ```bash
-jrfc select --text "add a Kafka consumer for booking events"
-jrfc show JRFC-0006.1
+shall select --text "add a Kafka consumer for booking events"
+shall show JRFC-0006.1
 ```
 
 ### D. While an agent works (Claude Code hooks)
@@ -167,7 +167,7 @@ the rule's level and its RFC's status choose the action:
 | before a Bash / MCP call | `tool` rules ([JRFC-0012](corpus/rfcs/JRFC-0012-agent-tool-use.md)): regex patterns, then Jev | deny · ask · warn | ~0.3 s |
 | before a Write / Edit | secret scanner (code, not Jev) | deny | ~1 ms |
 | after a Write / Edit | code rules on the written lines plus context | warn only | ~0.3 s |
-| end of the agent's turn (Stop) | the whole change through `jrfc review` | block (verified findings only) | seconds; skipped when nothing changed |
+| end of the agent's turn (Stop) | the whole change through `shall review` | block (verified findings only) | seconds; skipped when nothing changed |
 
 Default actions (`hooks.actions`): an **enforced MUST** rule denies at p ≥ 0.9 and asks the
 user at 0.5–0.9; an enforced SHOULD warns the agent at p ≥ 0.7; an **approved MUST** warns;
@@ -175,34 +175,34 @@ everything else is only logged. After a write nothing is denied: the lines just 
 not enough evidence (the timeout may be set in another file), so the agent gets a warning
 it can check, and only the Stop review can block. Every input is redacted by the secret
 scanner before it reaches Jev. If Jev is slow (`hooks.timeout`, 3 s) or down, the call
-runs: the hooks fail open. Each decision is appended to `.jrfc-cache/hooks/decisions.jsonl`.
+runs: the hooks fail open. Each decision is appended to `.shall-cache/hooks/decisions.jsonl`.
 
-**With the plugin** the hooks are on: `hooks/hooks.json` calls `bin/jrfc-hook` for every
-event. Outside a jrfc workspace (no `.jrfc/jrfc.yaml` or `jrfc.yaml` up the tree, no
-`JRFC_CONFIG`, `JRFC_EXTENDS` or `~/.config/jrfc/config.yaml`) it exits in a few
-milliseconds. Inside one it sends the event to `jrfc hookd` when one runs for that
-repository (~0.3 s per call), and otherwise runs `jrfc hook` (~0.5 s per call):
+**With the plugin** the hooks are on: `hooks/hooks.json` calls `bin/shall-hook` for every
+event. Outside a shall workspace (no `.shall/shall.yaml` or `shall.yaml` up the tree, no
+`SHALL_CONFIG`, `SHALL_EXTENDS` or `~/.config/shall/config.yaml`) it exits in a few
+milliseconds. Inside one it sends the event to `shall hookd` when one runs for that
+repository (~0.3 s per call), and otherwise runs `shall hook` (~0.5 s per call):
 
 ```bash
-jrfc hookd &                  # optional: keeps the Jev connection warm (port: hooks.port, 8765)
+shall hookd &                  # optional: keeps the Jev connection warm (port: hooks.port, 8765)
 ```
 
 Turn the hooks off in a workspace with `hooks: {enabled: false}`, or only the end-of-turn
-review with `hooks: {stop: {enabled: false}}` (it runs `jrfc review`, with Claude, when the
+review with `hooks: {stop: {enabled: false}}` (it runs `shall review`, with Claude, when the
 change is new). Without `TYPESAFE_API_KEY` only the secret scanner runs.
 
 **Without the plugin**, print a settings block and merge it into `.claude/settings.json`
 (project) or `~/.claude/settings.json`. Do not use both, or every hook runs twice.
 
 ```bash
-jrfc hook-config                      # http hooks to `jrfc hookd` (start it yourself)
-jrfc hook-config --transport command  # no server: one process per call
-jrfc hook-config --no-stop            # without the end-of-turn review
+shall hook-config                      # http hooks to `shall hookd` (start it yourself)
+shall hook-config --transport command  # no server: one process per call
+shall hook-config --no-stop            # without the end-of-turn review
 ```
 
-`jrfc hookd` checks only events whose working directory is inside its repository (others
-get 421); run one per repository with `--port` (`JRFC_HOOKD_PORT` for the plugin). Set
-`JRFC_HOOK_TOKEN` before `hookd` and the hooks to require a bearer token.
+`shall hookd` checks only events whose working directory is inside its repository (others
+get 421); run one per repository with `--port` (`SHALL_HOOKD_PORT` for the plugin). Set
+`SHALL_HOOK_TOKEN` before `hookd` and the hooks to require a bearer token.
 
 The tool rules are in [JRFC-0012](corpus/rfcs/JRFC-0012-agent-tool-use.md) (`enforced`).
 A `tool` rule names the tools it covers with `Tools:` (a regular expression on the tool
@@ -218,28 +218,28 @@ The other rules are judged by Jev, with `Violated when:` as the criterion. To tr
 RFC's tool rules before its owner approves them, add a `draft` action table in a workspace:
 
 ```yaml
-# .jrfc/jrfc.yaml
+# .shall/shall.yaml
 hooks:
   actions:
     draft: {MUST: [[0.9, deny], [0.5, ask]], SHOULD: [[0.7, warn]], MAY: [[0.7, log]]}
 ```
 
-### E. Lint existing code (`jrfc scan`)
+### E. Lint existing code (`shall scan`)
 
-`jrfc scan` applies the code rules to whole files, the way the post-write hook applies them
+`shall scan` applies the code rules to whole files, the way the post-write hook applies them
 to written lines: the secret scanner on the raw text, then one Jev request per file (secrets
 redacted) with p = min(applies, violates) for every eligible rule. No agent runs.
 
 ```bash
-jrfc scan                          # the current folder: git-tracked and untracked, not ignored
-jrfc scan src/ lib/client.py       # files or folders
-jrfc scan --fail-on-blocking       # CI: exit 2 on a secret-scanner hit on an enforced MUST rule
-jrfc scan --threshold 0.5          # more warnings (higher recall, more noise)
+shall scan                          # the current folder: git-tracked and untracked, not ignored
+shall scan src/ lib/client.py       # files or folders
+shall scan --fail-on-blocking       # CI: exit 2 on a secret-scanner hit on an enforced MUST rule
+shall scan --threshold 0.5          # more warnings (higher recall, more noise)
 ```
 
 It prints one line per warning (`path[:line]: ID [level, p] title`) and writes `scan.md` and
-`scan.json` to `--out-dir` (`.jrfc-out`). A Jev warning never blocks: one file is not
-evidence, so check it against the code, or run `jrfc review` on the change for verified
+`scan.json` to `--out-dir` (`.shall-out`). A Jev warning never blocks: one file is not
+evidence, so check it against the code, or run `shall review` on the change for verified
 findings. Only secret-scanner hits can block. Markdown documents, `scan.exclude` globs
 (node_modules, dist, vendor, lock files, ...) and files over `scan.max_file_chars` are
 skipped; statuses default to `selection.include_status` (`--status draft,approved,enforced`
@@ -252,24 +252,24 @@ exactly (type hints, formatting) belong to a linter (`Enforcement: linter`), not
 
 ## Run it in CI on pull requests
 
-1. Copy [`ci/github/jrfc-review.yml`](ci/github/jrfc-review.yml) to `.github/workflows/` in your
+1. Copy [`ci/github/shall-review.yml`](ci/github/shall-review.yml) to `.github/workflows/` in your
    repository.
-2. Edit the lines marked `TODO`: the tooling repository and ref, and `JRFC_EXTENDS` if your
-   repository has no `.jrfc/`.
+2. Edit the lines marked `TODO`: the tooling repository and ref, and `SHALL_EXTENDS` if your
+   repository has no `.shall/`.
 3. Add repository secrets:
 
    | Secret | Why |
    | --- | --- |
    | `TYPESAFE_API_KEY` | rule selection (Jev) |
    | `ANTHROPIC_API_KEY` | the review (`claude -p`) |
-   | `JRFC_GIT_TOKEN` | read access to the tooling and corpus repositories, if they are private |
+   | `SHALL_GIT_TOKEN` | read access to the tooling and corpus repositories, if they are private |
 
 4. Open a pull request. The job posts inline comments and one summary comment, and uploads
-   `.jrfc-out/pr` as an artifact.
-5. To block merges on enforced rules, make the `jrfc / review` job a **required check**: it
+   `.shall-out/pr` as an artifact.
+5. To block merges on enforced rules, make the `shall / review` job a **required check**: it
    exits 2 when a blocking finding remains after verification.
 
-Other CI systems: run `plugins/jrfc/bin/jrfc-pr-review --base origin/main --post <PR number>
+Other CI systems: run `plugins/shall/bin/shall-pr-review --base origin/main --post <PR number>
 --fail-on-blocking` from the repository root (see the header of that script). Posting uses
 `gh`; add `--dry-run` to see what would be posted without writing.
 
@@ -279,21 +279,21 @@ Re-running on every push is safe and cheap:
   fixed line resolves its thread, and threads a person resolved stay resolved;
 - only files whose diff, applicable rules or known effects changed are reviewed again, and a
   blocking finding is only re-checked when its evidence changed. Earlier answers are kept in
-  `.jrfc-cache/review.json`, which the workflow caches per pull request. A push that changes
+  `.shall-cache/review.json`, which the workflow caches per pull request. A push that changes
   one file of a two-file PR cost $0.15 instead of $0.39; re-running an unchanged push cost $0.
 
 ### Triage the comments of other AI reviewers
 
 Copilot, CodeRabbit and similar bots leave many comments on a pull request. A few point to
 real problems; the rest is noise: praise, summaries, nits, optional extras, the same concern
-twice, or a claim that code in another file already refutes. `jrfc triage` sorts the open
+twice, or a claim that code in another file already refutes. `shall triage` sorts the open
 comments of these bots with the same method as the review:
 
 1. **Code** keeps open threads started by a bot (GitHub type `Bot` or a login in
    `triage.authors`) and sets aside comments whose code changed since (outdated).
 2. **Jev** selects the rules that apply to the commented file (the same questions as the
    review), then asks per comment: does it name a concrete problem in this code? which of
-   those rules covers it? does it repeat a jrfc finding or an earlier comment on nearby lines?
+   those rules covers it? does it repeat a shall finding or an earlier comment on nearby lines?
 3. **An agent** without tools checks each remaining claim against evidence from the repository
    (the same code graph and search as verification): confirmed, refuted or unknown.
 4. **Code** decides: *relevant* (confirmed), *unverified* (not decided: kept), *noise* (not
@@ -301,11 +301,11 @@ comments of these bots with the same method as the review:
 
 ```bash
 gh pr diff 123 > /tmp/pr.diff
-jrfc triage /tmp/pr.diff --pr 123 --findings .jrfc-out/pr/findings.json   # reads the PR, writes nothing
-jrfc triage /tmp/pr.diff --comments threads.json                         # offline, from a file
+shall triage /tmp/pr.diff --pr 123 --findings .shall-out/pr/findings.json   # reads the PR, writes nothing
+shall triage /tmp/pr.diff --comments threads.json                         # offline, from a file
 ```
 
-It writes `triage.md` and `triage.json`. In CI, `jrfc-pr-review --post N --triage` adds the
+It writes `triage.md` and `triage.json`. In CI, `shall-pr-review --post N --triage` adds the
 triage to the summary comment; `--resolve-noise` also replies to each noise thread with the
 reason and resolves it. A thread that a person answered, resolved or reopened is never
 touched, and a triaged comment never blocks a merge. Cost: about $0.01–0.02 per bot comment
@@ -360,7 +360,7 @@ Rules for writing statements that work:
 - **One level per statement**: MUST, SHOULD or MAY, never two. Keywords only in UPPERCASE.
 - **Write `Applies when:` literally.** Jev reads it word by word: name the code or text it is
   about ("performs an HTTP request"), not the intent ("resilience matters").
-- **Mechanical rules go to linters**: mark them `Enforcement: linter`; jrfc never sends them
+- **Mechanical rules go to linters**: mark them `Enforcement: linter`; shall never sends them
   to a model.
 - **Never renumber or reuse an id.** To change a meaning, add a new statement and list the old
   id under `retired:`.
@@ -370,18 +370,18 @@ Rules for writing statements that work:
 Workflow:
 
 ```bash
-jrfc new --domain reliability --title "Idempotent retries"   # next free id, status: draft
-jrfc lint                                  # format, levels, ids
-jrfc conflicts corpus/rfcs/JRFC-0012-*.md  # duplicates / conflicts with existing rules (Jev)
-jrfc build                                 # regenerate the index (commit it)
+shall new --domain reliability --title "Idempotent retries"   # next free id, status: draft
+shall lint                                  # format, levels, ids
+shall conflicts corpus/rfcs/JRFC-0012-*.md  # duplicates / conflicts with existing rules (Jev)
+shall build                                 # regenerate the index (commit it)
 ```
 
-With the plugin, ask Claude ("write a standard for idempotent retries"); the `jrfc-author`
+With the plugin, ask Claude ("write a standard for idempotent retries"); the `shall-author`
 skill follows these rules. Full format: [JRFC-0001](corpus/rfcs/JRFC-0001-rfc-format.md).
 
 ### Known effects
 
-A rule about network calls, databases or processes only applies when jrfc can see that the
+A rule about network calls, databases or processes only applies when shall can see that the
 code does that. If a library hides it (`get_parser(lang)` downloads a file,
 `db.Query(...)` goes to the network), add an entry to `effects.yaml` instead of widening the
 rule:
@@ -395,7 +395,7 @@ rule:
   owner: data-platform
 ```
 
-jrfc also follows calls through your repository (3 hops), so a wrapper around `requests`
+shall also follows calls through your repository (3 hops), so a wrapper around `requests`
 two files away is found too. See [`corpus/effects.yaml`](corpus/effects.yaml) for 30+ entries.
 
 ## Create your organisation's corpus
@@ -405,23 +405,23 @@ The corpus in this repository is an example. For your organisation:
 1. Create a repository (for example `your-org/engineering-standards`) with:
 
    ```
-   jrfc.yaml               # prefix: JRFC, paths, pinned Jev model, thresholds (copy this repo's)
+   shall.yaml               # prefix: JRFC, paths, pinned Jev model, thresholds (copy this repo's)
    corpus/domains.yaml     # your areas: api, security, reliability, ... (title, owner, applies_when)
    corpus/rfcs/            # your standards
    corpus/effects.yaml     # optional: known effects of the libraries you use
-   corpus/index/           # generated by `jrfc build`, committed
+   corpus/index/           # generated by `shall build`, committed
    ```
 
 2. Give each domain an owner, and add a `CODEOWNERS` rule so the owner approves changes.
-3. Copy [`ci/github/jrfc-corpus.yml`](ci/github/jrfc-corpus.yml): it runs lint, the index
+3. Copy [`ci/github/shall-corpus.yml`](ci/github/shall-corpus.yml): it runs lint, the index
    check and id stability on every pull request, with no model call.
 4. Tag releases (`v2026.09`) and let application repositories pin a tag in `extends.ref`.
 5. Test that your rules are selected where they should be: add cases to `eval/` and run
-   `jrfc eval` (see below).
+   `shall eval` (see below).
 
 ## Configuration
 
-Settings live in `jrfc.yaml` (organisation) and can be overridden in `.jrfc/jrfc.yaml`
+Settings live in `shall.yaml` (organisation) and can be overridden in `.shall/shall.yaml`
 (repository). The main ones:
 
 | Setting | Default | Meaning |
@@ -437,8 +437,8 @@ Settings live in `jrfc.yaml` (organisation) and can be overridden in `.jrfc/jrfc
 | `review.cache` | `true` | reuse Claude's answer when its input is identical (incremental re-review); `--no-cache` forces new calls |
 | `review.max_comments` | `25` | cap on comments per review |
 | `conflicts.fail_threshold` | `0.75` | `conflicts --local` fails at or above this |
-| `codegraph.download_grammars` | `true` | `false`: never download parser grammars during a run (run `jrfc prefetch` first) |
-| `triage.authors` | Copilot, CodeRabbit, `*[bot]`… | logins whose comments `jrfc triage` sorts (`*` is the only wildcard); GitHub Apps always count |
+| `codegraph.download_grammars` | `true` | `false`: never download parser grammars during a run (run `shall prefetch` first) |
+| `triage.authors` | Copilot, CodeRabbit, `*[bot]`… | logins whose comments `shall triage` sorts (`*` is the only wildcard); GitHub Apps always count |
 | `triage.thresholds` | `actionable 0.5, statement 0.5, duplicate 0.7` | a comment below `actionable` is noise; `duplicate` marks a repeated concern |
 | `triage.verify` | `true` | check each actionable comment against repository evidence (`--no-verify` skips it) |
 | `hooks.enabled` | `true` | `false`: the hooks (also the plugin's) do nothing in this workspace |
@@ -448,55 +448,55 @@ Settings live in `jrfc.yaml` (organisation) and can be overridden in `.jrfc/jrfc
 | `hooks.pre_matcher` / `hooks.code_tools` | `Bash\|Write\|Edit\|…\|mcp__.*` / `Write\|Edit\|MultiEdit\|NotebookEdit` | tools checked before / after the call |
 | `hooks.stop` | `enabled, max_blocks 2` | end-of-turn review; blocks at most twice per session |
 
-Environment variables: `TYPESAFE_API_KEY`, `ANTHROPIC_API_KEY` (CI), `JRFC_CONFIG`,
-`JRFC_EXTENDS`, `JRFC_GIT_TOKEN`, `JRFC_CACHE_DIR`; for hooks `JRFC_HOOKD_PORT`,
-`JRFC_HOOK_TOKEN` and `JRFC_HOOKS_DISABLED` (set by jrfc for the agents it runs).
+Environment variables: `TYPESAFE_API_KEY`, `ANTHROPIC_API_KEY` (CI), `SHALL_CONFIG`,
+`SHALL_EXTENDS`, `SHALL_GIT_TOKEN`, `SHALL_CACHE_DIR`; for hooks `SHALL_HOOKD_PORT`,
+`SHALL_HOOK_TOKEN` and `SHALL_HOOKS_DISABLED` (set by shall for the agents it runs).
 
 ## Commands
 
 | Command | Calls a model? | Purpose |
 | --- | --- | --- |
-| `jrfc lint [--against base-index.json]` | no | check files, levels, ids and id stability |
-| `jrfc build [--check]` | no | regenerate the index; `--check` fails when it is stale |
-| `jrfc list`, `jrfc show ID…` | no | browse rules |
-| `jrfc new --domain D --title T` | no | new draft with the next free id |
-| `jrfc init --prefix P --repo R --ref T` | no | create `.jrfc/` in a repository |
-| `jrfc fetch [--update]` | no (git) | download the pinned organisation corpus |
-| `jrfc prefetch` | no (download) | download parser grammars for the repository's languages (CI) |
-| `jrfc select PATH \| --text T` | Jev | which rules apply, with probabilities |
-| `jrfc review PATH` | Jev + Claude | select → review → validate → verify → reports |
-| `jrfc scan [PATHS…]` | Jev | lint whole files: secret scanner + one Jev request per file; warnings, `scan.md` / `scan.json` |
-| `jrfc publish --pr N [--dry-run] [--resolve-noise]` | no | post a review to a GitHub pull request; with `triage.json`, add the triage and optionally resolve noise threads |
-| `jrfc triage DIFF --pr N \| --comments F` | Jev + Claude | sort other AI reviewers' comments: relevant, unverified, noise, outdated |
-| `jrfc conflicts FILE` / `--local` | Jev | duplicates, weakening and conflicts between rules |
-| `jrfc bundle`, `validate`, `verify` | varies | the review in separate steps (used by the `jrfc-review` skill) |
-| `jrfc hook` | Jev (+ Claude on Stop) | handle one Claude Code hook event from stdin (command hook) |
-| `jrfc hookd [--port P]` | Jev (+ Claude on Stop) | serve hook events on localhost for `type: http` hooks |
-| `jrfc hook-config [--transport http\|command] [--no-stop]` | no | print the `hooks` block for `.claude/settings.json` |
-| `jrfc eval`, `jrfc eval-verify`, `jrfc eval-triage`, `jrfc eval-hooks` | Jev (+ Claude) | measure selection, verification, triage and the hook judge on labelled cases |
+| `shall lint [--against base-index.json]` | no | check files, levels, ids and id stability |
+| `shall build [--check]` | no | regenerate the index; `--check` fails when it is stale |
+| `shall list`, `shall show ID…` | no | browse rules |
+| `shall new --domain D --title T` | no | new draft with the next free id |
+| `shall init --prefix P --repo R --ref T` | no | create `.shall/` in a repository |
+| `shall fetch [--update]` | no (git) | download the pinned organisation corpus |
+| `shall prefetch` | no (download) | download parser grammars for the repository's languages (CI) |
+| `shall select PATH \| --text T` | Jev | which rules apply, with probabilities |
+| `shall review PATH` | Jev + Claude | select → review → validate → verify → reports |
+| `shall scan [PATHS…]` | Jev | lint whole files: secret scanner + one Jev request per file; warnings, `scan.md` / `scan.json` |
+| `shall publish --pr N [--dry-run] [--resolve-noise]` | no | post a review to a GitHub pull request; with `triage.json`, add the triage and optionally resolve noise threads |
+| `shall triage DIFF --pr N \| --comments F` | Jev + Claude | sort other AI reviewers' comments: relevant, unverified, noise, outdated |
+| `shall conflicts FILE` / `--local` | Jev | duplicates, weakening and conflicts between rules |
+| `shall bundle`, `validate`, `verify` | varies | the review in separate steps (used by the `shall-review` skill) |
+| `shall hook` | Jev (+ Claude on Stop) | handle one Claude Code hook event from stdin (command hook) |
+| `shall hookd [--port P]` | Jev (+ Claude on Stop) | serve hook events on localhost for `type: http` hooks |
+| `shall hook-config [--transport http\|command] [--no-stop]` | no | print the `hooks` block for `.claude/settings.json` |
+| `shall eval`, `shall eval-verify`, `shall eval-triage`, `shall eval-hooks` | Jev (+ Claude) | measure selection, verification, triage and the hook judge on labelled cases |
 
-`jrfc <command> --help` shows every option.
+`shall <command> --help` shows every option.
 
 ## Outputs and exit codes
 
-`jrfc review --out-dir DIR` writes:
+`shall review --out-dir DIR` writes:
 
 | File | Content |
 | --- | --- |
 | `review.md` | human summary: findings, applicable rules, health line |
 | `findings.json` | validated findings and the ones dropped (with the reason) |
 | `selection.json` | every rule's probability per file chunk, and the known effects |
-| `github-review.json` | payload for `jrfc publish` (`--format github`) |
+| `github-review.json` | payload for `shall publish` (`--format github`) |
 | `health.json` | what could have gone wrong silently: failed calls, unverified blocking findings, files not parsed, rules just below the threshold |
 | `prompts/` | the exact prompt sent to the reviewer per chunk |
 
-`jrfc scan --out-dir DIR` writes `scan.md` (warnings per file, skipped files, files Jev could not
+`shall scan --out-dir DIR` writes `scan.md` (warnings per file, skipped files, files Jev could not
 check) and `scan.json` (every file's scores, findings, skips and Jev usage). It exits 3 when Jev
 failed for a file, and 2 only with `--fail-on-blocking` (secret-scanner hits) or `--fail-on-warn`.
 
-`jrfc triage` writes `triage.md` (relevant and unverified comments first, noise folded) and
+`shall triage` writes `triage.md` (relevant and unverified comments first, noise folded) and
 `triage.json` (every comment with its status, reason, scores, matched rules and the evidence
-the verifier cited). `jrfc publish --resolve-noise` writes `triage-plan.json`.
+the verifier cited). `shall publish --resolve-noise` writes `triage-plan.json`.
 
 | Exit code | Meaning |
 | --- | --- |
@@ -505,7 +505,7 @@ the verifier cited). `jrfc publish --resolve-noise` writes `triage-plan.json`.
 | 2 | blocking findings (an enforced MUST rule, verified) |
 | 3 | the Jev service failed after retries: retry the job, do not treat it as a code problem |
 
-## Evaluate changes to jrfc
+## Evaluate changes to shall
 
 Before changing thresholds, prompts, rules' wording or the tooling, compare before and after:
 
@@ -515,12 +515,12 @@ make check         # corpus lint + index
 make eval          # selection on 11 cases (needs TYPESAFE_API_KEY)
 make eval-scale    # selection with ~540 rules, 20 cases
 make eval-facts    # known effects on vs off, 19 files in 9 languages
-plugins/jrfc/bin/jrfc --config jrfc.yaml eval-verify --retrieval treesitter   # verification (needs claude)
+plugins/shall/bin/shall --config shall.yaml eval-verify --retrieval treesitter   # verification (needs claude)
 make eval-triage   # triage of AI review comments, 24 labelled comments (needs claude)
 make eval-hooks    # hook judge on 75 labelled tool calls and writes (--no-cache for latency)
 ```
 
-Jev answers are cached in `.jrfc-cache/`, so re-runs only pay for changed questions. Current
+Jev answers are cached in `.shall-cache/`, so re-runs only pay for changed questions. Current
 numbers and what they mean: [docs/results.md](docs/results.md).
 
 ## Repository layout
@@ -528,12 +528,12 @@ numbers and what they mean: [docs/results.md](docs/results.md).
 | Path | What |
 | --- | --- |
 | `corpus/` | example organisation corpus: `rfcs/`, `domains.yaml`, `effects.yaml`, generated `index/` |
-| `jrfc.yaml` | configuration of the example organisation corpus |
-| `plugins/jrfc/` | the Claude Code plugin: skills, agents, `hooks/hooks.json`, `bin/jrfc`, `bin/jrfc-hook`, `bin/jrfc-pr-review` |
-| `plugins/jrfc/tooling/` | the Python package behind the CLI (`uv` project, tests) |
+| `shall.yaml` | configuration of the example organisation corpus |
+| `plugins/shall/` | the Claude Code plugin: skills, agents, `hooks/hooks.json`, `bin/shall`, `bin/shall-hook`, `bin/shall-pr-review` |
+| `plugins/shall/tooling/` | the Python package behind the CLI (`uv` project, tests) |
 | `ci/github/` | workflow templates for the corpus repository and for application repositories |
-| `examples/booking-service/.jrfc/` | an application repository's local rules (`BOOK-`) |
-| `.jrfc/` | this repository's own rules for its tooling (`JTOOL-`) |
+| `examples/booking-service/.shall/` | an application repository's local rules (`BOOK-`) |
+| `.shall/` | this repository's own rules for its tooling (`JTOOL-`) |
 | `eval/` | labelled cases: `cases/`, `scale/`, `facts/` (selection), `verify/` (verification), `triage/` (AI review comments), `hooks/` (tool calls and writes) |
 | `docs/` | [architecture](docs/architecture.md), [results](docs/results.md) |
 
@@ -546,7 +546,7 @@ numbers and what they mean: [docs/results.md](docs/results.md).
   reflection and clients configured in YAML or environment variables are not followed.
 - **Only blocking findings are verified.** Advisory comments are not checked against the
   rest of the repository.
-- **Triage sees bots' comments when the job runs.** A bot that comments after the jrfc job is
+- **Triage sees bots' comments when the job runs.** A bot that comments after the shall job is
   triaged on the next push. Only inline review threads are read, not PR-level comments.
 - **Two external services.** An outage fails the job with exit 3.
 - **Data leaves your machine.** Diffs are sent to TypeSafe and Anthropic.
