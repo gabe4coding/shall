@@ -1,0 +1,109 @@
+---
+title: Configuration
+description: How shall finds its configuration, how layers inherit settings, every main setting with its default, and the environment variables.
+---
+
+# Configuration
+
+## Where shall finds the configuration
+
+shall uses the first configuration that it finds, in this order:
+
+1. `--config PATH` or the variable `SHALL_CONFIG`
+2. `.shall/shall.yaml` or `shall.yaml` in the current folder or in a parent folder
+3. The variable `SHALL_EXTENDS` (`owner/name@ref` or a local path): the organisation rules only
+4. `~/.config/shall/config.yaml`
+
+If shall finds no configuration, the repository has no standards. Run `shall init`, or set
+`SHALL_EXTENDS`.
+
+## Layers
+
+A configuration can have one parent layer, set with `extends`:
+
+```yaml
+# .shall/shall.yaml in an application repository
+prefix: BOOK
+extends:
+  repo: your-org/engineering-standards
+  ref: v2026.09            # a tag or a commit sha
+```
+
+Instead of `repo` and `ref`, `path:` can point to a local checkout, and `url:` to any git remote.
+`shall fetch` downloads the parent into `~/.cache/shall`. The local layer inherits the settings of
+the parent and can change them. [Architecture → Corpus layers](./architecture.mdx#corpus-layers)
+tells how the layers merge.
+
+## Main settings
+
+The organisation sets the settings in `shall.yaml`. A repository can change them in
+`.shall/shall.yaml`. The defaults are in `DEFAULTS` in
+[`config.py`](../plugins/shall/tooling/src/shall/config.py).
+
+### Selection and review
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `jev.model` | `jev-1.13.0` | The pinned Jev model. The thresholds are tuned for it. |
+| `jev.max_chunk_chars` | `40000` | The largest part of a file that shall sends at one time |
+| `selection.strategy` | `flat` | `flat` asks about each rule. `layered` asks domain → RFC → rule. It costs less but loses recall on large corpora. |
+| `selection.thresholds.statement` | `0.50` | A rule applies at this probability or higher. |
+| `selection.include_status` | `[approved, enforced]` | The statuses that reviews use. `--include-draft` adds drafts. |
+| `selection.facts` | `true` | Add known effects to the input of Jev and to the review |
+| `review.model` | `claude-sonnet-5` | The model of the reviewer and the verifier |
+| `review.verify` | `true` | Verify blocking findings against the repository before they block |
+| `review.cache` | `true` | Use the earlier answer of Claude again when its input is the same. `--no-cache` forces new calls. |
+| `review.max_comments` | `25` | The maximum number of comments for each review |
+| `conflicts.fail_threshold` | `0.75` | `conflicts --local` fails at this value or higher. |
+| `codegraph.download_grammars` | `true` | `false`: never download parser grammars during a run. Run `shall prefetch` first. |
+
+### Triage
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `triage.authors` | Copilot, CodeRabbit, `*[bot]` and more | The logins whose comments `shall triage` sorts. `*` is the only wildcard. GitHub Apps always count. |
+| `triage.thresholds` | `actionable 0.5, statement 0.5, duplicate 0.7` | A comment below `actionable` is noise. `duplicate` marks a repeated concern. |
+| `triage.verify` | `true` | Check each actionable comment against evidence from the repository. `--no-verify` skips it. |
+
+### Hooks
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `hooks.enabled` | `true` | `false`: the hooks, also the hooks of the plugin, do nothing in this workspace. |
+| `hooks.actions` | See [Hooks](./hooks.mdx#default-actions) | Status → level → `[[min p, action]]`. shall does not check a status without a table. |
+| `hooks.code_warn` | `0.7` | After a write, warn at this value or higher. Never deny. |
+| `hooks.timeout` | `3.0` | Seconds for Jev in a hook. After this time, the call runs (fail-open). |
+| `hooks.pre_matcher` | `Bash\|Write\|Edit\|MultiEdit\|NotebookEdit\|mcp__.*` | The tools that shall checks before the call |
+| `hooks.code_tools` | `Write\|Edit\|MultiEdit\|NotebookEdit` | The tools that shall checks after the call |
+| `hooks.stop` | `enabled, max_blocks 2` | The review at the end of the turn. It blocks two times for each session at most. |
+| `hooks.port` | `8765` | The port of `shall hookd` |
+
+### Scan
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `scan.threshold` | `0.7` | Warn at this value or higher |
+| `scan.statuses` | `selection.include_status` | The statuses that the scan uses |
+| `scan.max_file_chars` | `200000` | shall skips larger files and lists them. |
+| `scan.exclude` | `node_modules`, `dist`, `vendor`, lock files and more | Glob patterns of files to skip |
+
+## Environment variables
+
+| Variable | Use |
+| --- | --- |
+| `TYPESAFE_API_KEY` | Jev |
+| `ANTHROPIC_API_KEY` | Claude in CI |
+| `SHALL_CONFIG` | The path of the configuration |
+| `SHALL_EXTENDS` | The organisation corpus when the repository has no `.shall/` |
+| `SHALL_GIT_TOKEN` | Read access to a private corpus repository |
+| `SHALL_CACHE_DIR` | The folder for the downloaded corpora (default `~/.cache/shall`) |
+| `SHALL_HOOKD_PORT` | The port of `shall hookd` for the plugin |
+| `SHALL_HOOK_TOKEN` | The bearer token between the hooks and `shall hookd` |
+| `SHALL_HOOKS_DISABLED` | shall sets it for the agents that it starts. Their hooks do nothing. |
+
+## Caches
+
+shall keeps the answers of Jev in `.shall-cache/jev.json` and the answers of Claude in
+`.shall-cache/review.json`, for each workspace. The key is the exact input. Each change to a
+question, a prompt or a state makes a new call. Use `--no-cache` on `select` and `review` to force
+new calls.

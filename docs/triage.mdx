@@ -1,0 +1,80 @@
+---
+title: Triage
+description: Sort the comments of Copilot, CodeRabbit and other AI reviewers on a pull request into relevant, unverified, noise and outdated, each with a reason.
+---
+
+# Triage
+
+AI reviewers such as Copilot and CodeRabbit write many comments on a pull request. Some comments
+show real problems. Many comments are noise: praise, summaries, small style points, optional
+extras, the same concern two times, or a claim that code in a different file already disproves.
+
+`shall triage` sorts the open comments of these bots. It uses the same method as the review.
+
+## How it works
+
+1. **Code** keeps the open threads that a bot started. A bot has the GitHub type `Bot`, or its login
+   is in `triage.authors`. Code sets aside the comments on code that changed after the comment
+   (outdated).
+2. **Jev** selects the rules that apply to the file of the comment. Then it asks these questions for
+   each comment:
+   - Does the comment name a real problem in this code?
+   - Which rule covers it?
+   - Does it repeat a shall finding or an earlier comment on lines near it?
+3. **An agent without tools** checks each remaining claim against evidence from the repository. It
+   uses the same code graph and search as the verification. It answers *confirmed*, *refuted* or
+   *unknown*.
+4. **Code** gives the status, always with a reason:
+
+   | Status | Meaning |
+   | --- | --- |
+   | relevant | The agent confirmed the problem. |
+   | unverified | The agent could not decide. shall keeps the comment. |
+   | noise | Not actionable, a duplicate, or refuted with cited evidence |
+   | outdated | The code changed after the comment. |
+
+## Run a triage
+
+Run the commands from the root of the repository of the pull request. shall searches for evidence
+there.
+
+```bash
+gh pr diff 123 > /tmp/pr.diff
+shall review /tmp/pr.diff --out-dir .shall-out/pr                            # optional
+shall triage /tmp/pr.diff --pr 123 --findings .shall-out/pr/findings.json   # reads the PR, writes nothing
+shall triage /tmp/pr.diff --comments threads.json                         # offline, from a file
+```
+
+With `--findings`, a bot comment that repeats a shall finding counts as noise. `--comments` reads
+the threads from a JSON file in the format of `shall triage --pr`.
+
+`shall triage` writes these files:
+
+| File | Content |
+| --- | --- |
+| `triage.md` | Relevant and unverified comments first, noise folded |
+| `triage.json` | Each comment with its status, reason, scores, matched rules and the evidence that the verifier cited |
+
+## Resolve the noise threads
+
+This step writes to the pull request. Look at the plan before you run it:
+
+```bash
+shall review /tmp/pr.diff --out-dir .shall-out/pr --format github     # publish needs github-review.json
+shall publish --pr 123 --dir .shall-out/pr --resolve-noise --dry-run  # writes triage-plan.json
+shall publish --pr 123 --dir .shall-out/pr --resolve-noise
+```
+
+shall answers each noise thread with the reason and resolves it. It never touches a thread that a
+person answered, resolved or opened again. A triaged comment never blocks a merge.
+
+In CI, `shall-pr-review --post 123 --triage` adds the triage to the summary comment.
+`--resolve-noise` also resolves the noise threads. Read [CI](./ci.mdx).
+
+## Cost and limits
+
+- Cost: approximately $0.01–0.02 for each bot comment that gets to the agent. Comments that are not
+  actionable and duplicates cost only Jev.
+- shall sees the bot comments that exist when the job runs. If a bot comments after the shall job,
+  shall sorts the comment on the next push.
+- shall reads only inline review threads, not the comments on the full pull request.

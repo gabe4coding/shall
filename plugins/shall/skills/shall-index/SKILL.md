@@ -5,38 +5,24 @@ description: Use when the shall index or catalog must be built, refreshed or che
 
 # shall index
 
-The index is a pure function of the corpus: `shall build` reads `corpus/rfcs/*.md` and
-`corpus/domains.yaml` and writes, byte for byte reproducibly:
+`shall build` writes `index/index.json` (tools, CI) and `index/catalog.md` (one line per statement)
+from the RFC sources, byte for byte reproducibly. Never edit the index by hand: semantic text
+(summaries, `Applies when:`) belongs in the RFC source, where a human reviews it.
 
-| File | Consumer | Content |
-| --- | --- | --- |
-| `corpus/index/index.json` | tools, CI, review pipeline | domains, RFCs, every statement with level, blocking flag, applicability, source line |
-| `corpus/index/catalog.md` | agents and humans | domain → RFC → one line per statement; the entry point for progressive disclosure |
-
-In an app repo with a `.shall/` layer, `shall build` writes `.shall/index/` for the **local
-layer only**; the organisation corpus is recorded by name and pinned ref, never copied, so
-`build --check` depends only on the repo's own files. `shall catalog` prints the merged view.
-
-No model runs at build time. Anything semantic (summaries, `Applies when:` text) is
-written in the RFC source, where a human reviews it; the build only copies it.
-
-## Commands
+In an app repo, `shall build` writes `.shall/index/` for the local layer only; the org corpus is
+recorded by name and pinned ref. `shall catalog` prints the merged view.
 
 ```bash
-shall lint                    # format, ids, one level per statement, references
-shall build                   # write the index (refuses while lint has errors)
-shall build --check           # CI: fail if the committed index differs from a fresh build
-shall lint --against base-index.json   # CI: fail if a published statement id disappeared
+shall lint                              # format, ids, one level per statement, references
+shall build                             # write the index (refuses while lint has errors)
+shall build --check                     # CI: fail if the committed index differs from a fresh build
+shall lint --against base-index.json    # CI: fail if a published statement id disappeared
 ```
 
 ## When a check fails
 
-- **Lint error** → fix the RFC source (see the `shall-author` skill), then build again.
-  Never silence a rule by editing the index.
-- **`build --check` stale** → someone changed the corpus without rebuilding. Run
-  `shall build` and commit the index together with the RFC change.
-- **`statement-removed`** → a published id was deleted. Restore it, or add it to the
-  RFC's `retired:` list if the removal is intended.
+- **Lint error** → fix the RFC source (skill `shall-author`), then build again.
+- **`build --check` stale** → run `shall build`; commit the index with the RFC change.
+- **`statement-removed`** → restore the id, or add it to the RFC's `retired:` list if the removal is intended.
 
-`blocking` in the index is computed, not authored: a statement blocks merges only when
-its RFC is `enforced` **and** its level is MUST.
+`blocking` is computed (RFC `enforced` and level MUST), never authored.
