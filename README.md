@@ -1,8 +1,9 @@
 <p align="center">
-  <img src="docs/assets/logo.svg" alt="shall logo" width="128" height="128">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/wordmark-dark.svg">
+    <img src="docs/assets/wordmark-light.svg" alt="shall" width="240">
+  </picture>
 </p>
-
-<h1 align="center">shall</h1>
 
 <p align="center">
   <b>Engineering standards that agents can apply.</b><br>

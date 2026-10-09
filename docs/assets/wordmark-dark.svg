@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 24 404 182" width="404" height="182" role="img" aria-label="shall">
+  <title>shall</title>
+  <defs>
+    <linearGradient id="ink" x1="104" y1="96" x2="36" y2="186" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#10B981"/>
+    </linearGradient>
+  </defs>
+  <!-- s: three rule lines -->
+  <path d="M 104 101 H 59.5 A 19.5 19.5 0 0 0 59.5 140 H 80.5 A 19.5 19.5 0 0 1 80.5 179 H 36" fill="none" stroke="url(#ink)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- hall -->
+  <g fill="none" stroke="#E6EDF3" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 144 40 V 190 M 144 134 A 33 33 0 0 1 210 134 V 190"/>
+    <circle cx="282" cy="140" r="39"/>
+    <path d="M 321 101 V 190"/>
+    <path d="M 364 40 V 190 M 408 40 V 190"/>
+  </g>
+</svg>
