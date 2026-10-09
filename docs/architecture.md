@@ -1,6 +1,6 @@
-# jrfc architecture
+# shall architecture
 
-How jrfc decides which standards apply, reviews against them, and keeps the result
+How shall decides which standards apply, reviews against them, and keeps the result
 trustworthy. For setup and usage see the [README](../README.md); for measurements see
 [results.md](results.md).
 
@@ -15,11 +15,11 @@ artifact (diff | spec | doc | code | task)
    │         repository, matched against effects.yaml → `known_effects` facts
    ├─ Jev    one Noul per remaining statement: "is this requirement relevant to the content?"
    │         (packed into as few requests as the token budget allows)
-   ├─ agent  jrfc-reviewer sees one chunk + only its selected statements (claude -p, no tools)
+   ├─ agent  shall-reviewer sees one chunk + only its selected statements (claude -p, no tools)
    ├─ code   validate: statement was selected for the chunk, line is a changed line
    │         (quote relocates), dedupe, blocking recomputed from the corpus, comment cap
    ├─ verify every blocking finding (+ those with depends_on): code graph + keyword search
-   │         gather evidence, Jev filters excerpts, jrfc-verifier → confirmed | refuted | unknown
+   │         gather evidence, Jev filters excerpts, shall-verifier → confirmed | refuted | unknown
    └─ out    review.md · findings.json · github-review.json · health.json · exit 2 on blocking
 ```
 
@@ -54,7 +54,7 @@ not, so the timeout rule was not selected. Code supplies the fact and Jev judges
 
 - `effects.yaml` in each corpus layer lists what library calls do: `module` (import spec,
   prefix match), `calls` (called through the import), `methods` (called on a receiver that
-  is traceably from the module), `languages` (built-ins such as `fetch`). `jrfc lint` checks it.
+  is traceably from the module), `languages` (built-ins such as `fetch`). `shall lint` checks it.
 - **Direct**: imports and calls in the chunk text are matched; no repository needed. A
   `methods` hit needs a receiver from the module (`DB *sql.DB`, `c = Consumer(...)`), so
   `r.URL.Query()` is not reported as a database query: a false fact misleads more than a
@@ -67,7 +67,7 @@ not, so the timeout rule was not selected. Code supplies the fact and Jev judges
 
 ## Review and validation
 
-The reviewer (`plugins/jrfc/agents/jrfc-reviewer.md`) runs as `claude -p` with no tools, a
+The reviewer (`plugins/shall/agents/shall-reviewer.md`) runs as `claude -p` with no tools, a
 fixed system prompt and a JSON schema. It sees one chunk, its known effects and only the
 selected statements. Code then drops a finding when its statement was not selected for that
 chunk or its line is not a changed line (the quote can relocate it), removes duplicates,
@@ -92,7 +92,7 @@ different files (flapping comments), and CI would expose more of the runner to P
    `depends_on`, code spans of the statement, identifiers of the quote; code before docs) runs
    alongside and covers files without a grammar.
 3. **Jev filters excerpts** when there are more than 6 (one Noul per excerpt).
-4. **The `jrfc-verifier` agent** (no tools) answers confirmed / refuted / unknown and must
+4. **The `shall-verifier` agent** (no tools) answers confirmed / refuted / unknown and must
    cite excerpt ids.
 5. **Code applies the verdict; severity only goes down**: refuted → dropped only if the cited
    evidence exists; unknown or confirmed-without-evidence → advisory; confirmed → unchanged.
@@ -104,7 +104,7 @@ configured in YAML or environment variables are invisible to the graph.
 ## Incremental re-review
 
 Every agent call goes through `run_claude`, which can reuse an earlier answer keyed by
-`hash(model, system prompt, schema, prompt)` (`AnswerCache`, `.jrfc-cache/review.json`):
+`hash(model, system prompt, schema, prompt)` (`AnswerCache`, `.shall-cache/review.json`):
 
 - a review prompt contains the chunk's diff, its selected statements and its known effects,
   so a file is reviewed again exactly when one of those changed;
@@ -119,19 +119,19 @@ forces fresh calls. The PR workflow restores the cache per pull request.
 
 ## Triage of other AI reviewers' comments
 
-`jrfc triage` applies the same split of work to comments that Copilot, CodeRabbit and similar
+`shall triage` applies the same split of work to comments that Copilot, CodeRabbit and similar
 bots left on the pull request. The goal is the opposite of a review: not to find problems, but
 to keep the bots' real problems and set the noise aside, with a reason for each.
 
 ```
 open review threads (gh, read only) or a JSON file
-   ├─ code   keep threads started by a bot (GraphQL type Bot, triage.authors), not jrfc's own,
+   ├─ code   keep threads started by a bot (GraphQL type Bot, triage.authors), not shall's own,
    │         not resolved; strip folded extras (<details>, HTML comments); anchor on the diff
    │         → outdated when the file or the line is gone
    ├─ Jev    selection of the commented chunk (the review's questions, shared cache)
    ├─ Jev    per comment: actionable? + one Noul per selected statement: does it cover the concern?
-   ├─ Jev    per pair on nearby lines (jrfc findings first, then earlier comments): same problem?
-   ├─ agent  jrfc-comment-verifier (no tools) with the verification evidence: confirmed | refuted | unknown
+   ├─ Jev    per pair on nearby lines (shall findings first, then earlier comments): same problem?
+   ├─ agent  shall-comment-verifier (no tools) with the verification evidence: confirmed | refuted | unknown
    └─ code   relevant (confirmed + cited) · unverified (kept) · noise (not actionable, duplicate,
              or refuted + cited evidence that exists) · outdated → triage.json, triage.md
 ```
@@ -141,41 +141,41 @@ open review threads (gh, read only) or a JSON file
   too many.
 - **The verifier judges truth, not importance.** "Also log the amount" is literally true, so
   importance is Jev's "actionable" question, before the agent.
-- **Never blocking.** A bot comment has no corpus severity; blocking stays with jrfc's review.
-- **Publishing.** `jrfc publish` adds the triage to the summary comment. With
+- **Never blocking.** A bot comment has no corpus severity; blocking stays with shall's review.
+- **Publishing.** `shall publish` adds the triage to the summary comment. With
   `--resolve-noise` it reads the threads again, and for each noise thread that is still open,
-  has no reply by a person and no earlier jrfc reply, it posts the reason (with a hidden
-  `jrfc:triage` key) and resolves it. A person who reopens the thread wins: jrfc replied once
+  has no reply by a person and no earlier shall reply, it posts the reason (with a hidden
+  `shall:triage` key) and resolves it. A person who reopens the thread wins: shall replied once
   and does not resolve it again. `--dry-run` writes `triage-plan.json` only.
 
 ## Run health
 
 A missed rule, a file that could not be parsed, or evidence that was not found all look the
-same on a PR: fewer comments. `jrfc review` writes `health.json` and a health line in the
+same on a PR: fewer comments. `shall review` writes `health.json` and a health line in the
 summary, with warnings for:
 
 - review calls that failed (chunks not reviewed);
 - blocking findings downgraded because their evidence was not found, and a high `unknown`
   rate in verification;
 - code graph problems: parse errors, tags-query errors, grammars downloaded during the run
-  (a network call; `jrfc prefetch` avoids it) or missing (`codegraph.download_grammars: false`).
+  (a network call; `shall prefetch` avoids it) or missing (`codegraph.download_grammars: false`).
 
 Statements that scored just below the threshold are listed as information. Threads that
-reviewers resolve without a fix are counted by `jrfc publish` ("dismissed").
+reviewers resolve without a fix are counted by `shall publish` ("dismissed").
 
 ## Publishing to a pull request
 
-Posting is deterministic code, never the agent. `jrfc publish` (called by
-`jrfc-pr-review --post N`) makes each push safe to re-run:
+Posting is deterministic code, never the agent. `shall publish` (called by
+`shall-pr-review --post N`) makes each push safe to re-run:
 
 - every inline comment carries a hidden key `hash(statement, path, line content)`; line
   content, not line number, so a finding keeps its key when code above it moves;
 - only findings without an existing thread are posted, as one `COMMENT` review;
-- an open jrfc thread is resolved when its line is **no longer in the PR diff** (fixed); a
+- an open shall thread is resolved when its line is **no longer in the PR diff** (fixed); a
   finding the agent simply did not repeat stays open, so model variance cannot flap it;
-- a thread jrfc resolved is reopened if the finding comes back;
+- a thread shall resolved is reopened if the finding comes back;
 - a thread a **person** resolved is left alone and written to `dismissed.json` (feedback);
-- one summary comment per PR is updated in place (`<!-- jrfc:summary -->`).
+- one summary comment per PR is updated in place (`<!-- shall:summary -->`).
 
 Blocking is the job's exit code (`--fail-on-blocking`, exit 2) on a required check, not a
 bot "changes requested" review. `--dry-run` reads the PR and writes `publish-plan.json`
@@ -185,48 +185,48 @@ without writing to GitHub.
 
 ```
 engineering-standards/          organisation corpus, prefix JRFC
-  jrfc.yaml  corpus/rfcs/  corpus/domains.yaml  corpus/effects.yaml  corpus/index/
+  shall.yaml  corpus/rfcs/  corpus/domains.yaml  corpus/effects.yaml  corpus/index/
 
 booking-service/                an application repository
-  .jrfc/jrfc.yaml               prefix: BOOK · extends: {repo: your-org/engineering-standards, ref: v2026.09}
-  .jrfc/rfcs/BOOK-0001-*.md     rules only this repository follows
-  .jrfc/domains.yaml            optional: local domains (cannot redefine org domains)
-  .jrfc/effects.yaml            optional: local known effects
-  .jrfc/index/                  generated, local layer only
+  .shall/shall.yaml               prefix: BOOK · extends: {repo: your-org/engineering-standards, ref: v2026.09}
+  .shall/rfcs/BOOK-0001-*.md     rules only this repository follows
+  .shall/domains.yaml            optional: local domains (cannot redefine org domains)
+  .shall/effects.yaml            optional: local known effects
+  .shall/index/                  generated, local layer only
 ```
 
-- **Discovery** (first match): `--config` / `$JRFC_CONFIG`, then `.jrfc/jrfc.yaml` or
-  `jrfc.yaml` walking up from the cwd, then `$JRFC_EXTENDS=owner/name@ref` (org corpus only),
-  then `~/.config/jrfc/config.yaml`.
-- **Pinned**: `extends.ref` is a tag or commit sha, fetched once into `~/.cache/jrfc`
-  (`$JRFC_CACHE_DIR`; private repositories via `$JRFC_GIT_TOKEN`). A PR is reviewed against
+- **Discovery** (first match): `--config` / `$SHALL_CONFIG`, then `.shall/shall.yaml` or
+  `shall.yaml` walking up from the cwd, then `$SHALL_EXTENDS=owner/name@ref` (org corpus only),
+  then `~/.config/shall/config.yaml`.
+- **Pinned**: `extends.ref` is a tag or commit sha, fetched once into `~/.cache/shall`
+  (`$SHALL_CACHE_DIR`; private repositories via `$SHALL_GIT_TOKEN`). A PR is reviewed against
   the same org rules on every run; a repository upgrades by bumping the ref. `extends.path`
   points at a local checkout instead.
 - **One prefix per layer**: org `JRFC-`, local e.g. `BOOK-`. Comments show which layer a rule
   comes from; org sources are GitHub permalinks at the pinned commit.
-- **Add, never weaken**: `jrfc conflicts --local` compares each local statement with every org
+- **Add, never weaken**: `shall conflicts --local` compares each local statement with every org
   statement (one Jev request per pair: a Choice for the relation plus two Nouls, "does it
   permit what the org rule forbids?" and "would following it violate the org rule?").
   Duplicate / weakens / conflict ≥ `conflicts.fail_threshold` (0.75) fails CI. A local RFC
   cannot supersede an org RFC. There are no waivers: a rule that should not apply to a
   repository is changed upstream by the domain owner.
 - **Settings** (`jev`, `selection`, `conflicts`, `review`, `codegraph`) are inherited from the
-  org `jrfc.yaml` and may be overridden locally.
+  org `shall.yaml` and may be overridden locally.
 
 ## This repository applies its own standards
 
-This repository is both an organisation corpus (root `jrfc.yaml`, `JRFC-`) and a consumer of
-it: `.jrfc/` extends `path: ..` and adds `JTOOL-` rules for the tooling itself.
+This repository is both an organisation corpus (root `shall.yaml`, `JRFC-`) and a consumer of
+it: `.shall/` extends `path: ..` and adds `JTOOL-` rules for the tooling itself.
 
 | RFC | Rules |
 | --- | --- |
-| JTOOL-0001 Using Jev | only through `jrfc.jev.Jev`; small state, no `existing[i]` indirection; gate on Nouls or summed failing classes; pinned model ids |
+| JTOOL-0001 Using Jev | only through `shall.jev.Jev`; small state, no `existing[i]` indirection; gate on Nouls or summed failing classes; pinned model ids |
 | JTOOL-0002 Agent boundaries | reviewer runs without tools; agent output validated before use; external writes deterministic with `--dry-run`; blocking from corpus + verification, only lowered by agents; blocking needs seen evidence |
 | JTOOL-0003 CLI contract | exit codes 0/1/2/3; deterministic commands never call a model; reproducible generated files |
 | JTOOL-0004 Plugin content (approved) | descriptions say when to use; one reviewer prompt; commands in skills exist |
 
-At the root, plain `jrfc` resolves to `.jrfc/` (a note is printed); organisation corpus
-commands use `--config jrfc.yaml` (the Makefile does this).
+At the root, plain `shall` resolves to `.shall/` (a note is printed); organisation corpus
+commands use `--config shall.yaml` (the Makefile does this).
 
 ## Hooks: standards on an agent's tool calls
 
@@ -252,7 +252,7 @@ PostToolUse  (Write | Edit | MultiEdit)
    ├─ Jev    one request per chunk: "do the added lines break it?" and "does it apply?"
    └─ code   warn at p ≥ hooks.code_warn, never deny: the lines are not evidence (JTOOL-0002.6)
 Stop
-   └─ jrfc review of the working tree (tracked diff + untracked files), once per distinct
+   └─ shall review of the working tree (tracked diff + untracked files), once per distinct
       change and session; `decision: block` only for verified blocking findings, at most
       `stop.max_blocks` times per session
 ```
@@ -275,27 +275,27 @@ Why these choices:
   that context, so it gets the warning; the Stop review, which gathers evidence, can block.
 - **Fail-open.** Jev gets `hooks.timeout` (3 s); past it or on an error the call runs and
   the decision log records `jev: timeout | error`. The answer still lands in the cache.
-  `jrfc hook` exits 3 on a Jev error (JTOOL-0003.1), which Claude Code treats as a
+  `shall hook` exits 3 on a Jev error (JTOOL-0003.1), which Claude Code treats as a
   non-blocking error.
 - **Redaction first.** The scanner replaces secrets with `[REDACTED:kind]` (line breaks kept)
   in everything sent to Jev or written to the log; Jev still sees that a credential was there.
-- **Plugin wiring.** The plugin's `hooks/hooks.json` runs `bin/jrfc-hook`, a shell script
-  that exits in a few milliseconds where no jrfc workspace exists, forwards to `jrfc hookd`
-  when it serves the repository, and otherwise runs `jrfc hook`. `hooks.enabled: false`
+- **Plugin wiring.** The plugin's `hooks/hooks.json` runs `bin/shall-hook`, a shell script
+  that exits in a few milliseconds where no shall workspace exists, forwards to `shall hookd`
+  when it serves the repository, and otherwise runs `shall hook`. `hooks.enabled: false`
   turns everything off in a workspace.
 - **No hook loops.** The Stop review runs `claude -p` agents; were they to load the plugin,
   their own Stop would start another review. Agents run with `--setting-sources ""` and
-  `JRFC_HOOKS_DISABLED=1` (the hooks answer nothing when it is set), and a lock per change
+  `SHALL_HOOKS_DISABLED=1` (the hooks answer nothing when it is set), and a lock per change
   (`stop-running-<sha>`) skips a second review of the same change from another session.
 - **Warm connection.** A new process per call costs ~0.5 s (Python start, TLS handshake);
-  `jrfc hookd` keeps one `Jev` (and its HTTP connection) for its lifetime: ~0.3 s per call,
+  `shall hookd` keeps one `Jev` (and its HTTP connection) for its lifetime: ~0.3 s per call,
   ~20 ms on a cache hit. It binds 127.0.0.1, answers only `application/json` POSTs (a
-  browser cannot send one cross-origin without a preflight) and, with `JRFC_HOOK_TOKEN`,
+  browser cannot send one cross-origin without a preflight) and, with `SHALL_HOOK_TOKEN`,
   requires a bearer token.
 
 ## Scan: whole files, the hook's judgment
 
-`jrfc scan` (`scan.py`) lists files with `git ls-files` (tracked and untracked, not ignored)
+`shall scan` (`scan.py`) lists files with `git ls-files` (tracked and untracked, not ignored)
 or a directory walk, keeps known code and config languages (not Markdown), and applies
 `scan.exclude` and `scan.max_file_chars`. Per file: the secret scanner on the raw text (exact;
 a hit on an enforced MUST is the only blocking finding), then the whole file, redacted, as one
@@ -311,10 +311,10 @@ its hill-climb changed only rule criteria (`applies_when`, `Violated when:`), no
 | --- | --- |
 | Agents deciding standards | Agents only draft (`status: draft`); promotion is an owner decision (JRFC-0001.4, CI notice) |
 | Unstable statement ids | Ids are in the source; `lint --against` fails on silent removal; `retired:` list |
-| Duplicates / conflicts | `jrfc conflicts`: one Jev request per statement pair |
+| Duplicates / conflicts | `shall conflicts`: one Jev request per statement pair |
 | Rot | `owner` + `review_by` required; lint warns when overdue |
 | Mechanical rules via AI | `Enforcement: linter` statements are never sent to Jev or the agent |
-| Index needs an agent | No: `jrfc build` is deterministic; semantic text lives in the reviewed source |
+| Index needs an agent | No: `shall build` is deterministic; semantic text lives in the reviewed source |
 | Jev is not an embedding model | One **Noul per candidate** (absolute, multi-label), not Choice-as-similarity |
 | Size limits (32k/64k tokens) | Chunking + automatic request packing under the token budget |
 | Literal reading | `applies_when` / `not_applies_when` per domain, RFC and statement |
@@ -323,10 +323,10 @@ its hill-climb changed only rule criteria (`applies_when`, `Violated when:`), no
 | Prompt injection | Strict criteria; the reviewer prompt treats content as data; tested (case 08) |
 | Noise | Blocking recomputed from corpus, comment cap, dedupe, advisory for SHOULD/approved |
 | Hallucinated lines / ids | Findings dropped unless the statement was selected for that chunk and the line is changed |
-| Unstable reruns | Jev answer cache; pinned model; `jrfc publish` dedupes comments by content key |
-| Repo-specific rules | Local `.jrfc/` layer with its own prefix, pinned `extends:`, `conflicts --local` gate |
+| Unstable reruns | Jev answer cache; pinned model; `shall publish` dedupes comments by content key |
+| Repo-specific rules | Local `.shall/` layer with its own prefix, pinned `extends:`, `conflicts --local` gate |
 | Reviewer sees one file | Verification of blocking findings against repository evidence |
 | Silent failures | `health.json` + summary warnings |
-| Noise from other AI reviewers | `jrfc triage`: Jev (actionable, covering rule, duplicate) + verifier with repository evidence; noise only with a reason |
+| Noise from other AI reviewers | `shall triage`: Jev (actionable, covering rule, duplicate) + verifier with repository evidence; noise only with a reason |
 | Service outages | Jev failures exit 3 (not 2), so CI can tell "service down" from "change blocked" |
 | Code leaves the company | **Open.** Diffs go to TypeSafe and Anthropic: get data-protection approval first |

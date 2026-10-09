@@ -13,7 +13,7 @@ Steps (each resumes where it stopped):
   grade                results.jsonl + traces + summary    -> <flow>/<variant>/
   check                oracle / null runs through the grader (harness self-test)
 
-  uv run --project plugins/jrfc/tooling python eval/scan/run.py jev --only pw-001,sgm-002
+  uv run --project plugins/shall/tooling python eval/scan/run.py jev --only pw-001,sgm-002
 """
 from __future__ import annotations
 
@@ -32,12 +32,12 @@ from pathlib import Path
 
 import yaml
 
-from jrfc.config import load_config
-from jrfc.corpus import load_corpus
-from jrfc.hooks import Hooks, redact
-from jrfc.jev import Jev
-from jrfc.review import run_claude
-from jrfc.select import Selector
+from shall.config import load_config
+from shall.corpus import load_corpus
+from shall.hooks import Hooks, redact
+from shall.jev import Jev
+from shall.review import run_claude
+from shall.select import Selector
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES = ROOT / "eval/scan/cases.yaml"
@@ -106,14 +106,14 @@ def gate() -> None:
 
 
 def setup():
-    cfg = load_config(str(ROOT / "jrfc.yaml"))
+    cfg = load_config(str(ROOT / "shall.yaml"))
     return cfg, load_corpus(cfg)
 
 
 def candidates(cfg, corpus, text: str, path: str) -> list:
     """The statements the hook asks Jev about for this file (same prefilter, same chunking)."""
-    from jrfc.artifact import parse_diff
-    from jrfc.hooks import synthetic_diff
+    from shall.artifact import parse_diff
+    from shall.hooks import synthetic_diff
     n = text.count("\n") + (0 if text.endswith("\n") else 1)
     chunks = parse_diff(synthetic_diff(path, redact(text)[0], [(1, max(n, 1))], 0), int(cfg.get("jev.max_chunk_chars")))
     sel = Selector(cfg, corpus, None, include_status=STATUSES)
@@ -137,7 +137,7 @@ async def step_jev(args) -> None:
     async with Jev(cfg, use_cache=False) as jev:   # fresh answers: reps measure Jev's own variance
         hooks = Hooks(cfg, corpus, jev, statuses=STATUSES, timeout=args.timeout_s, log=False,
                       score=args.score, skip_when_denied=False)
-        with tempfile.TemporaryDirectory(prefix="jrfc-scan-eval-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="shall-scan-eval-") as tmp:
             for case, rep in todo:   # one at a time: latency is what one scan request waits
                 text = read_file(repos, case)
                 path = Path(tmp) / case["id"] / case["path"]
@@ -473,10 +473,10 @@ def split_metrics(rows, labels) -> dict:
 
 
 def fingerprint() -> dict:
-    """What the scores depend on besides the runner: the jrfc commit, the corpus and the hook code."""
+    """What the scores depend on besides the runner: the shall commit, the corpus and the hook code."""
     h = hashlib.sha256()
     for p in sorted([*(ROOT / "corpus").rglob("*.md"), *(ROOT / "corpus").glob("*.yaml"),
-                     *(ROOT / "plugins/jrfc/tooling/src/jrfc").glob("*.py"), ROOT / "jrfc.yaml"]):
+                     *(ROOT / "plugins/shall/tooling/src/shall").glob("*.py"), ROOT / "shall.yaml"]):
         h.update(p.relative_to(ROOT).as_posix().encode() + p.read_bytes())
     head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
     return {"commit": head, "app_sha": h.hexdigest()[:16]}

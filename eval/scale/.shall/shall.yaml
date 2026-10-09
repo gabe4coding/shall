@@ -1,0 +1,7 @@
+# Scale evaluation corpus: ~45 extra RFCs layered on top of the organisation corpus, so
+# selection is measured against ~470 statements instead of ~50. Not a real standard set:
+# the rules are realistic distractors and near neighbours of the organisation rules.
+prefix: SCALE
+extends:
+  path: ../../..
+  name: shall              # layer label in indexes; without it the checkout folder name is used

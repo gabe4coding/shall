@@ -1,5 +1,5 @@
 {
-  "corpus_hash": "b0e45afb7c914bbd",
+  "corpus_hash": "1c063163e2867ef7",
   "counts": {
     "domains": 11,
     "rfcs": 12,
@@ -56,7 +56,7 @@
     },
     {
       "applies_when": "The content is an engineering standard, an RFC, or a change to the standards corpus.",
-      "description": "How engineering standards (jrfc RFCs) are written, reviewed and maintained.",
+      "description": "How engineering standards (shall RFCs) are written, reviewed and maintained.",
       "id": "governance",
       "layer": "local",
       "not_applies_when": "Application code, product specs or docs that are not engineering standards.",
@@ -143,7 +143,7 @@
   "extends": [],
   "rfcs": [
     {
-      "applies_when": "The content is a jrfc RFC file (front matter with an id like JRFC-0000) or a change to one.",
+      "applies_when": "The content is a shall RFC file (front matter with an id like JRFC-0000) or a change to one.",
       "artifacts": [
         "doc",
         "diff"
@@ -154,7 +154,7 @@
         "any"
       ],
       "layer": "local",
-      "not_applies_when": "Any content that is not a jrfc RFC file.",
+      "not_applies_when": "Any content that is not a shall RFC file.",
       "owner": "ai-governance",
       "path": "corpus/rfcs/JRFC-0001-rfc-format.md",
       "retired": [],
@@ -167,10 +167,10 @@
         "JRFC-0001.5"
       ],
       "status": "enforced",
-      "summary": "How a jrfc standard is structured so humans can read it and agents can select and enforce single statements from it.",
+      "summary": "How a shall standard is structured so humans can read it and agents can select and enforce single statements from it.",
       "superseded_by": null,
       "supersedes": [],
-      "title": "Format and lifecycle of jrfc standards"
+      "title": "Format and lifecycle of shall standards"
     },
     {
       "applies_when": "The content adds, changes or describes an HTTP endpoint, route, controller, handler, request/response payload or OpenAPI contract.",
@@ -517,7 +517,7 @@
       ],
       "layer": "local",
       "level": "MUST",
-      "not_applies_when": "Any content that is not a jrfc RFC file.",
+      "not_applies_when": "Any content that is not a shall RFC file.",
       "rfc": "JRFC-0001",
       "source": "corpus/rfcs/JRFC-0001-rfc-format.md#L41",
       "status": "enforced",
@@ -539,7 +539,7 @@
       ],
       "layer": "local",
       "level": "MUST",
-      "not_applies_when": "Any content that is not a jrfc RFC file.",
+      "not_applies_when": "Any content that is not a shall RFC file.",
       "rfc": "JRFC-0001",
       "source": "corpus/rfcs/JRFC-0001-rfc-format.md#L48",
       "status": "enforced",
@@ -561,7 +561,7 @@
       ],
       "layer": "local",
       "level": "SHOULD",
-      "not_applies_when": "Any content that is not a jrfc RFC file.",
+      "not_applies_when": "Any content that is not a shall RFC file.",
       "rfc": "JRFC-0001",
       "source": "corpus/rfcs/JRFC-0001-rfc-format.md#L55",
       "status": "enforced",
@@ -583,7 +583,7 @@
       ],
       "layer": "local",
       "level": "MUST",
-      "not_applies_when": "Any content that is not a jrfc RFC file.",
+      "not_applies_when": "Any content that is not a shall RFC file.",
       "rfc": "JRFC-0001",
       "source": "corpus/rfcs/JRFC-0001-rfc-format.md#L62",
       "status": "enforced",
@@ -605,7 +605,7 @@
       ],
       "layer": "local",
       "level": "SHOULD",
-      "not_applies_when": "Any content that is not a jrfc RFC file.",
+      "not_applies_when": "Any content that is not a shall RFC file.",
       "rfc": "JRFC-0001",
       "source": "corpus/rfcs/JRFC-0001-rfc-format.md#L69",
       "status": "enforced",

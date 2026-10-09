@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Claude Code hook entry of the shall plugin (hooks/hooks.json): one hook event on stdin,
+# the decision JSON on stdout.
+#   - no shall workspace here, or SHALL_HOOKS_DISABLED set: exit at once (a few ms, no output)
+#   - `shall hookd` running for this repository: forward the event to it (warm Jev, ~0.3 s)
+#   - otherwise: `shall hook` in a new process (~0.5 s)
+# Every failure lets the tool call run (fail-open): only a JSON decision on stdout blocks.
+set -uo pipefail
+[ -n "${SHALL_HOOKS_DISABLED:-}" ] && exit 0
+
+has_workspace() {
+  [ -n "${SHALL_CONFIG:-}${SHALL_EXTENDS:-}" ] && return 0
+  [ -f "$HOME/.config/shall/config.yaml" ] && return 0
+  local d="$PWD"
+  while :; do
+    [ -f "$d/.shall/shall.yaml" ] || [ -f "$d/shall.yaml" ] && return 0
+    [ "$d" = "/" ] && return 1
+    d="$(dirname "$d")"
+  done
+}
+has_workspace || exit 0
+
+input="$(cat)"
+port="${SHALL_HOOKD_PORT:-8765}"
+auth=()
+[ -n "${SHALL_HOOK_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $SHALL_HOOK_TOKEN")
+# refused (no hookd), 421 (hookd serves another repository) or any error: fall back
+if out="$(printf '%s' "$input" | curl -sf --max-time 590 -H 'Content-Type: application/json' \
+      ${auth[@]+"${auth[@]}"} --data-binary @- "http://127.0.0.1:$port/hook-events" 2>/dev/null)"; then
+  [ -n "$out" ] && [ "$out" != "{}" ] && printf '%s\n' "$out"
+  exit 0
+fi
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+printf '%s' "$input" | exec "$here/shall" hook
