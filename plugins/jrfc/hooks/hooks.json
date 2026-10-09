@@ -1,5 +1,5 @@
 {
-  "description": "jrfc: apply the engineering standards to an agent's tool calls (Jev) and review the change when the agent stops. Active only in repositories with a jrfc workspace; see README 'While an agent works'.",
+  "description": "jrfc: apply the engineering standards to an agent's tool calls (Jev) and review the change when the agent stops. Active only in repositories with a jrfc workspace; see docs/hooks.mdx in the jrfc repository.",
   "hooks": {
     "PreToolUse": [
       {

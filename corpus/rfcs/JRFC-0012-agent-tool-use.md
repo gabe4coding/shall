@@ -28,7 +28,7 @@ statement to some tools (a regular expression on the tool name). A statement wit
 `Enforcement: linter` is checked by code: its `Pattern:` (a regular expression searched in
 the command, with quoted strings masked) or the secret scanner. The others are judged by
 Jev; `Violated when:` describes a violating call. The action depends on the RFC status and
-the statement level: see "Hooks" in the README.
+the statement level: see docs/hooks.mdx.
 
 ## Requirements
 
