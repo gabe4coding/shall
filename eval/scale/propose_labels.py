@@ -7,12 +7,12 @@ definition; Claude returns the ids that govern the artifact. Output is for human
 import asyncio, json, sys
 from pathlib import Path
 import yaml
-from jrfc.config import load_config
-from jrfc.corpus import load_corpus
-from jrfc.jev import Jev
-from jrfc.artifact import build_artifact, detect_kind, read_source
-from jrfc.select import Selector, classify_document
-from jrfc.review import run_claude
+from shall.config import load_config
+from shall.corpus import load_corpus
+from shall.jev import Jev
+from shall.artifact import build_artifact, detect_kind, read_source
+from shall.select import Selector, classify_document
+from shall.review import run_claude
 
 SYSTEM = """You label an evaluation set for a classifier that selects engineering standards.
 A statement is APPLICABLE to an artifact when the artifact contains (or, for a task, the work will
@@ -25,7 +25,7 @@ SCHEMA = {"type": "object", "properties": {"applicable": {"type": "array", "item
           "required": ["applicable"]}
 
 async def main(labels_path, out_path):
-    cfg = load_config("eval/scale/.jrfc/jrfc.yaml"); corpus = load_corpus(cfg)
+    cfg = load_config("eval/scale/.shall/shall.yaml"); corpus = load_corpus(cfg)
     labels = yaml.safe_load(Path(labels_path).read_text()); base = Path(labels_path).parent
     sem = asyncio.Semaphore(4)
     async with Jev(cfg) as jev:

@@ -10,30 +10,30 @@ description: Repository layout, code map, tests, evals, the rules of this reposi
 | Path | Content |
 | --- | --- |
 | `corpus/` | The example organisation corpus: `rfcs/`, `domains.yaml`, `effects.yaml`, the generated `index/` |
-| `jrfc.yaml` | The configuration of the example organisation corpus |
-| `.jrfc/` | The rules of this repository for its own code (prefix `JTOOL-`) |
-| `plugins/jrfc/` | The Claude Code plugin: `skills/`, `agents/`, `hooks/hooks.json`, `bin/` |
-| `plugins/jrfc/tooling/` | The Python package of the CLI (`uv` project, Python 3.11+, tests) |
+| `shall.yaml` | The configuration of the example organisation corpus |
+| `.shall/` | The rules of this repository for its own code (prefix `JTOOL-`) |
+| `plugins/shall/` | The Claude Code plugin: `skills/`, `agents/`, `hooks/hooks.json`, `bin/` |
+| `plugins/shall/tooling/` | The Python package of the CLI (`uv` project, Python 3.11+, tests) |
 | `ci/github/` | Workflow templates for a corpus repository and for application repositories |
-| `examples/booking-service/.jrfc/` | The local rules of an example application repository (`BOOK-`) |
+| `examples/booking-service/.shall/` | The local rules of an example application repository (`BOOK-`) |
 | `eval/` | Labelled cases: `cases/`, `scale/`, `facts/` (selection), `verify/`, `triage/`, `hooks/`, `scan/` |
 | `docs/` | This documentation |
 
 ## Three workspaces
 
-Three jrfc workspaces are in this repository. Select the correct one:
+Three shall workspaces are in this repository. Select the correct one:
 
 | Workspace | How to select it | Prefix |
 | --- | --- | --- |
-| The rules of this repository | `jrfc` without options (`.jrfc/`) | `JTOOL-` |
-| The example organisation corpus | `jrfc --config jrfc.yaml` (the Makefile does this) | `JRFC-` |
-| The scale eval corpus | `jrfc --config eval/scale/.jrfc/jrfc.yaml` | |
+| The rules of this repository | `shall` without options (`.shall/`) | `JTOOL-` |
+| The example organisation corpus | `shall --config shall.yaml` (the Makefile does this) | `JRFC-` |
+| The scale eval corpus | `shall --config eval/scale/.shall/shall.yaml` | |
 
-`.jrfc/` extends the example corpus with `path: ..`.
+`.shall/` extends the example corpus with `path: ..`.
 
 ## Code map
 
-The code is in `plugins/jrfc/tooling/src/jrfc/`. The flow of `jrfc review`:
+The code is in `plugins/shall/tooling/src/shall/`. The flow of `shall review`:
 
 ```
 cli.py → config.py → corpus.py → artifact.py → effects.py → select.py → review.py
@@ -54,7 +54,7 @@ cli.py → config.py → corpus.py → artifact.py → effects.py → select.py 
 | `health.py` | `health.json` and the warnings about silent failures |
 | `publish.py` | Posts to GitHub. Deterministic, with `--dry-run`. |
 | `triage.py` | Sorts the comments of other AI reviewers |
-| `hooks.py` | The Claude Code hooks: `jrfc hook`, `jrfc hookd`, `jrfc hook-config` |
+| `hooks.py` | The Claude Code hooks: `shall hook`, `shall hookd`, `shall hook-config` |
 | `scan.py` | Lints whole files with `Hooks.judge_code` |
 | `conflicts.py` | Compares pairs of statements with Jev |
 | `evaluate.py` | The selection eval and the verification eval |
@@ -73,7 +73,7 @@ make build                    # write corpus/index/ again after a change to corp
 To run one test:
 
 ```bash
-uv run --quiet --project plugins/jrfc/tooling pytest -q plugins/jrfc/tooling/tests/test_effects.py -k fetch
+uv run --quiet --project plugins/shall/tooling pytest -q plugins/shall/tooling/tests/test_effects.py -k fetch
 ```
 
 ## Evals
@@ -87,10 +87,10 @@ make eval-scale    # selection with ~540 rules, 20 cases
 make eval-facts    # known effects on and off, 19 files in 9 languages
 make eval-triage   # triage, 24 labelled comments (needs TYPESAFE_API_KEY and claude)
 make eval-hooks    # hook judge, 75 labelled tool calls and writes (--no-cache to measure latency)
-plugins/jrfc/bin/jrfc --config jrfc.yaml eval-verify --retrieval treesitter   # verification (needs claude)
+plugins/shall/bin/shall --config shall.yaml eval-verify --retrieval treesitter   # verification (needs claude)
 ```
 
-The caches in `.jrfc-cache/` keep the answers. A second run pays only for the questions that
+The caches in `.shall-cache/` keep the answers. A second run pays only for the questions that
 changed. To measure the behavior of a model, use `--no-cache`.
 
 Know these facts about the eval data:
@@ -105,14 +105,14 @@ The current numbers are in [Results](./results.mdx).
 
 ## The rules of this repository
 
-This repository applies its own standards. The rules are in `.jrfc/rfcs/JTOOL-*.md`:
+This repository applies its own standards. The rules are in `.shall/rfcs/JTOOL-*.md`:
 
 | RFC | Topic |
 | --- | --- |
-| [JTOOL-0001](../.jrfc/rfcs/JTOOL-0001-jev-usage.md) | Use of Jev: only through `jrfc.jev.Jev`, small state, absolute Nouls, pinned model ids |
-| [JTOOL-0002](../.jrfc/rfcs/JTOOL-0002-agent-boundaries.md) | Agents: no tools, code validates each output, agents can only lower severity, deterministic writes with `--dry-run` |
-| [JTOOL-0003](../.jrfc/rfcs/JTOOL-0003-cli-contract.md) | CLI: exit codes, deterministic commands never call a model, reproducible generated files |
-| [JTOOL-0004](../.jrfc/rfcs/JTOOL-0004-plugin-content.md) | Plugin skills and agents |
+| [JTOOL-0001](../.shall/rfcs/JTOOL-0001-jev-usage.md) | Use of Jev: only through `shall.jev.Jev`, small state, absolute Nouls, pinned model ids |
+| [JTOOL-0002](../.shall/rfcs/JTOOL-0002-agent-boundaries.md) | Agents: no tools, code validates each output, agents can only lower severity, deterministic writes with `--dry-run` |
+| [JTOOL-0003](../.shall/rfcs/JTOOL-0003-cli-contract.md) | CLI: exit codes, deterministic commands never call a model, reproducible generated files |
+| [JTOOL-0004](../.shall/rfcs/JTOOL-0004-plugin-content.md) | Plugin skills and agents |
 
 To review your changes against these rules and the rules of the example corpus:
 
@@ -125,17 +125,17 @@ make self-review
 - Use one RFC 2119 level for each statement. Write the keywords in UPPERCASE only.
 - Never renumber or reuse a statement id. Retire it.
 - Agents make `status: draft` only. The domain owner decides about a promotion.
-- After a change to `corpus/`, run `make build` and `make check`. After a change to `.jrfc/`, run
-  `jrfc build`.
+- After a change to `corpus/`, run `make build` and `make check`. After a change to `.shall/`, run
+  `shall build`.
 
 [Standards](./standards.mdx) has all the rules.
 
 ## Release plugin changes
 
-When you change `plugins/jrfc/skills/`, `agents/` or `hooks/`, increase `version` in
-`plugins/jrfc/.claude-plugin/plugin.json`. Claude Code keeps a cache of each plugin version.
+When you change `plugins/shall/skills/`, `agents/` or `hooks/`, increase `version` in
+`plugins/shall/.claude-plugin/plugin.json`. Claude Code keeps a cache of each plugin version.
 
-The prompts in `plugins/jrfc/agents/*.md` are also the system prompts of `jrfc review` in CI. A
+The prompts in `plugins/shall/agents/*.md` are also the system prompts of `shall review` in CI. A
 change to a prompt changes the cache keys and the behavior. Run the related eval before and after.
 
 ## Contribute

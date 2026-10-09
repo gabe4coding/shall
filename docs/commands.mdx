@@ -1,12 +1,12 @@
 ---
 title: Commands
-description: Every jrfc command, whether it calls a model, and what it does.
+description: Every shall command, whether it calls a model, and what it does.
 ---
 
 # Commands
 
-Run `jrfc --help` to see all the commands. To see the options of a command, run
-`jrfc <command> --help`.
+Run `shall --help` to see all the commands. To see the options of a command, run
+`shall <command> --help`.
 
 Commands without a model call are deterministic. They do not need a key.
 
@@ -14,43 +14,43 @@ Commands without a model call are deterministic. They do not need a key.
 
 | Command | Calls a model? | What it does |
 | --- | --- | --- |
-| `jrfc lint [--against base-index.json]` | No | Checks the files, the levels, the ids and the id stability |
-| `jrfc build [--check]` | No | Writes the index again. `--check` fails when the index is not current. |
-| `jrfc list`, `jrfc show ID…` | No | Shows the RFCs and the statements |
-| `jrfc catalog` | No | Shows one line for each statement of all layers |
-| `jrfc new --domain D --title T` | No | Makes a new draft with the next free id |
-| `jrfc init --prefix P --repo R --ref T` | No | Makes a `.jrfc/` folder in a repository |
-| `jrfc fetch [--update]` | No (git) | Downloads the pinned organisation corpus |
-| `jrfc conflicts FILE` / `--local` | Jev | Finds duplicates, weaker rules and conflicts between rules |
+| `shall lint [--against base-index.json]` | No | Checks the files, the levels, the ids and the id stability |
+| `shall build [--check]` | No | Writes the index again. `--check` fails when the index is not current. |
+| `shall list`, `shall show ID…` | No | Shows the RFCs and the statements |
+| `shall catalog` | No | Shows one line for each statement of all layers |
+| `shall new --domain D --title T` | No | Makes a new draft with the next free id |
+| `shall init --prefix P --repo R --ref T` | No | Makes a `.shall/` folder in a repository |
+| `shall fetch [--update]` | No (git) | Downloads the pinned organisation corpus |
+| `shall conflicts FILE` / `--local` | Jev | Finds duplicates, weaker rules and conflicts between rules |
 
 ## Review
 
 | Command | Calls a model? | What it does |
 | --- | --- | --- |
-| `jrfc select PATH \| --text T` | Jev | Shows the rules that apply, with probabilities |
-| `jrfc review PATH` | Jev and Claude | Select → review → validate → verify → reports |
-| `jrfc bundle`, `validate`, `verify` | It changes | The review in separate steps. The skill `jrfc-review` uses them. |
-| `jrfc publish --pr N [--dry-run] [--resolve-noise]` | No | Posts a review to a GitHub pull request. With `triage.json`, it adds the triage and can resolve the noise threads. |
-| `jrfc triage DIFF --pr N \| --comments F` | Jev and Claude | Sorts the comments of other AI reviewers: relevant, unverified, noise, outdated |
-| `jrfc scan [PATHS…]` | Jev | Lints whole files: secret scanner and one Jev request for each file |
-| `jrfc prefetch` | No (download) | Downloads the parser grammars for the languages of the repository (CI) |
+| `shall select PATH \| --text T` | Jev | Shows the rules that apply, with probabilities |
+| `shall review PATH` | Jev and Claude | Select → review → validate → verify → reports |
+| `shall bundle`, `validate`, `verify` | It changes | The review in separate steps. The skill `shall-review` uses them. |
+| `shall publish --pr N [--dry-run] [--resolve-noise]` | No | Posts a review to a GitHub pull request. With `triage.json`, it adds the triage and can resolve the noise threads. |
+| `shall triage DIFF --pr N \| --comments F` | Jev and Claude | Sorts the comments of other AI reviewers: relevant, unverified, noise, outdated |
+| `shall scan [PATHS…]` | Jev | Lints whole files: secret scanner and one Jev request for each file |
+| `shall prefetch` | No (download) | Downloads the parser grammars for the languages of the repository (CI) |
 
 ## Hooks
 
 | Command | Calls a model? | What it does |
 | --- | --- | --- |
-| `jrfc hook` | Jev (and Claude on Stop) | Handles one Claude Code hook event from stdin |
-| `jrfc hookd [--port P]` | Jev (and Claude on Stop) | Serves hook events on localhost for `type: http` hooks |
-| `jrfc hook-config [--transport http\|command] [--no-stop]` | No | Prints the `hooks` block for `.claude/settings.json` |
+| `shall hook` | Jev (and Claude on Stop) | Handles one Claude Code hook event from stdin |
+| `shall hookd [--port P]` | Jev (and Claude on Stop) | Serves hook events on localhost for `type: http` hooks |
+| `shall hook-config [--transport http\|command] [--no-stop]` | No | Prints the `hooks` block for `.claude/settings.json` |
 
 ## Evals
 
 | Command | Calls a model? | What it does |
 | --- | --- | --- |
-| `jrfc eval` | Jev | Measures the selection on labelled cases |
-| `jrfc eval-verify` | Claude | Measures the verification |
-| `jrfc eval-triage` | Jev and Claude | Measures the triage |
-| `jrfc eval-hooks` | Jev | Measures the hook judge |
+| `shall eval` | Jev | Measures the selection on labelled cases |
+| `shall eval-verify` | Claude | Measures the verification |
+| `shall eval-triage` | Jev and Claude | Measures the triage |
+| `shall eval-hooks` | Jev | Measures the hook judge |
 
 Read [Development → Evals](./development.mdx#evals).
 
@@ -58,8 +58,8 @@ Read [Development → Evals](./development.mdx#evals).
 
 | Script | What it does |
 | --- | --- |
-| `plugins/jrfc/bin/jrfc` | The CLI. A wrapper around `uv run`. |
-| `plugins/jrfc/bin/jrfc-pr-review` | The review of a pull request for any CI system. See [CI](./ci.mdx). |
-| `plugins/jrfc/bin/jrfc-hook` | The entry point of the plugin hooks. See [Hooks](./hooks.mdx). |
+| `plugins/shall/bin/shall` | The CLI. A wrapper around `uv run`. |
+| `plugins/shall/bin/shall-pr-review` | The review of a pull request for any CI system. See [CI](./ci.mdx). |
+| `plugins/shall/bin/shall-hook` | The entry point of the plugin hooks. See [Hooks](./hooks.mdx). |
 
 The exit codes are in [Review → Exit codes](./review.mdx#exit-codes).

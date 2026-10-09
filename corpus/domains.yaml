@@ -4,7 +4,7 @@
 domains:
   governance:
     title: Standards governance
-    description: How engineering standards (jrfc RFCs) are written, reviewed and maintained.
+    description: How engineering standards (shall RFCs) are written, reviewed and maintained.
     owner: ai-governance
     applies_when: The content is an engineering standard, an RFC, or a change to the standards corpus.
     not_applies_when: Application code, product specs or docs that are not engineering standards.

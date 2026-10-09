@@ -1,0 +1,121 @@
+# Copy to .github/workflows/ in an application repository.
+#
+# Corpus layers:
+#   - organisation corpus: pinned by `extends:` in .shall/shall.yaml, or by SHALL_EXTENDS below
+#     for repositories without local standards; fetched into ~/.cache/shall
+#   - local corpus: .shall/rfcs/ in this repository (optional)
+#
+# Secrets: TYPESAFE_API_KEY, ANTHROPIC_API_KEY, SHALL_GIT_TOKEN (read access to the
+# organisation corpus and tooling repos, if private).
+# Data: diffs are sent to TypeSafe and Anthropic. Get data-protection approval first
+# (TypeSafe zero data retention is an enterprise-plan feature).
+#
+# Exit codes of the review step: 0 ok · 2 blocking findings · 3 Jev service failure · 1 other error.
+name: shall
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: shall-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  SHALL_EXTENDS: your-org/engineering-standards@v2026.09   # TODO: org corpus @ pinned tag; used only without .shall/
+  SHALL_GIT_TOKEN: ${{ secrets.SHALL_GIT_TOKEN }}
+  JRFC: .shall-tooling/plugins/shall/bin
+
+jobs:
+  # Local standards of this repository: deterministic checks + "local rules must not weaken
+  # organisation rules". Runs only when .shall/ exists.
+  local-standards:
+    if: ${{ hashFiles('.shall/shall.yaml') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/checkout@v4
+        with:
+          repository: gabe4coding/shall       # TODO: the shall tooling repository (or your fork)
+          ref: main                          # TODO: pin a tag or commit sha
+          path: .shall-tooling
+          token: ${{ secrets.SHALL_GIT_TOKEN || github.token }}
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/shall
+          key: shall-corpus-${{ hashFiles('.shall/shall.yaml') }}
+      - name: Lint local RFCs
+        run: $JRFC/shall lint
+      - name: Local index is up to date
+        run: $JRFC/shall build --check
+      - name: Local statement ids are stable
+        run: |
+          if git show "origin/${{ github.base_ref }}:.shall/index/index.json" > /tmp/base-index.json 2>/dev/null; then
+            $JRFC/shall lint --quiet --against /tmp/base-index.json
+          fi
+      - name: Local rules do not duplicate, weaken or conflict with organisation rules
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+        run: $JRFC/shall conflicts --local
+
+  review:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/checkout@v4
+        with:
+          repository: gabe4coding/shall       # TODO: the shall tooling repository (or your fork)
+          ref: main                          # TODO: pin a tag or commit sha
+          path: .shall-tooling
+          token: ${{ secrets.SHALL_GIT_TOKEN || github.token }}
+
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install -g @anthropic-ai/claude-code
+
+      - name: Restore corpus, grammar and Jev answer caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/shall
+            ~/.cache/tree-sitter-language-pack
+            .shall/.shall-cache
+            .shall-cache
+          key: shall-${{ github.event.pull_request.number }}-${{ github.sha }}
+          restore-keys: shall-${{ github.event.pull_request.number }}-
+
+      - name: Grammars for the languages in this repository (verification code graph)
+        run: $JRFC/shall prefetch
+
+      - name: shall review
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        # Make this job a required check to block merges on exit 2 (enforced MUST findings).
+        # Optional: add `--triage` to sort the open comments of other AI reviewers (Copilot,
+        # CodeRabbit...) into relevant / unverified / noise in the summary comment, and
+        # `--resolve-noise` to reply to and resolve the noise threads (needs
+        # `pull-requests: write`, already granted above). Bots that comment after this job
+        # are triaged on the next push.
+        run: $JRFC/shall-pr-review --post ${{ github.event.pull_request.number }} --fail-on-blocking
+
+      - name: Job summary
+        if: always()
+        run: cat .shall-out/pr/review.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shall-review
+          path: .shall-out/pr

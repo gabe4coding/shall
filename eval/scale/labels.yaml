@@ -1,4 +1,4 @@
-# Selection labels for the scale evaluation (org corpus + eval/scale/.jrfc, ~540 statements).
+# Selection labels for the scale evaluation (org corpus + eval/scale/.shall, ~540 statements).
 # expected = statements that GOVERN something in the artifact (applicability, not violation).
 # How they were made: the org labels (eval/labels.yaml), plus every statement that Claude
 # (Sonnet, independent of Jev) and Jev flat (p >= 0.5) both proposed, plus disagreements a

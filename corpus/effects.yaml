@@ -1,4 +1,4 @@
-# Known side effects of library calls (jrfc effects registry).
+# Known side effects of library calls (shall effects registry).
 #
 # Jev judges only the text it is given: `requests.post(...)` looks like a network call,
 # `get_parser(lang)` or `h.DB.Query(...)` do not. When code finds a call listed here (in the
@@ -7,7 +7,7 @@
 # from p 0.14 to 0.77 with the fact.
 #
 # Reviewed like the RFCs: owners approve entries. Keep `effect` literal and short; it is read
-# as "<call> (<module>) <effect>". Local layers may add entries in .jrfc/effects.yaml.
+# as "<call> (<module>) <effect>". Local layers may add entries in .shall/effects.yaml.
 #
 #   module:    import spec, prefix match (`requests` also matches `requests.adapters`)
 #   calls:     names called through the import (`requests.post`, `from x import get; get()`)
