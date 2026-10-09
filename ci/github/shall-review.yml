@@ -41,7 +41,7 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: actions/checkout@v4
         with:
-          repository: gabe4coding/jrfc       # TODO: the shall tooling repository (or your fork)
+          repository: gabe4coding/shall       # TODO: the shall tooling repository (or your fork)
           ref: main                          # TODO: pin a tag or commit sha
           path: .shall-tooling
           token: ${{ secrets.SHALL_GIT_TOKEN || github.token }}
@@ -73,7 +73,7 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: actions/checkout@v4
         with:
-          repository: gabe4coding/jrfc       # TODO: the shall tooling repository (or your fork)
+          repository: gabe4coding/shall       # TODO: the shall tooling repository (or your fork)
           ref: main                          # TODO: pin a tag or commit sha
           path: .shall-tooling
           token: ${{ secrets.SHALL_GIT_TOKEN || github.token }}
