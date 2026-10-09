@@ -1,0 +1,75 @@
+---
+title: Installation
+description: The tools that jrfc needs, how to put the CLI on your PATH and how to install the Claude Code plugin.
+---
+
+# Installation
+
+## Requirements
+
+| Tool | Necessary for | How to get it |
+| --- | --- | --- |
+| `git`, `make` | All tasks | The package manager of your operating system |
+| [`uv`](https://docs.astral.sh/uv/) | The `jrfc` CLI. `uv` installs Python 3.11+ and the dependencies. | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| `TYPESAFE_API_KEY` | Selection of the rules that apply (Jev) | An API key from [typesafe.ai](https://docs.typesafe.ai) |
+| [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`) | The review | `npm install -g @anthropic-ai/claude-code`. Then log in, or set `ANTHROPIC_API_KEY`. |
+| [`gh`](https://cli.github.com/) | Comments on GitHub pull requests | `gh auth login` |
+
+Some commands only read or build the corpus: `lint`, `build`, `list`, `show`, `new`, `init`. These
+commands do not need a key, and they do not call a model.
+
+> [!IMPORTANT]
+> A review sends the diff to TypeSafe (selection) and to Anthropic (review). Make sure that your
+> organisation permits this before you use jrfc on private code.
+
+## Install the CLI
+
+The CLI is `plugins/jrfc/bin/jrfc`. It is a wrapper around `uv run`. The first run installs the
+dependencies.
+
+```bash
+git clone https://github.com/gabe4coding/jrfc.git
+cd jrfc
+export PATH="$PWD/plugins/jrfc/bin:$PATH"
+jrfc --help
+```
+
+To make sure that the installation is correct, run the checks. They do not need a key:
+
+```bash
+make check
+make test
+```
+
+## Install the Claude Code plugin
+
+```bash
+claude plugin marketplace add gabe4coding/jrfc
+claude plugin install jrfc@jrfc
+```
+
+You can also give a path to a local clone instead of `gabe4coding/jrfc`. Start a new Claude Code
+session after the installation. The plugin loads only in a new session.
+
+The plugin contains these parts:
+
+| Part | What it does |
+| --- | --- |
+| `jrfc` command | The CLI on the `PATH` of Claude Code |
+| `jrfc-standards` skill | Before Claude writes code, it finds the rules that apply |
+| `jrfc-review` skill | Reviews a pull request, a spec or a document when you ask |
+| `jrfc-author` skill | Writes, changes, splits or retires a standard |
+| `jrfc-index` skill | Builds the index again after a change to the corpus |
+| `jrfc-triage` skill | Sorts the comments of other AI reviewers on a pull request |
+| Agents | `jrfc-reviewer`, `jrfc-verifier`, `jrfc-comment-verifier`. Code and skills use them. |
+| Hooks | Check the tool calls of an agent. See [Hooks](./hooks.mdx). |
+
+The hooks do nothing outside a jrfc workspace. A workspace has a `.jrfc/jrfc.yaml` or a `jrfc.yaml`
+in the current folder or a parent folder, or one of `JRFC_CONFIG`, `JRFC_EXTENDS` or
+`~/.config/jrfc/config.yaml`.
+
+## Next steps
+
+- [Review](./review.mdx): find the rules that apply and review a change.
+- [Standards](./standards.mdx): write your first standard.
+- [CI](./ci.mdx): review each pull request.
