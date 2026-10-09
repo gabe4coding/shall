@@ -1,0 +1,115 @@
+---
+title: Hooks
+description: Check each tool call of a Claude Code agent against the standards while the agent works, and review the change when the agent stops.
+---
+
+# Hooks
+
+The hooks apply the rules to each tool call of an agent, at the time of the call. Jev is the judge.
+The level of the rule and the status of its standard select the action.
+
+## What the hooks check
+
+| When | What jrfc checks | Possible actions | Time |
+| --- | --- | --- | --- |
+| Before a Bash or MCP call | `tool` rules ([JRFC-0012](../corpus/rfcs/JRFC-0012-agent-tool-use.md)): regex patterns, then Jev | deny, ask, warn | ~0.3 s |
+| Before a Write or Edit | Secret scanner (code, not Jev) | deny | ~1 ms |
+| After a Write or Edit | Code rules on the written lines and the lines around them | warn only | ~0.3 s |
+| End of the turn of the agent (Stop) | The full change, with `jrfc review` | block (verified findings only) | Some seconds. jrfc skips it when nothing changed. |
+
+## Default actions
+
+The setting `hooks.actions` maps the status and the level of a rule to an action:
+
+| Rule | Probability that the call breaks the rule | Action |
+| --- | --- | --- |
+| Enforced MUST | p ≥ 0.9 | Deny the call |
+| Enforced MUST | 0.5 ≤ p < 0.9 | Ask the user |
+| Enforced SHOULD | p ≥ 0.7 | Warn the agent |
+| Approved MUST | p ≥ 0.5 | Warn the agent |
+| All other rules | Any | Write to the log only |
+
+After a write, the hooks never deny. The written lines are not sufficient evidence: for example, the
+timeout can be in a different file. The agent gets a warning that it can check. Only the Stop review
+can block.
+
+## Safety
+
+- **Redaction.** The secret scanner removes secrets from each input before jrfc sends it to Jev.
+- **Fail-open.** If Jev is slow (more than `hooks.timeout`, 3 s) or not available, the call runs.
+- **Log.** jrfc adds each decision to `.jrfc-cache/hooks/decisions.jsonl`.
+- **No loops.** The agents that jrfc starts get `JRFC_HOOKS_DISABLED=1`. Their hooks do nothing.
+
+Without `TYPESAFE_API_KEY`, only the secret scanner runs.
+
+## With the plugin
+
+The plugin turns the hooks on. `hooks/hooks.json` runs `bin/jrfc-hook` for each event:
+
+- Outside a jrfc workspace, it stops in a few milliseconds.
+- If `jrfc hookd` runs for the repository, it sends the event to that server (~0.3 s for each call).
+- If not, it runs `jrfc hook` (~0.5 s for each call).
+
+To keep the Jev connection open, start the server. It is optional:
+
+```bash
+jrfc hookd &                  # port: hooks.port, 8765
+```
+
+To turn off the hooks in a workspace, set `hooks: {enabled: false}`. To turn off only the review at
+the end of the turn, set `hooks: {stop: {enabled: false}}`. This review runs `jrfc review` with
+Claude when the change is new.
+
+## Without the plugin
+
+Print a settings block. Merge it into `.claude/settings.json` (project) or `~/.claude/settings.json`
+(user). Do not use the plugin and this block together: if you do, each hook runs two times.
+
+```bash
+jrfc hook-config                      # http hooks to `jrfc hookd` (you start the server)
+jrfc hook-config --transport command  # no server: one process for each call
+jrfc hook-config --no-stop            # without the review at the end of the turn
+```
+
+`jrfc hookd` checks only events whose working directory is in its repository. Other events get the
+status 421. Run one server for each repository with `--port` (`JRFC_HOOKD_PORT` for the plugin). To
+require a bearer token, set `JRFC_HOOK_TOKEN` before you start `hookd` and the hooks.
+
+## Tool rules
+
+The tool rules are in [JRFC-0012](../corpus/rfcs/JRFC-0012-agent-tool-use.md), with the status
+`enforced`. A `tool` rule names the tools that it covers with `Tools:`. This is a regular expression
+that must match the full tool name.
+
+Code checks the rules with `Enforcement: linter` exactly, without Jev:
+
+- **With a `Pattern:`.** jrfc searches the command for a regular expression. It masks quoted
+  strings first, so a commit message that contains `--no-verify` does not match. Examples:
+  JRFC-0012.2 (force push), JRFC-0012.3 (skipped git hooks), JRFC-0012.8 (TLS verification off). A
+  match counts as p = 1.
+- **With the secret scanner.** JRFC-0012.4 and JRFC-0004.1. `hooks.secrets` maps a tool to the rule
+  that a hit breaks.
+
+Jev judges the other rules. It uses the line `Violated when:` as the criterion.
+
+## Try draft rules
+
+To try the tool rules of a draft standard before its owner approves them, add a `draft` action
+table in a workspace:
+
+```yaml
+# .jrfc/jrfc.yaml
+hooks:
+  actions:
+    draft: {MUST: [[0.9, deny], [0.5, ask]], SHOULD: [[0.7, warn]], MAY: [[0.7, log]]}
+```
+
+## Limits
+
+The hooks see one call at a time. A violation can be split over many calls, for example "write a
+script, then run it". jrfc judges each call alone. The Stop review sees the files that result, not
+the commands. After a write, Jev judges the written lines and 15 lines around them only.
+
+The settings are in [Configuration](./configuration.mdx#hooks). The design and the measurements are
+in [Architecture](./architecture.mdx#hooks-standards-on-an-agents-tool-calls) and
+[Results](./results.mdx).

@@ -1,0 +1,145 @@
+---
+title: Review
+description: Find the rules that apply to a change or a task, review a diff, a spec or a document, and read the outputs and exit codes.
+---
+
+# Review
+
+A review has four steps. Each step has one owner:
+
+1. **Select (Jev).** Jev finds the rules that apply to each file of the change. It gives a
+   probability for each rule.
+2. **Review (Claude, no tools).** The reviewer agent sees one file and only the rules that apply to
+   it. It returns the violations as JSON.
+3. **Validate (code).** Code removes findings on lines that the change did not touch, findings for
+   rules that Jev did not select, and duplicates.
+4. **Verify (code, Jev and an agent).** Code collects evidence from the repository for each blocking
+   finding. A verifier agent answers *confirmed*, *refuted* or *unknown*. A finding blocks only if
+   its evidence was seen.
+
+[Architecture](./architecture.mdx) tells how each step works.
+
+## Find the rules that apply
+
+Before you start a task, ask which rules apply to it:
+
+```bash
+jrfc select --text "add a Kafka consumer for booking events"
+jrfc show JRFC-0006.1
+```
+
+You can also give a diff or a file:
+
+```bash
+jrfc select /tmp/pr.diff
+```
+
+`jrfc select` uses only Jev. It takes approximately 2 seconds. With the plugin, Claude Code does this
+step without a request (skill `jrfc-standards`).
+
+## Review a change
+
+Make a diff and review it from the root of your repository. The verification step searches for
+evidence there.
+
+```bash
+git diff origin/main...HEAD > /tmp/pr.diff
+jrfc review /tmp/pr.diff --out-dir .jrfc-out/pr
+cat .jrfc-out/pr/review.md
+```
+
+For a pull request on GitHub, use `gh pr diff 123 > /tmp/pr.diff`.
+
+You can also review a spec, a document or a code file. jrfc uses Jev to identify a Markdown file as
+a spec or a document. To set the kind, use `--kind spec` or `--kind doc`:
+
+```bash
+jrfc review docs/design/refunds.md --kind spec
+```
+
+To post the review on a pull request, read [CI](./ci.mdx).
+
+## Organisation rules and local rules
+
+### Only the rules of your organisation
+
+Set `JRFC_EXTENDS` to the corpus of your organisation, pinned to a tag or a commit:
+
+```bash
+export JRFC_EXTENDS=your-org/engineering-standards@v2026.09   # owner/name@ref, or a local path
+export JRFC_GIT_TOKEN=...                                      # only for a private repository
+```
+
+To try jrfc with the example corpus of this repository, use `JRFC_EXTENDS=gabe4coding/jrfc@main`.
+
+### Rules for one repository
+
+A repository can add its own rules on top of the rules of the organisation:
+
+```bash
+jrfc init --prefix BOOK --repo your-org/engineering-standards --ref v2026.09
+jrfc fetch                                     # download the pinned corpus into ~/.cache/jrfc
+jrfc new --domain api --title "Booking events carry a schema version"
+$EDITOR .jrfc/rfcs/BOOK-0001-*.md              # write the rule
+jrfc lint && jrfc build                        # check the file, write .jrfc/index/ again
+jrfc conflicts --local                         # compare your rules with the rules of the organisation
+git add .jrfc && git commit -m "Add BOOK-0001"
+```
+
+These rules apply to local rules:
+
+- Local rules use their own prefix, for example `BOOK-`.
+- Local rules can only **add** requirements or make the requirements of the organisation
+  **stricter**. `jrfc conflicts --local` fails when a local rule repeats, weakens or contradicts an
+  organisation rule.
+- There are no local waivers. If a rule of the organisation must not apply to your repository, ask
+  the owner of the rule to change it in the organisation corpus.
+- To get new organisation rules, change `extends.ref` in `.jrfc/jrfc.yaml`. Then run
+  `jrfc fetch --update`.
+
+[`examples/booking-service/.jrfc/`](../examples/booking-service/.jrfc/) is a full example.
+[Standards](./standards.mdx) tells how to write a rule.
+
+## Review inside a Claude Code session
+
+With the plugin, ask Claude: *"check this PR against our standards"*. The skill `jrfc-review` runs
+`jrfc review`. If you want to discuss the findings, the skill can also run the steps one at a time:
+`jrfc select`, `jrfc bundle`, the `jrfc-reviewer` agent for each file, `jrfc validate` and
+`jrfc verify`. Both ways use the same reviewer prompt
+(`plugins/jrfc/agents/jrfc-reviewer.md`).
+
+## Outputs
+
+`jrfc review --out-dir DIR` writes these files:
+
+| File | Content |
+| --- | --- |
+| `review.md` | The summary for people: findings, the rules that apply, a health line |
+| `findings.json` | The validated findings, and the findings that code removed, each with the reason |
+| `selection.json` | The probability of each rule for each part of a file, and the known effects |
+| `github-review.json` | The payload for `jrfc publish` (`--format github`) |
+| `health.json` | Problems that can stay hidden: failed calls, blocking findings without verification, files that jrfc did not parse, rules just below the threshold |
+| `prompts/` | The exact prompt that jrfc sent to the reviewer for each part of a file |
+
+## Exit codes
+
+All `jrfc` commands use the same exit codes:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Done. There is no blocking finding, or `--fail-on-blocking` is not set. |
+| 1 | Error: configuration, tooling, or a failed review call |
+| 2 | Blocking findings: a verified violation of a MUST rule in an `enforced` standard |
+| 3 | The Jev service failed after retries. Run the job again. This is not a problem in the code. |
+
+## Severity
+
+The corpus sets the severity, not the reviewer:
+
+| Status of the standard | MUST rule | SHOULD or MAY rule |
+| --- | --- | --- |
+| `enforced` | Blocking | Advisory comment |
+| `approved` | Advisory comment | Advisory comment |
+| `draft` | Not used in reviews | Not used in reviews |
+
+To include drafts in a review, use `--include-draft`.

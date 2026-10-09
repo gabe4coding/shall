@@ -5,58 +5,38 @@ description: Use before writing or changing code, an API, a migration, a design 
 
 # Follow jrfc standards while you work
 
-The jrfc corpus holds the organisation's engineering standards as RFC 2119 statements
-(MUST / SHOULD / MAY). Load only what applies — never read the whole corpus into context.
+Load only the statements that apply. Never read the whole corpus into context.
 
 ## Before you start a task
 
-Ask the selector which statements apply to the work you are about to do:
-
 ```bash
 jrfc select --text "<one or two sentences describing the change you will make>"
+jrfc show JRFC-0006.1 JRFC-0003.1      # text, level, applicability of the ids it returned
 ```
 
-It returns statement ids with a probability. Then open the ones you need:
+Follow MUST statements. Follow SHOULD statements unless you have a reason; tell the user the
+reason. Mention the ids you followed in your summary or commit message.
 
-```bash
-jrfc show JRFC-0006.1 JRFC-0003.1      # statement text, level, applicability, source line
-```
+`enforced` MUST statements block merges in CI; `approved` ones give advisory comments; `draft`
+ones are proposals, not rules. Local ids (repo prefix, for example `BOOK-`) apply on top of
+organisation rules.
 
-Follow MUST statements; follow SHOULD statements unless you have a reason, and tell the
-user the reason. Mention the ids you followed in your summary or commit message.
+## Browse
 
-## Browsing
+- `jrfc catalog`: one line per statement, all layers.
+- `jrfc list [--domain api] [--status enforced]`: RFCs with status.
+- `jrfc show JRFC-0002`: a full RFC with its context.
 
-- `jrfc catalog` — one line per statement of all layers (organisation + this repo's
-  `.jrfc/`), grouped by domain and RFC. Local ids have the repo prefix (e.g. `BOOK-`);
-  they apply in this repo on top of the organisation rules.
-- `jrfc list [--domain api] [--status enforced]` — RFCs with status.
-- `jrfc show JRFC-0002` — a full RFC with its context.
+## Check existing files
 
-## Lint existing files
-
-To check files that already exist (a module you are about to change, a folder), without an
-agent review:
-
-```bash
-jrfc scan src/payments/          # one Jev request per file; warnings, secret-scanner hits
-```
-
-A warning is Jev's judgment on one file: read the code before you act on it. Only
-secret-scanner hits are blocking.
+`jrfc scan src/payments/` lints files (one Jev request per file). A warning is Jev's judgment on one
+file: read the code before you act. Only secret-scanner hits block.
 
 ## Before you hand over
-
-Run the review on your own change and fix what it reports:
 
 ```bash
 git diff > /tmp/change.diff && jrfc review /tmp/change.diff --out-dir .jrfc-out/self
 ```
 
-## Status meanings
-
-If `jrfc` says no config is found, the repository has no standards set up; tell the user
+Fix what it reports. If `jrfc` finds no config, the repository has no standards: tell the user
 (`jrfc init`, or `JRFC_EXTENDS=<org>/<corpus-repo>@<tag>` for organisation rules only).
-
-`enforced` MUST statements block merges in CI; `approved` statements produce advisory
-comments; `draft` statements are proposals — do not treat them as rules.
