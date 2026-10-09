@@ -1,12 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="shall">
   <title>shall</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#16233D"/>
+      <stop offset="1" stop-color="#0A111F"/>
+    </linearGradient>
+    <linearGradient id="ink" x1="190" y1="70" x2="66" y2="186" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7DD3FC"/>
+      <stop offset="1" stop-color="#34D399"/>
+    </linearGradient>
+  </defs>
   <!-- tile -->
-  <rect width="256" height="256" rx="58" fill="#0F1A2B"/>
-  <rect x="1.5" y="1.5" width="253" height="253" rx="56.5" fill="none" stroke="#5EC2FF" stroke-opacity=".2" stroke-width="3"/>
-  <!-- the standard: a page with numbered statements -->
-  <path d="M 72 52 H 150 L 184 86 V 204 H 72 Z" fill="none" stroke="#E6F2FF" stroke-width="14" stroke-linejoin="round"/>
-  <path d="M 150 52 V 86 H 184" fill="none" stroke="#E6F2FF" stroke-width="10" stroke-linejoin="round"/>
-  <path d="M 98 112 H 158 M 98 140 H 138" stroke="#E6F2FF" stroke-width="12" stroke-linecap="round"/>
-  <!-- the check: applied and verified -->
-  <path d="M 112 178 L 140 204 L 206 132" fill="none" stroke="#5EC2FF" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect width="256" height="256" rx="58" fill="url(#bg)"/>
+  <rect x="1.5" y="1.5" width="253" height="253" rx="56.5" fill="none" stroke="#7DD3FC" stroke-opacity=".18" stroke-width="3"/>
+  <!-- an "s" made of three rule lines -->
+  <path d="M 184 76 H 102 A 26 26 0 0 0 102 128 H 154 A 26 26 0 0 1 154 180 H 72" fill="none" stroke="url(#ink)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- rule numbers -->
+  <g fill="#7DD3FC" fill-opacity=".55">
+    <circle cx="214" cy="76" r="9"/>
+    <circle cx="42" cy="180" r="9"/>
+  </g>
 </svg>
