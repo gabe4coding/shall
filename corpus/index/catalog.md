@@ -75,7 +75,7 @@ How services write logs, metrics and traces, and what data may appear in them.
 Conventions for Python source code in services, jobs and tools.
 
 ### JRFC-0011 Python type hints (draft) — `corpus/rfcs/JRFC-0011-python-typing.md`
-- `JRFC-0011.1` [SHOULD, draft, agent] Typed public functions
+- `JRFC-0011.1` [SHOULD, draft, linter] Typed public functions
 
 ## reliability — Reliability of service-to-service calls
 

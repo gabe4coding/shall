@@ -454,7 +454,7 @@ def cmd_triage(args, cfg) -> int:
     import os
     from .jev import Jev
     from .review import answer_cache
-    from .triage import bot_comments, load_threads, render_triage, triage_comments
+    from .triage import bot_comments, load_pr_level, load_threads, pr_level_items, render_triage, triage_comments
     corpus = load_corpus(cfg)
     if bool(args.comments) == bool(args.pr):
         raise SystemExit("shall triage: give --comments <file.json> or --pr <number>")
@@ -463,12 +463,20 @@ def cmd_triage(args, cfg) -> int:
         repo = args.repo or os.environ.get("GITHUB_REPOSITORY")
         if not repo:
             raise SystemExit("shall triage: pass --repo owner/name or set GITHUB_REPOSITORY")
-        threads = GitHub(repo, args.pr).review_threads()   # read only
+        gh = GitHub(repo, args.pr)
+        threads, pr_level = gh.review_threads(), gh.pr_level_comments()   # read only
     else:
-        threads = load_threads(Path(args.comments))
+        threads, pr_level = load_threads(Path(args.comments)), load_pr_level(Path(args.comments))
     comments, skipped = bot_comments(cfg, threads)
     name, raw = read_source(args.path, None)
     artifact = build_artifact(name, raw, "diff", int(cfg.get("jev.max_chunk_chars")))
+    # PR-level bot comments: the findings they list per file are triaged like inline ones; the
+    # rest are summaries and are only counted
+    bot_pr_level, _ = bot_comments(cfg, pr_level)
+    paths = {c.path for c in artifact.chunks}
+    per_comment = [pr_level_items(c, paths) for c in bot_pr_level]
+    comments += [item for items in per_comment for item in items]
+    skipped["pr_level_summary"] = sum(1 for items in per_comment if not items)
     findings = None
     if args.findings:
         findings = json.loads(Path(args.findings).read_text(encoding="utf-8"))

@@ -140,3 +140,22 @@ def test_end_to_end_only_verifies_what_code_selects(tmp_path):
     assert [k["statement_id"] for k in kept] == ["JTOOL-0001.4"]
     assert dropped[0]["statement_id"] == "JTOOL-0002.1"
     assert stats["refuted"] == 1 and stats["verified"] == 1
+
+
+def test_a_diff_finding_gets_evidence_from_the_rest_of_its_own_file(tmp_path):
+    from shall.verify import gather_evidence
+    lines = ["const client = makeClient({ timeoutMs: 2000 });"] + [f"// filler {i}" for i in range(80)] + \
+            ["export async function load(id) {", "  return client.get(`/items/${id}`);", "}"]
+    (tmp_path / "api.ts").write_text("\n".join(lines) + "\n")
+    diff = ("diff --git a/api.ts b/api.ts\n--- a/api.ts\n+++ b/api.ts\n@@ -82,1 +82,2 @@\n"
+            " export async function load(id) {\n+  return client.get(`/items/${id}`);\n")
+    art = build_artifact("pr.diff", diff, "diff", 40000)
+    f = finding(path="api.ts", line=83, quote="return client.get(`/items/${id}`);", depends_on=["client"],
+                statement_text="Every outbound call MUST set a timeout.", chunk=art.chunks[0].id)
+    excerpts, _ = asyncio.run(gather_evidence(art, FakeJev(), f, tmp_path, set(), None))
+    assert any(e.path == "api.ts" and e.start == 1 for e in excerpts)        # the client setup, 80 lines up
+    assert not any(e.path == "api.ts" and e.start >= 63 for e in excerpts)  # not the lines the chunk shows
+    whole = build_artifact("api.ts", (tmp_path / "api.ts").read_text(), "code", 40000)
+    excerpts, _ = asyncio.run(gather_evidence(whole, FakeJev(), {**f, "chunk": whole.chunks[0].id},
+                                              tmp_path, set(), None))
+    assert not any(e.path == "api.ts" for e in excerpts)                     # a whole file is already shown

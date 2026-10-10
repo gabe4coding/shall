@@ -201,7 +201,10 @@ def relevance_question():
     )
 
 
-def chunk_context(artifact: Artifact, finding: dict, radius: int = 20) -> str:
+CHUNK_RADIUS = 20  # lines around the flagged line that the verifier sees as the chunk
+
+
+def chunk_context(artifact: Artifact, finding: dict, radius: int = CHUNK_RADIUS) -> str:
     chunk = next((c for c in artifact.chunks if c.id == finding.get("chunk")), None)
     if chunk is None:
         return ""
@@ -300,7 +303,15 @@ async def gather_evidence(artifact: Artifact, jev: Jev, f: dict, root: Path, exc
         excerpts = [Excerpt(id="", path=w.path, start=w.start, end=w.end, text=w.text, terms=[], via=w.via)
                     for w in windows]
     taken = {(e.path, e.start) for e in excerpts}
-    excerpts += [e for e in gather_excerpts(root, terms, excluded | {f["path"]}) if (e.path, e.start) not in taken]
+    # a diff chunk shows only the changed hunks: the rest of the same file (where a variable is
+    # computed, a client configured) is evidence too, except the lines the chunk already shows.
+    # A whole-file chunk already has all of it.
+    own = {f["path"]} if artifact.kind != "diff" else set()
+    line = f.get("line")
+    shown = range(line - CHUNK_RADIUS, line + CHUNK_RADIUS + 1) if line else range(0)
+    excerpts += [e for e in gather_excerpts(root, terms, excluded | own)
+                 if (e.path, e.start) not in taken
+                 and not (e.path == f["path"] and e.start >= shown.start and e.end < shown.stop)]
     for i, e in enumerate(excerpts[:MAX_EXCERPTS]):
         e.id = f"e{i}"
     excerpts = excerpts[:MAX_EXCERPTS]

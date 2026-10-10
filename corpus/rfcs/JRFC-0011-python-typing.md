@@ -25,4 +25,5 @@ Public functions and methods in Python modules SHOULD have type hints for all pa
 and the return value.
 
 - Applies when: the content adds or changes a public Python function or method.
-- Enforcement: agent
+- Enforcement: linter
+- Check: python-typed-public

@@ -13,7 +13,7 @@ import pytest
 from shall.artifact import parse_diff
 from shall.config import load_config
 from shall.corpus import load_corpus
-from shall.hooks import (Hooks, action_for, changed_ranges, code_action, hook_settings, redact,
+from shall.hooks import (Hooks, action_for, changed_ranges, code_action, hook_settings, redact, run_files,
                         scan_secrets, synthetic_diff, valid_event, written_text)
 
 REPO = Path(__file__).resolve().parents[4]
@@ -188,6 +188,44 @@ def test_pre_ignores_tools_outside_the_matcher(org):
     assert pre(hooks_for(org, jev), "Read", {"file_path": "x"}) == {} and not jev.states
 
 
+@pytest.mark.parametrize("command,files", [
+    ("bash deploy.sh", ["deploy.sh"]),
+    ("./scripts/cleanup.sh --all", ["./scripts/cleanup.sh"]),
+    ("sh -x setup.sh > out.log 2>&1", ["setup.sh"]),
+    ("cd app && FOO=1 python3 tools/purge.py --dry-run", ["tools/purge.py"]),
+    ("sudo /usr/bin/env node scripts/report.js", ["scripts/report.js"]),
+    ("source .venv/bin/activate; pytest -q", [".venv/bin/activate"]),
+    ("uv run python manage.py migrate", ["manage.py"]),
+    ("bash -c 'git push --force'", []),       # inline code: already in the command
+    ("python -m pytest tests/", []),
+    ("git push origin feat/x", []),
+    ("cat run.sh", []),                        # read, not run
+    ("echo hi > run.sh", []),                  # a redirect target is written, not run
+    ("bash 'unbalanced", []),
+])
+def test_run_files(command, files):
+    assert run_files(command) == files
+
+
+def test_pre_judges_the_script_a_call_runs(org, tmp_path):
+    (tmp_path / "deploy.sh").write_text("#!/bin/sh\nTOKEN=ghp_8fK2mQ9xLpR4tV7wZ1aB3cD5eF6gH0iJ2kL4\ngit push --force\n")
+    jev = FakeJev()
+    out = pre(hooks_for(org, jev), "Bash", {"command": "bash deploy.sh"}, cwd=str(tmp_path))
+    # the regex rule for force push sees the script text: denied without Jev
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "JRFC-0012.2" in out["hookSpecificOutput"]["permissionDecisionReason"] and not jev.states
+    (tmp_path / "deploy.sh").write_text("#!/bin/sh\nTOKEN=ghp_8fK2mQ9xLpR4tV7wZ1aB3cD5eF6gH0iJ2kL4\ngit push origin main\n")
+    jev = FakeJev({"JRFC-0012.1": 0.97})
+    out = pre(hooks_for(org, jev), "Bash", {"command": "bash deploy.sh"}, cwd=str(tmp_path))
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+    script = jev.states[0]["runs_files"]["deploy.sh"]
+    assert "git push origin main" in script and "ghp_" not in script  # redacted before Jev
+    # no script: the state and the questions stay as before (cached answers stay valid)
+    jev = FakeJev()
+    pre(hooks_for(org, jev), "Bash", {"command": "bash missing.sh"}, cwd=str(tmp_path))
+    assert "runs_files" not in jev.states[0]
+
+
 # ---------------------------------------------------------------- PostToolUse
 
 
@@ -217,6 +255,31 @@ def test_post_warns_never_blocks(org, tmp_path):
     assert "(lines 4)" in ctx["additionalContext"] and "decision" not in out
     assert jev.states[0]["file"] == "svc/client.py" and "    4 + " in jev.states[0]["content"]
     assert asyncio.run(hooks_for(org, FakeJev()).handle(event)) == {}
+
+
+def test_post_runs_code_checks_on_the_written_lines_only(org, tmp_path):
+    f = tmp_path / "svc.py"
+    f.write_text("def old(x):\n    return x\n\n\ndef new(y):\n    return y\n")
+    event = {"hook_event_name": "PostToolUse", "tool_name": "Edit", "cwd": str(tmp_path),
+             "tool_input": {"file_path": str(f), "old_string": "x", "new_string": "def new(y):\n    return y"}}
+    out = asyncio.run(hooks_for(org, FakeJev(), statuses=["draft", "approved", "enforced"]).handle(event))
+    ctx = out["hookSpecificOutput"]["additionalContext"]
+    assert "JRFC-0011.1" in ctx and "[SHOULD, draft, check] (lines 5)" in ctx  # not line 1: not written now
+
+
+def test_post_sends_a_small_file_whole_and_a_large_one_as_windows(org, tmp_path):
+    f = tmp_path / "partner.py"
+    body = "".join(f"# filler line {i}\n" for i in range(1, 60))
+    f.write_text("SESSION = make_session(timeout=2.0)\n" + body + "def get(p):\n    return SESSION.get(p)\n")
+    event = {"hook_event_name": "PostToolUse", "tool_name": "Edit", "cwd": str(tmp_path),
+             "tool_input": {"file_path": str(f), "old_string": "x", "new_string": "    return SESSION.get(p)"}}
+    jev = FakeJev()
+    asyncio.run(hooks_for(org, jev).handle(event))
+    assert "make_session(timeout=2.0)" in jev.states[0]["content"]  # 60 lines above the edit
+    hooks = hooks_for(org, jev := FakeJev())
+    hooks.cfg.data["hooks"]["whole_file_chars"] = 100
+    asyncio.run(hooks.handle(event))
+    assert "make_session" not in jev.states[0]["content"] and "filler line 50" in jev.states[0]["content"]
 
 
 # ---------------------------------------------------------------- settings

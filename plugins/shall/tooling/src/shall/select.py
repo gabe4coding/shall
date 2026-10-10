@@ -107,8 +107,9 @@ class Selector:
         self.status = set(include_status or cfg.get("selection.include_status"))
         self.facts = facts or {}
 
-    def eligible(self, chunk: Chunk) -> list[tuple[Rfc, Statement]]:
-        """Deterministic prefilter: everything code can decide exactly."""
+    def eligible(self, chunk: Chunk, checks: bool = False) -> list[tuple[Rfc, Statement]]:
+        """Deterministic prefilter: everything code can decide exactly. With `checks`, the
+        linter statements whose `Check:` code runs instead of a Jev question."""
         out = []
         for rfc, st in self.corpus.statements():
             if rfc.status not in self.status:
@@ -120,7 +121,7 @@ class Selector:
                 continue
             if "any" not in rfc.languages and chunk.language not in rfc.languages and chunk.kind != "task":
                 continue
-            if st.enforcement == "linter":
+            if (st.enforcement == "linter") != checks or (checks and not st.check):
                 continue  # mechanically checkable: the linter owns it, not the agent
             out.append((rfc, st))
         return out

@@ -1,0 +1,696 @@
+# Real-PR eval cases: merged public PRs with inline comments from AI reviewers.
+# Ids only (repository, PR, commit sha, comment ids); `run.py fetch` downloads the code.
+# `selected: false` keeps a case out of the runs without losing it.
+cases:
+- id: authentik-20151
+  repo: goauthentik/authentik
+  pr: 20151
+  base_ref: main
+  head: 24b8ddb3b31d8c624656469dac005d80a709c4cb
+  title: 'sources/oauth: support public keys for PKCE flows'
+  files: 12
+  lines: 180
+  bots:
+  - Copilot
+  bot_comments:
+  - 2789499973
+  - 2789500001
+  - 2789500018
+- id: autogpt-15182
+  repo: Significant-Gravitas/AutoGPT
+  pr: 15182
+  base_ref: dev
+  head: 3a78a93c86f72e698bc21baed0280b1c84f27833
+  title: 'fix(backend): bound AutoPilot trace export retries'
+  files: 8
+  lines: 390
+  bots:
+  - coderabbitai[bot]
+  bot_comments:
+  - 4183323772
+  - 4183323777
+- id: autogpt-15217
+  repo: Significant-Gravitas/AutoGPT
+  pr: 15217
+  base_ref: dev
+  head: b03588fe48133a478b369bdb9081aec1bb0bb132
+  title: 'feat(platform): make the expert hire card short and Typeform-like'
+  files: 9
+  lines: 691
+  bots:
+  - coderabbitai[bot]
+  bot_comments:
+  - 4206337320
+- id: core-185448
+  repo: home-assistant/core
+  pr: 185448
+  base_ref: dev
+  head: 76f51252d5c32aad54564606709ef00e6c8ec348
+  title: Remove duplicate error logs (batch 6)
+  files: 10
+  lines: 89
+  bots:
+  - Copilot
+  bot_comments:
+  - 4230264568
+  - 4230264667
+- id: dub-4630
+  repo: dubinc/dub
+  pr: 4630
+  base_ref: main
+  head: c39f29437c76bd585c2659873d89252086a64533
+  title: Assign partner tags on API application approval
+  files: 12
+  lines: 514
+  bots:
+  - coderabbitai[bot]
+  bot_comments:
+  - 4208354143
+  - 4208354183
+- id: dub-4632
+  repo: dubinc/dub
+  pr: 4632
+  base_ref: main
+  head: 16b30bd6dca44c2d5a60140888cdae9fe18d6f46
+  title: Let partners update their country from profile settings
+  files: 7
+  lines: 360
+  bots:
+  - coderabbitai[bot]
+  bot_comments:
+  - 4200987296
+  - 4200987307
+- id: dub-4640
+  repo: dubinc/dub
+  pr: 4640
+  base_ref: main
+  head: fc78abaf8f54214b4b98607500c761f74eb66ab6
+  title: Allow rejecting in-progress social bounty submissions
+  files: 3
+  lines: 56
+  bots:
+  - coderabbitai[bot]
+  bot_comments:
+  - 4216763901
+  - 4216763916
+- id: erpnext-59883
+  repo: frappe/erpnext
+  pr: 59883
+  base_ref: develop
+  head: a1ff01724d4e645dee22b6f2c56a99b57a0e6994
+  title: 'fix(assets): depreciation schedule double posting, manual schedule validation and booked months'
+  files: 11
+  lines: 614
+  bots:
+  - greptile-apps[bot]
+  bot_comments:
+  - 4202175927
+  - 4202175931
+- id: erpnext-59901
+  repo: frappe/erpnext
+  pr: 59901
+  base_ref: develop
+  head: 3aaabbcb32d8afc6356b507e496d039ff371cf7b
+  title: 'fix(asset): correct disposal GL and sold status, validate asset sale, split and opening depreciation'
+  files: 8
+  lines: 356
+  bots:
+  - greptile-apps[bot]
+  bot_comments:
+  - 4208182732
+  - 4208182750
+  - 4208182764
+- id: erpnext-59907
+  repo: frappe/erpnext
+  pr: 59907
+  base_ref: develop
+  head: 5a501e7fe1c93f0513d3dc8e3180c4dba9d8982b
+  title: 'fix(prospect): keep prospects on lead delete, one prospect per lead and convert to customer once'
+  files: 5
+  lines: 218
+  bots:
+  - greptile-apps[bot]
+  bot_comments:
+  - 4209052627
+  - 4209052638
+- id: erpnext-60279
+  repo: frappe/erpnext
+  pr: 60279
+  base_ref: develop
+  head: 54d5764e52ca2bec2b9baa324c797ba3dafba8cd
+  title: 'fix(selling): link lead quotations and opportunities to its customer'
+  files: 3
+  lines: 62
+  bots:
+  - greptile-apps[bot]
+  bot_comments:
+  - 4227955987
+  - 4227955998
+- id: hatchet-5036
+  repo: hatchet-dev/hatchet
+  pr: 5036
+  base_ref: main
+  head: 1d14add3ef59121e9c478e68672f883211abbf53
+  title: 'fix(dashboard): workflow search ux tweaks'
+  files: 4
+  lines: 33
+  bots:
+  - greptile-apps[bot]
+  bot_comments:
+  - 4096144270
+  - 4096144286
+  - 4096144290
+- id: hatchet-5090
+  repo: hatchet-dev/hatchet
+  pr: 5090
+  base_ref: main
+  head: 17fc1b781bf0a3541aad084bcf82830b4a064fcd
+  title: 'perf(olap): drop ix_v1_runs_olap_tenant_ins_at_status'
+  files: 2
+  lines: 126
+  bots:
+  - greptile-apps[bot]
+  bot_comments:
+  - 4143540542
+  - 4143540556
+- id: hatchet-5102
+  repo: hatchet-dev/hatchet
+  pr: 5102
+  base_ref: main
+  head: cff3b6e70230861b05fd1a0b41b1c32b9eee5338
+  title: 'fix(engine): lock durable event log files before satisfying entries'
+  files: 3
+  lines: 51
+  bots:
+  - greptile-apps[bot]
+  bot_comments:
+  - 4159508206
+- id: hatchet-5103
+  repo: hatchet-dev/hatchet
+  pr: 5103
+  base_ref: main
+  head: 481ea012fdb2ba3116085e28cc2d29e6aea5906d
+  title: 'feat(engine): skip stale NATS pub/sub messages instead of working through a backlog'
+  files: 5
+  lines: 285
+  bots:
+  - greptile-apps[bot]
+  bot_comments:
+  - 4167072014
+  - 4167072026
+  - 4167072042
+  - 4167072052
+- id: hatchet-5104
+  repo: hatchet-dev/hatchet
+  pr: 5104
+  base_ref: main
+  head: 98ad73392d2664a1478bbf3f7c18d8b389adf395
+  title: 'feat(engine): run NATS pub/sub handlers on a bounded per-subscription pool'
+  files: 6
+  lines: 663
+  bots:
+  - greptile-apps[bot]
+  bot_comments:
+  - 4167208924
+  - 4167208932
+- id: hatchet-5133
+  repo: hatchet-dev/hatchet
+  pr: 5133
+  base_ref: main
+  head: ce73737d98c3bd6e823870cd2e8c16ee58034351
+  title: 'fix(engine): misleading durable exec error'
+  files: 1
+  lines: 79
+  bots:
+  - greptile-apps[bot]
+  bot_comments:
+  - 4183984636
+  - 4183984642
+- id: hatchet-5134
+  repo: hatchet-dev/hatchet
+  pr: 5134
+  base_ref: main
+  head: bb75a1dfc82a19749b6b0b3465726967b04d7441
+  title: 'fix: rename durable streams migration'
+  files: 2
+  lines: 22
+  bots:
+  - greptile-apps[bot]
+  bot_comments:
+  - 4184623010
+  - 4184623037
+- id: hatchet-5136
+  repo: hatchet-dev/hatchet
+  pr: 5136
+  base_ref: main
+  head: 122927b574757b449145dcab716160c565944a45
+  title: 'fix(engine): dag operator causes idempotency key collisions by default'
+  files: 6
+  lines: 197
+  bots:
+  - greptile-apps[bot]
+  bot_comments:
+  - 4186303234
+  - 4186303242
+- id: hatchet-5137
+  repo: hatchet-dev/hatchet
+  pr: 5137
+  base_ref: main
+  head: 8d8677fb3c837f98556dee9e383c73606a85dfc9
+  title: 'fix(engine): dag operator cycles from task and workflow sharing names'
+  files: 10
+  lines: 149
+  bots:
+  - greptile-apps[bot]
+  bot_comments:
+  - 4186568473
+- id: hatchet-5144
+  repo: hatchet-dev/hatchet
+  pr: 5144
+  base_ref: main
+  head: 44a8a1a588e0cf0a86ea890b2f78c46e1ef835ac
+  title: 'fix(scheduler): let idle queues go inactive again'
+  files: 5
+  lines: 126
+  bots:
+  - greptile-apps[bot]
+  bot_comments:
+  - 4194049464
+  - 4194049475
+  - 4194049483
+- id: hatchet-5149
+  repo: hatchet-dev/hatchet
+  pr: 5149
+  base_ref: main
+  head: d96f18b99a5b9628853e736f644c3eba2f37e130
+  title: 'fix: Consolidate entitlement logic'
+  files: 8
+  lines: 250
+  bots:
+  - greptile-apps[bot]
+  bot_comments:
+  - 4197364317
+  - 4197364328
+- id: hatchet-5160
+  repo: hatchet-dev/hatchet
+  pr: 5160
+  base_ref: main
+  head: 5baffc3dfb51c000606dffbb427439c4dbebe221
+  title: 'fix(engine): avoid seq scan on ListStuckEvictedDurableOrchestrators'
+  files: 7
+  lines: 333
+  bots:
+  - greptile-apps[bot]
+  bot_comments:
+  - 4219850769
+  - 4219850781
+  - 4219850792
+- id: infisical-8372
+  repo: Infisical/infisical
+  pr: 8372
+  base_ref: main
+  head: dc4150d8b9672e5e813b7489ff12e16e63dc3d3e
+  title: 'feat(secret-sync): warn before moving or copying secrets into a synced path'
+  files: 7
+  lines: 499
+  bots:
+  - chatgpt-codex-connector[bot]
+  - greptile-apps[bot]
+  - veria-ai[bot]
+  bot_comments:
+  - 4148288885
+  - 4148295243
+  - 4148295252
+  - 4148295266
+  - 4148295272
+  - 4148295278
+  - 4148295284
+  - 4148345905
+- id: infisical-8375
+  repo: Infisical/infisical
+  pr: 8375
+  base_ref: main
+  head: 7730fc24cf370e1e2380f95e2f7805f1b73fc69d
+  title: 'feat(agent-vault): use the org ID as the AWS External ID and show it'
+  files: 7
+  lines: 183
+  bots:
+  - chatgpt-codex-connector[bot]
+  - greptile-apps[bot]
+  bot_comments:
+  - 4150197819
+  - 4150197825
+  - 4150197829
+  - 4150197833
+  - 4150199262
+  - 4150199275
+- id: infisical-8482
+  repo: Infisical/infisical
+  pr: 8482
+  base_ref: main
+  head: 4cbb96563e684189e78ff3af144d169f211a4117
+  title: 'fix(notifications): add clear all and refine remove control'
+  files: 6
+  lines: 335
+  bots:
+  - chatgpt-codex-connector[bot]
+  - greptile-apps[bot]
+  bot_comments:
+  - 4199310278
+  - 4199331451
+  - 4199331482
+- id: langfuse-18523
+  repo: langfuse/langfuse
+  pr: 18523
+  base_ref: main
+  head: d2bb0fd080fe65d66850cfbad8207e428353de50
+  title: 'feat(evals): revamp decision model results'
+  files: 7
+  lines: 361
+  bots:
+  - chatgpt-codex-connector[bot]
+  - greptile-apps[bot]
+  bot_comments:
+  - 4228562202
+  - 4228562211
+  - 4228567402
+- id: langfuse-18532
+  repo: langfuse/langfuse
+  pr: 18532
+  base_ref: main
+  head: 94389b97bd50741b1120106644bc81e8c88aa6ae
+  title: 'fix(topics): move time selector and restore tabs'
+  files: 7
+  lines: 534
+  bots:
+  - chatgpt-codex-connector[bot]
+  - greptile-apps[bot]
+  bot_comments:
+  - 4228978420
+  - 4228985215
+- id: n8n-40681
+  repo: n8n-io/n8n
+  pr: 40681
+  base_ref: master
+  head: 8d80374957e072e4fdc622f881822d49dcc30234
+  title: 'feat(core): Translate trusted-source claims into an external identity (no-changelog)'
+  files: 5
+  lines: 357
+  bots:
+  - cubic-dev-ai[bot]
+  bot_comments:
+  - 4219507119
+- id: n8n-40701
+  repo: n8n-io/n8n
+  pr: 40701
+  base_ref: master
+  head: b76ed0d98409520cbe7a5665ba353d868ae94a17
+  title: 'fix(core): Allow reverting a workflow version that uses credentials the user cannot use'
+  files: 10
+  lines: 303
+  bots:
+  - cubic-dev-ai[bot]
+  bot_comments:
+  - 4220932384
+  - 4220932398
+- id: novu-12822
+  repo: novuhq/novu
+  pr: 12822
+  base_ref: next
+  head: 4e8c5d99da4dfae4bbf19be62757e02430172bf9
+  title: 'feat(api-service): let a keyless claim replace an untouched Human agent fixes NV-8983'
+  files: 6
+  lines: 314
+  bots:
+  - greptile-apps[bot]
+  bot_comments:
+  - 4208585970
+  - 4208585982
+  - 4208585997
+  - 4208586009
+- id: openstatus-2876
+  repo: openstatusHQ/openstatus
+  pr: 2876
+  base_ref: main
+  head: 08463e8a640afd8b4020f3a32c5388ddb0450b3a
+  title: 'chore: improve incidents communication section'
+  files: 5
+  lines: 873
+  bots:
+  - cubic-dev-ai[bot]
+  bot_comments:
+  - 4223929223
+  - 4223929232
+  - 4223929243
+- id: plane-9156
+  repo: makeplane/plane
+  pr: 9156
+  base_ref: preview
+  head: 71a05e77a638e2406e87d34113df37450482ce3f
+  title: '[WEB-7447] feat: migrate CE telemetry from OTLP traces to OTLP metrics'
+  files: 8
+  lines: 639
+  bots:
+  - Copilot
+  - coderabbitai[bot]
+  bot_comments:
+  - 3317062751
+  - 3317062800
+  - 3317062828
+  - 3317062855
+  - 3317072009
+  - 3317072040
+- id: plane-9727
+  repo: makeplane/plane
+  pr: 9727
+  base_ref: preview
+  head: bbf6f1df4f0ac0611ced2013ba2fcb4a981d6272
+  title: '[INFRA-804] fix(airgapped and minio): harden community restore-airgapped.sh script and minio image f'
+  files: 6
+  lines: 158
+  bots:
+  - Copilot
+  - coderabbitai[bot]
+  bot_comments:
+  - 3902733417
+  - 3902733483
+  - 3902733559
+  - 3902733611
+  - 3902750882
+  - 3902750906
+- id: posthog-114405
+  repo: PostHog/posthog
+  pr: 114405
+  base_ref: master
+  head: 22f9c79f7240327a2940a29e005e864fad03c5ef
+  title: 'feat(business-knowledge): drain indexing in chunks of 50'
+  files: 6
+  lines: 526
+  bots:
+  - greptile-apps[bot]
+  bot_comments:
+  - 4228872255
+  - 4228872268
+  - 4228872283
+  - 4228872287
+- id: twenty-26969
+  repo: twentyhq/twenty
+  pr: 26969
+  base_ref: main
+  head: 9228452503a341cb55af323f3422efabc966c4ee
+  title: 'fix(rich-text): keep selection after image autosave'
+  files: 5
+  lines: 171
+  bots:
+  - cubic-dev-ai[bot]
+  - greptile-apps[bot]
+  bot_comments:
+  - 4164157974
+  - 4164157979
+- id: twenty-27041
+  repo: twentyhq/twenty
+  pr: 27041
+  base_ref: main
+  head: 91a61013f78424514ee78294fa47bced6d0a45ec
+  title: 'fix(front): preserve multi-record selection in side-panel components'
+  files: 8
+  lines: 256
+  bots:
+  - cubic-dev-ai[bot]
+  - greptile-apps[bot]
+  bot_comments:
+  - 4154259672
+  - 4154259682
+  - 4154262970
+- id: twenty-27705
+  repo: twentyhq/twenty
+  pr: 27705
+  base_ref: main
+  head: f0a02d99a92b3b2c015c3084368a177b95df891a
+  title: Register the wait on an answer before the call can be answered
+  files: 7
+  lines: 103
+  bots:
+  - greptile-apps[bot]
+  - twenty-ci-bot-public[bot]
+  bot_comments:
+  - 4229166666
+  - 4229166678
+- id: zitadel-12862
+  repo: zitadel/zitadel
+  pr: 12862
+  base_ref: main
+  head: 9ae516aab9a68b43c34067c15761296be4e559b0
+  title: 'docs: replace built in fumadocs search with custom semantic vector search'
+  files: 3
+  lines: 336
+  bots:
+  - Copilot
+  - github-advanced-security[bot]
+  bot_comments:
+  - 4162108143
+  - 4162114014
+  - 4162114040
+  - 4162114067
+  - 4162114095
+- id: zitadel-12883
+  repo: zitadel/zitadel
+  pr: 12883
+  base_ref: main
+  head: 9c930f120453eff6038fdbf9ee96bbbe822a8b06
+  title: 'docs: add AI chat assistant to docs'
+  files: 6
+  lines: 620
+  bots:
+  - Copilot
+  bot_comments:
+  - 4187976075
+  - 4187976133
+  - 4187976178
+  - 4187976219
+  - 4187976263
+  - 4187976315
+rejected:
+  autogpt-14148: 1712 changed lines
+  autogpt-14378: 17 files
+  autogpt-14397: 35 files
+  autogpt-15152: 74 files
+  autogpt-15196: 42 files
+  autogpt-15199: 85 files
+  autogpt-15230: 35 files
+  autogpt-15249: 45 files
+  autogpt-15305: 15 files
+  autogpt-15342: 15 files
+  calcom-25217: 32 files
+  core-178426: 2/4 code files
+  core-184046: 4/7 code files
+  core-184857: 1/2 code files
+  core-185214: 371 files
+  core-185444: 23 files
+  core-185446: 17 files
+  documenso-3319: 76 files
+  dub-4639: 56 files
+  formbricks-9473: 0/6 code files
+  formbricks-9513: 39 files
+  formbricks-9529: 0/6 code files
+  formbricks-9552: 27 files
+  formbricks-9556: 97 files
+  formbricks-9560: 78 files
+  formbricks-9568: 1/2 code files
+  formbricks-9574: 68 files
+  hatchet-5025: 26 files
+  hatchet-5038: 15 files
+  hatchet-5050: 1223 changed lines
+  hatchet-5128: 19 files
+  hatchet-5139: 78 files
+  hatchet-5143: 3/7 code files
+  hatchet-5146: 2/4 code files
+  hatchet-5170: 11 changed lines
+  hoppscotch-6611: 0/1 code files
+  hoppscotch-6670: 71 files
+  hoppscotch-6689: 1/4 code files
+  hoppscotch-6697: 3/10 code files
+  infisical-8182: 126 files
+  infisical-8356: 77 files
+  infisical-8406: 24 files
+  infisical-8443: 109 files
+  infisical-8474: 52 files
+  infisical-8484: 36 files
+  infisical-8500: 57 files
+  infisical-8503: 0/1 code files
+  infisical-8506: 17 files
+  infisical-8524: 0/12 code files
+  langflow-15576: 1022 changed lines
+  langflow-15616: 46 files
+  langflow-15654: 38 files
+  langfuse-18444: 4/8 code files
+  langfuse-18445: 49 files
+  langfuse-18455: 1/5 code files
+  langfuse-18469: 1528 changed lines
+  langfuse-18531: 14 files
+  langfuse-18537: 19 files
+  mattermost-38374: 55 files
+  mattermost-38513: 17 files
+  mattermost-38941: 20 files
+  mattermost-39057: 0/5 code files
+  n8n-39308: 28 files
+  n8n-40292: 4/8 code files
+  n8n-40394: 6/12 code files
+  n8n-40407: 1206 changed lines
+  n8n-40418: 46 files
+  n8n-40428: 52 files
+  n8n-40452: 17 files
+  n8n-40567: 17 files
+  n8n-40571: 21 files
+  n8n-40654: 0/5 code files
+  n8n-40658: 2/9 code files
+  n8n-40659: 20 files
+  n8n-40665: 15 files
+  novu-12740: 48 files
+  novu-12805: 1/2 code files
+  novu-12809: 32 files
+  novu-12810: 13 files
+  novu-12811: 17 files
+  novu-12814: 8 changed lines
+  novu-12816: 332 files
+  novu-12817: 14 files
+  novu-12825: 36 files
+  novu-12829: 16 files
+  novu-12836: 41 files
+  novu-12838: 43 files
+  novu-12839: 15 files
+  openstatus-2561: 99 files
+  openstatus-2865: 48 files
+  openstatus-2866: 13 files
+  openstatus-2870: 5/10 code files
+  openstatus-2872: 13 files
+  openstatus-2882: 6/12 code files
+  plane-9632: 23 files
+  plane-9898: 1/2 code files
+  plane-9911: 1/2 code files
+  plane-9912: 1/3 code files
+  posthog-102896: 31 files
+  posthog-107559: 53 files
+  posthog-112179: 30 files
+  posthog-114001: 41 files
+  posthog-114426: 24 files
+  posthog-114427: 13 files
+  posthog-114497: 19 files
+  sentry-124872: 15 files
+  sentry-125206: 995 changed lines
+  sentry-126613: 1/3 code files
+  sentry-126696: 32 files
+  triggerdev-4367: 22 files
+  triggerdev-4980: 1/5 code files
+  twenty-27526: 48 files
+  twenty-27648: 43 files
+  twenty-27663: 13 files
+  twenty-27669: 195 files
+  twenty-27686: 32 files
+  twenty-27688: 2/5 code files
+  twenty-27704: 5/9 code files
+  twenty-27706: 18 files
+  twenty-27708: 39 files
+  zitadel-12803: 27 files
+  zitadel-12819: 14 files
+  zitadel-12875: 38 files

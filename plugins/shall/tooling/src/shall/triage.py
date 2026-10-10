@@ -114,6 +114,60 @@ def load_threads(path: Path) -> list[dict]:
     return out
 
 
+FILE_BLOCK_RE = re.compile(r"<details>\s*<summary>\s*([^<]+?)\s*\((\d+)\)\s*</summary>\s*<blockquote>", re.I)
+SECTION_RE = re.compile(r"<summary>\s*([^<]*?[A-Za-z][^<]*?)\s*\(\d+\)\s*</summary>", re.I)
+ITEM_RE = re.compile(r"^`(\d+)(?:-(\d+))?`:\s*", re.M)
+QUOTE_TAG_RE = re.compile(r"</?(?:blockquote|details|summary)>", re.I)
+
+
+def _block_end(body: str, start: int) -> int:
+    """End of the <blockquote> opened just before `start` (nested blockquotes counted)."""
+    depth = 1
+    for m in re.finditer(r"<(/?)blockquote>", body[start:], re.I):
+        depth += -1 if m.group(1) else 1
+        if depth == 0:
+            return start + m.start()
+    return len(body)
+
+
+def pr_level_items(comment: dict, paths: set[str]) -> list[dict]:
+    """The findings a PR-level bot comment (a review body or a PR comment) lists per file with a
+    line range, as CodeRabbit writes its nitpick, outside-diff and additional comments:
+
+        <details><summary>src/app.ts (2)</summary><blockquote>
+        `60-62`: **Title** text ...
+
+    Each one becomes a comment on that file and line, so triage can judge it as an inline one.
+    Only files in the diff count; a PR-level comment without such items is a summary."""
+    body = comment.get("body") or ""
+    out = []
+    for m in FILE_BLOCK_RE.finditer(body):
+        path = m.group(1).strip().strip("`")
+        if path not in paths:
+            continue
+        block = body[m.end():_block_end(body, m.end())]
+        sections = [s.group(1) for s in SECTION_RE.finditer(body[:m.start()]) if s.group(1).strip() not in paths]
+        section = re.sub(r"^[^\w]+", "", sections[-1]).strip() if sections else "PR-level comment"
+        items = list(ITEM_RE.finditer(block))
+        for i, it in enumerate(items):
+            text = block[it.end(): items[i + 1].start() if i + 1 < len(items) else len(block)]
+            text = QUOTE_TAG_RE.sub("", clean_body(text)).strip()
+            start, end = int(it.group(1)), int(it.group(2) or it.group(1))
+            out.append({**{k: comment.get(k) for k in ("author", "author_type", "url")},
+                        "id": f"{comment.get('id')}:{path}:{start}", "thread": None, "comment_id": None,
+                        "path": path, "line": end, "start_line": start, "body": text, "outdated": False,
+                        "resolved": False, "replies": [], "pr_level": section})
+    return out
+
+
+def load_pr_level(path: Path) -> list[dict]:
+    """PR-level comments from a JSON file `{"comments": [...], "pr_level": [...]}`, in the shape
+    of `GitHub.pr_level_comments()` (a plain list of threads has none)."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return [{"author_type": None, **c, "id": str(c.get("id") or f"p{i}")}
+            for i, c in enumerate(data.get("pr_level") or [])] if isinstance(data, dict) else []
+
+
 def bot_comments(cfg: Config, threads: list[dict]) -> tuple[list[dict], dict]:
     """The threads started by an AI reviewer that are still open, and counts of the rest."""
     patterns = list(cfg.get("triage.authors") or [])
@@ -134,13 +188,17 @@ def bot_comments(cfg: Config, threads: list[dict]) -> tuple[list[dict], dict]:
     return kept, skipped
 
 
-def anchor(artifact: Artifact, c: dict) -> tuple[Chunk | None, str | None]:
-    """The chunk that shows the commented line, or why there is none (the comment is outdated)."""
+def anchor(artifact: Artifact, c: dict, file_lines: list[str] | None = None) -> tuple[Chunk | None, str | None]:
+    """The chunk that shows the commented line, or why there is none (the comment is outdated).
+    A PR-level item may point outside the diff hunks of its file: with the file's lines it keeps
+    the file's first chunk (for the selection) and takes its code from the file."""
     chunks = [ch for ch in artifact.chunks if ch.path == c.get("path")]
     if not chunks:
         return None, "outdated: the file is not in the diff any more"
     line = c.get("line")
     if c.get("outdated") or (line is not None and line not in chunks[0].line_text):
+        if c.get("pr_level") and not c.get("outdated") and file_lines and line and line <= len(file_lines):
+            return chunks[0], None
         return None, "outdated: the commented code changed after the comment"
     if line is None:
         return chunks[0], None  # a comment on the whole file
@@ -148,11 +206,22 @@ def anchor(artifact: Artifact, c: dict) -> tuple[Chunk | None, str | None]:
     return next((ch for ch in chunks if shown.search(ch.rendered)), chunks[0]), None
 
 
-def code_context(chunk: Chunk, line: int | None, radius: int = 12) -> str:
+def code_context(chunk: Chunk, line: int | None, radius: int = 12, file_lines: list[str] | None = None) -> str:
     if line is None:
         return chunk.rendered[:MAX_AGENT_TEXT]
-    numbers = sorted(n for n in chunk.line_text if abs(n - line) <= radius)
-    return "\n".join(f"{'>>' if n == line else '  '}{n:>5} | {chunk.line_text[n]}" for n in numbers)
+    text = chunk.line_text if line in chunk.line_text or not file_lines else \
+        {n: file_lines[n - 1] for n in range(max(1, line - radius), min(len(file_lines), line + radius) + 1)}
+    numbers = sorted(n for n in text if abs(n - line) <= radius)
+    return "\n".join(f"{'>>' if n == line else '  '}{n:>5} | {text[n]}" for n in numbers)
+
+
+def read_lines(root: Path | None, path: str | None) -> list[str] | None:
+    if root is None or not path:
+        return None
+    try:
+        return (root / path).read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
 
 
 # ---------------------------------------------------------------- triage
@@ -160,7 +229,8 @@ def code_context(chunk: Chunk, line: int | None, radius: int = 12) -> str:
 def _item(c: dict, status: str, reason: str, **extra) -> dict:
     return {"id": c["id"], "thread": c.get("thread"), "comment_id": c.get("comment_id"), "url": c.get("url"),
             "author": c["author"], "path": c.get("path"), "line": c.get("line"),
-            "summary": summary_of(c["text"]), "status": status, "reason": reason, **extra}
+            "summary": summary_of(c["text"]), "status": status, "reason": reason,
+            **({"pr_level": c["pr_level"]} if c.get("pr_level") else {}), **extra}
 
 
 def comment_prompt(c: dict, context: str, standard: dict | None, evidence: str) -> str:
@@ -205,15 +275,20 @@ async def triage_comments(cfg: Config, corpus: Corpus, artifact: Artifact, jev: 
     stats = {"comments": len(comments), "agent_calls": 0, "reused": 0, "cost_usd": 0.0, "errors": []}
     items: dict[str, dict] = {}
 
-    # 1. code: anchor on the diff
+    # 1. code: anchor on the diff (a PR-level item outside the hunks: on the file in the repository)
+    from .verify import repo_root
+    file_root = None
+    if any(c.get("pr_level") for c in comments):
+        file_root = index.root if index is not None else repo_root(search_root)
     live: list[tuple[dict, Chunk]] = []
     for c in comments:
         c["text"] = clean_body(c.get("body", ""))
-        chunk, reason = anchor(artifact, c)
+        lines = read_lines(file_root, c.get("path")) if c.get("pr_level") else None
+        chunk, reason = anchor(artifact, c, lines)
         if reason:
             items[c["id"]] = _item(c, "outdated", reason)
         else:
-            c["context"] = code_context(chunk, c.get("line"))
+            c["context"] = code_context(chunk, c.get("line"), file_lines=lines)
             live.append((c, chunk))
 
     # 2. Jev: which statements apply to the chunk (as in review)? is the comment actionable?
@@ -331,7 +406,8 @@ def render_triage(items: list[dict], stats: dict) -> str:
 
     def where(i: dict) -> str:
         loc = f"{i['path']}:{i['line']}" if i.get("line") else f"{i['path']}"
-        return f"[`{loc}`]({i['url']})" if i.get("url") else f"`{loc}`"
+        tag = f" ({i['pr_level']})" if i.get("pr_level") else ""
+        return (f"[`{loc}`]({i['url']})" if i.get("url") else f"`{loc}`") + tag
 
     def std(i: dict) -> str:
         s = i.get("standards") or []
@@ -351,6 +427,10 @@ def render_triage(items: list[dict], stats: dict) -> str:
             out += [f"<details><summary>{title} ({len(rows)})</summary>", ""]
             out += [f"- {i['author']} {where(i)} — {i['summary']}<br>_{i['reason']}_" for i in rows]
             out += ["", "</details>", ""]
+    summaries = (stats.get("skipped") or {}).get("pr_level_summary")
+    if summaries:
+        out.append(f"<sub>{summaries} PR-level bot comment(s) list no finding with a file and line "
+                   "(summaries): not triaged.</sub>")
     if stats.get("errors"):
         out.append(f"<sub>⚠️ {len(stats['errors'])} verification call(s) failed: those comments are unverified.</sub>")
     return "\n".join(out).rstrip() + "\n"

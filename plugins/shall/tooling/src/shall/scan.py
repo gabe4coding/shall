@@ -112,8 +112,15 @@ async def scan_file(hooks: Hooks, rel: str, text: str, threshold: float, secret_
                          "lines": ",".join(map(str, lines)), "blocking": rfc.statement_blocking(st)})
     n = text.count("\n") + (0 if text.endswith("\n") else 1)
     chunks = parse_diff(synthetic_diff(rel, redact(text)[0], [(1, max(n, 1))], 0), max_chunk_chars)
-    judged = await hooks.judge_code(chunks, record, lambda rfc, st, p: "warn" if p >= threshold else None)
-    findings += [{**f, "lines": None, "blocking": False} for f in judged if f["action"]]
+    judged = await hooks.judge_code(chunks, record, lambda rfc, st, p: "warn" if p >= threshold else None,
+                                    texts={rel: text})
+
+    def blocking(f: dict) -> bool:  # a code check is exact, as the secret scanner: the statement's severity
+        rfc, st = hooks.corpus.statement(f["id"])
+        return f["by"] == "check" and rfc.statement_blocking(st)
+
+    findings += [{**f, "lines": f["lines"] if f["by"] == "check" else None, "blocking": blocking(f)}
+                 for f in judged if f["action"]]
     jev = record.get("jev", "none")
     return {"path": rel, "language": language_of(rel), "lines": n, "chunks": len(chunks),
             "candidates": record.get("candidates", 0), "jev": jev,
@@ -164,7 +171,7 @@ async def run_scan(cfg: Config, corpus: Corpus, jev: Jev, paths: list[str], root
 
 
 def _line(f: dict) -> str:
-    how = "secret scanner" if f["by"] == "scanner" else f"p={f['p']:.2f}"
+    how = {"scanner": "secret scanner", "check": "code check"}.get(f["by"], f"p={f['p']:.2f}")
     where = f", lines {f['lines']}" if f.get("lines") else ""
     found = f" Found: {', '.join(f['secrets'])}." if f.get("secrets") else ""
     block = " **blocking**" if f.get("blocking") else ""
@@ -199,7 +206,7 @@ def render_lines(report: dict) -> list[str]:
     for f in report["files"]:
         for x in f["findings"]:
             where = f":{x['lines']}" if x.get("lines") else ""
-            how = "secret" if x["by"] == "scanner" else f"p={x['p']:.2f}"
+            how = {"scanner": "secret", "check": "check"}.get(x["by"], f"p={x['p']:.2f}")
             lines.append(f"{f['path']}{where}: {x['id']} [{x['level']}, {how}]"
                          f"{' BLOCKING' if x.get('blocking') else ''} {x['title']}")
     return lines

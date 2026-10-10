@@ -33,6 +33,7 @@ Endpoint paths MUST name resources with plural nouns in kebab-case (for example
 `/booking-requests/{id}`) and MUST NOT contain verbs such as `get`, `create` or `update`.
 
 - Applies when: the content defines or changes an HTTP route path.
+- Not applies when: the code only calls an HTTP API as a client (it builds a URL or sends a request to another service) and defines no route of its own.
 - Enforcement: agent
 
 ### JRFC-0002.2 Methods match semantics

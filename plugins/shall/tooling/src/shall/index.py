@@ -63,6 +63,7 @@ def build_index(corpus: Corpus, layers: set[str] | None = None) -> dict:
                 **({"tools": st.tools} if st.tools else {}),
                 **({"violated_when": st.violated_when} if st.violated_when else {}),
                 **({"pattern": st.pattern} if st.pattern else {}),
+                **({"check": st.check} if st.check else {}),
             })
     parents = [
         {"name": layer.name, "repo": layer.parent.repo, "ref": layer.parent.ref, "prefix": layer.prefix}

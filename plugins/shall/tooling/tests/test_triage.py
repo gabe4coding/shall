@@ -10,8 +10,8 @@ from shall.artifact import build_artifact
 from shall.config import load_config
 from shall.corpus import load_corpus
 from shall.publish import TRIAGE_MARKER_RE, is_bot, login_matches, make_triage_plan, publish
-from shall.triage import (anchor, apply_comment_verdict, bot_comments, clean_body, load_threads, summary_of,
-                         triage_comments)
+from shall.triage import (anchor, apply_comment_verdict, bot_comments, clean_body, code_context, load_pr_level,
+                         load_threads, pr_level_items, summary_of, triage_comments)
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -86,6 +86,81 @@ def test_anchor_sets_outdated_comments_aside():
     assert anchor(art, {"path": "src/confirm.ts", "line": 2, "outdated": True})[1] is not None
     chunk, reason = anchor(art, {"path": "src/confirm.ts", "line": 3})
     assert reason is None and chunk.id == "c0"
+
+
+# The shape of a review body that lists findings per file (as CodeRabbit writes its nitpick and
+# outside-diff sections); the text is made up for the test.
+PR_LEVEL_BODY = """**Actionable comments posted: 1**
+
+<details>
+<summary>⚠️ Outside diff range comments (1)</summary><blockquote>
+
+<details>
+<summary>src/confirm.ts (1)</summary><blockquote>
+
+`30-32`: **Unbounded retry.** The loop retries the hold forever.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+Fix the loop in src/confirm.ts.
+</details>
+
+</blockquote></details>
+
+</blockquote></details>
+<details>
+<summary>🧹 Nitpick comments (2)</summary><blockquote>
+
+<details>
+<summary>src/confirm.ts (2)</summary><blockquote>
+
+`3-3`: **Rename `b`.** A longer name reads better.
+
+`5`: **Add a log line.** It helps debugging.
+
+</blockquote></details>
+<details>
+<summary>src/not-in-diff.ts (1)</summary><blockquote>
+
+`1-1`: **Ignored.** The file is not in the diff.
+
+</blockquote></details>
+
+</blockquote></details>
+
+<details>
+<summary>📒 Files selected for processing (1)</summary>
+
+* `src/confirm.ts`
+</details>
+"""
+
+
+def test_pr_level_items_become_comments_on_file_and_line():
+    comment = {"id": "review-7", "author": "coderabbitai[bot]", "author_type": "Bot", "body": PR_LEVEL_BODY,
+               "url": "u"}
+    items = pr_level_items(comment, {"src/confirm.ts"})
+    assert [(i["path"], i["start_line"], i["line"], i["pr_level"]) for i in items] == [
+        ("src/confirm.ts", 30, 32, "Outside diff range comments"),
+        ("src/confirm.ts", 3, 3, "Nitpick comments"),
+        ("src/confirm.ts", 5, 5, "Nitpick comments")]
+    assert items[0]["body"].startswith("**Unbounded retry.**") and "Prompt for AI" not in items[0]["body"]
+    assert "blockquote" not in items[2]["body"] and items[0]["thread"] is None  # never resolved: no thread
+    assert pr_level_items({"id": "s", "body": "## Summary\nLooks good."}, {"src/confirm.ts"}) == []
+
+
+def test_outside_diff_item_takes_its_code_from_the_file(tmp_path):
+    art = build_artifact("pr.diff", DIFF, "diff", 40000)
+    lines = [f"line {n}" for n in range(1, 41)]
+    item = {"path": "src/confirm.ts", "line": 32, "pr_level": "Outside diff range comments"}
+    assert anchor(art, item)[1].startswith("outdated")          # no file: cannot show the code
+    chunk, reason = anchor(art, item, lines)
+    assert reason is None and ">>   32 | line 32" in code_context(chunk, 32, file_lines=lines)
+    assert anchor(art, {**item, "pr_level": None}, lines)[1].startswith("outdated")  # inline: outdated
+    f = tmp_path / "c.json"
+    f.write_text(json.dumps({"comments": [], "pr_level": [{"id": 1, "author": "x[bot]", "body": "b"}]}))
+    assert load_pr_level(f)[0]["id"] == "1" and load_pr_level(tmp_path / "c.json") != []
 
 
 def test_verdict_needs_cited_evidence():

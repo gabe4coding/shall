@@ -12,6 +12,9 @@ calls.write_text(calls.read_text() + "x" if calls.exists() else "x")
 prompt = sys.stdin.read()
 if "FAIL" in prompt:
     sys.exit(1)
+if "FLAKY" in prompt and len(calls.read_text()) == 1:   # fails once, as a schema retry error does
+    print(json.dumps({"is_error": True, "subtype": "error_max_structured_output_retries"}))
+    sys.exit(1)
 print(json.dumps({"structured_output": {"findings": [], "echo": prompt}, "total_cost_usd": 0.05}))
 """
 
@@ -74,3 +77,12 @@ def test_no_cache_means_no_reuse(tmp_path):
     ask(cfg, "chunk A", None)
     ask(cfg, "chunk A", None)
     assert n_calls(calls) == 2
+
+
+def test_a_known_flaky_failure_is_retried_once_and_others_are_not(tmp_path):
+    cfg, calls = setup(tmp_path)
+    out, meta = ask(cfg, "FLAKY chunk", AnswerCache(None))
+    assert out["echo"] == "FLAKY chunk" and n_calls(calls) == 2       # prompt read from the stdin file
+    cfg, calls = setup(tmp_path / "x") if (tmp_path / "x").mkdir() is None else None
+    out, meta = ask(cfg, "FAIL chunk", AnswerCache(None))
+    assert out is None and "error" in meta and n_calls(calls) == 1    # an unknown failure: no retry
