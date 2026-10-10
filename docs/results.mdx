@@ -1,6 +1,6 @@
 ---
 title: Results
-description: This page gives the shall measurements for selection, known effects, verification, triage, hooks and whole-file scan, and the lessons from them.
+description: This page gives the shall measurements for selection, known effects, verification, triage, hooks, whole-file scan and real pull requests, and the lessons from them.
 ---
 
 # shall results and lessons (PoC)
@@ -183,6 +183,34 @@ These are the actions that the user saw before that change, with JRFC-0012 trial
 - Caveat: the same author wrote the cases and the rules. Real agent sessions
   (the decision log) are the next measurement.
 
+### Scripts, whole-file context and three criteria lines (October 2026)
+
+`make eval-hooks` · 97 cases: the 91 cases above and 6 new cases where a Bash call runs a local script
+(`bash deploy.sh` that force-pushes to main, `./scripts/cleanup.sh` that deletes in the home folder,
+`sh setup.sh` that pipes a download into a shell, `python3 tools/purge.py` that deletes production rows,
+two clean scripts). Fresh answers for every question that changed.
+
+| | before | after |
+| --- | --- | --- |
+| tool calls, P / R at p ≥ 0.5 | 0.95 / 1.00 | **1.00 / 1.00** |
+| tool calls, wrong asks | 2 | **0** |
+| script cases right (6) | – | 6 |
+| code writes, P at p ≥ 0.5 / 0.7 / 0.9 | 0.57 / 0.76 / 0.92 | **0.73 / 0.94 / 1.00** |
+| code writes, R at p ≥ 0.9 | 0.75 | 0.81 |
+| code writes, wrong warnings | 3 | **0** |
+| guard: `make eval` flat R / P | 0.98 / 0.62 | 0.98 / 0.61 |
+
+- **Whole file after a write.** The wrong warning on the session with a timeout 30 lines above the
+  edit went from p 0.91 to under 0.5. The file is small, so Jev now sees all of it.
+- **Three criteria lines, no statement text changed.** JRFC-0012.6 does not apply to a download
+  piped into a shell (JRFC-0012.5 covers it). JRFC-0002.1 does not apply to an HTTP client. JRFC-0010.1
+  has a `Violated when:` that asks for the place where the behavior is switched on.
+- JRFC-0010.1 still scores 0.67–0.77 on two new booking routes. With the new line, a route
+  registration without a flag check is the place where the behavior is switched on, so the labels of
+  these two cases are possibly wrong. We did not change them.
+- JRFC-0011.1 now uses a code check (`python-typed-public`). Totals did not change: no miss, no wrong
+  flag.
+
 ## Whole-file scan (linting)
 
 `eval/scan/run.py` · Can the post-write hook path lint existing code? The path is `Hooks.post` with a `Write` of the whole
@@ -229,6 +257,60 @@ flagged pairs (hash of the pair) and 30 random clean pairs. Therefore treat the 
   (JRFC-0002 and 0008 could only produce false positives). The labels are a model's labels with 3 human
   rulings.
 
+## Real pull requests
+
+`make eval-realpr` (`eval/realpr/run.py`) · 40 merged public pull requests from 15 open-source
+repositories (Go, Python, TypeScript), with 121 inline comments of 7 AI reviewers (Greptile 62,
+Copilot 23, CodeRabbit 18, cubic 9, Codex 7, two others). `cases.yaml` holds only ids. The runner
+downloads the reviewed commit and its merge base, and it rebuilds the bot comments as they were at
+review time. CodeRabbit's per-file PR-level findings are included. shall ran `review` and then
+`triage`, as in CI.
+
+Labels: Claude Opus 5.5 labelled each comment and each shall finding without the source and without
+shall's result: is the claim true, and is it worth a fix before the merge. No person has checked
+the labels yet (`run.py review` writes a sample of 48 items). A second signal needs no model: did the
+developer change the commented lines before the merge?
+
+| triage | value |
+| --- | --- |
+| relevant comments kept | 56 / 63 (0.89), confirmed 41 / 63 |
+| relevant comments dropped as a duplicate of a kept comment or a shall finding | 5 |
+| **relevant comments lost** | **2 / 63 (0.03)**, both refuted by the verifier |
+| noise removed | 10 / 55 (0.18) |
+| developer changed the lines: gold relevant / gold noise | 0.80 / 0.62 |
+
+| shall review | true claim | worth a fix |
+| --- | --- | --- |
+| blocking findings (23) | 20 (0.87) | 13 |
+| advisory findings (26) | 14 (0.54) | 7 |
+
+- **Triage keeps real problems.** It lost 2 of 63. On one of them the developer changed the code, so
+  the refute was wrong.
+- **Triage keeps most "noise".** The bots in this set (Greptile, Codex, cubic) write few nits. The
+  labeller called 55 comments noise, but the developers changed the code for 62% of them. Of the 45
+  kept noise comments, 17 have a claim that the file alone cannot decide, and 19 are true but minor.
+  The verifier confirms true claims, and Jev scored them as actionable. We did not tune triage on
+  these labels before a person checks them.
+- **Advisory findings are the weak part of the review.** JRFC-0010.1 (risky change behind a flag)
+  gave 8 findings, 2 worth a fix. A probe with one Jev question ("does the marked code break the
+  requirement as the finding says?") on the 26 advisory findings gave p ≥ 0.54 for all of them, and
+  4 of the 6 false claims scored ≥ 0.70. So a cheap Jev check does not separate them, and shall does
+  not have one. A per-rule feedback loop is the better lever.
+- **Same-file evidence.** In the first case, the verifier said that the needed code was "elsewhere in
+  the component": in the same file, outside the diff hunks. The evidence search excluded that file.
+  Now it includes the file, except the lines the verifier already sees. The bot comment went from
+  unverified to confirmed with a citation of that part of the file. `eval-verify` (1.00 / 1.00, 0
+  wrong refutes) and `eval-triage` (8/8 kept, 15/15 removed) did not change.
+- **Agent calls failed under load.** 8 triage verifications failed. 7 of them: `claude -p` got no
+  prompt on stdin within 3 s, because blocking `git grep` calls held the event loop. 1: the agent
+  returned JSON without a required field 5 times. Now the prompt is a file on stdin, and these two
+  errors get one more try. After the change, the 8 calls worked.
+- **Large repositories are slow.** With 3 cases at a time, most reviews and triages took 1–5 minutes.
+  In posthog, n8n, infisical and twenty they took 15–40 minutes. The posthog triage took 38 minutes
+  also when the agent answers came from the cache, so the time is in the evidence search and the
+  known effects, not in the models.
+- Cost: review $3.89 and triage $2.53 for 40 pull requests (~$0.16 for each), labels $7.82.
+
 ## Lessons
 
 1. **Deterministic filters work better than better prompts.** The selection included "A design MUST state…" for code
@@ -246,16 +328,25 @@ flagged pairs (hash of the pair) and 30 random clean pairs. Therefore treat the 
    and lost 11 points at ~540 statements.
 6. **Give Jev the facts. Do not expect it to know libraries.** The timeout rule went from
    p 0.14 to 0.77 on one call when the state had the fact "downloads over the network".
+7. **Measure on real data before you tune.** On written cases, triage removed 15 of 15 noise comments.
+   On real pull requests it removed 10 of 55, and the developers acted on most of the "noise". The
+   real data also showed two bugs that the written cases did not: the same-file evidence gap and the
+   agent calls that failed under load.
+8. **Mechanical rules need code, not a better question.** Jev cannot count functions without type
+   hints. A 40-line `ast` check gives exact lines.
 
 ## Next steps
 
-- Make real labelled cases from real pull requests (with data-protection approval), and a
-  violation-level eval.
-- Make a feedback loop: dismissed PR comments → labels → threshold tuning for each domain. Collect
+- Get human rulings on the real-PR sample (`eval/realpr/run.py review`, then `accept`). Then grow the
+  set, and add pull requests of the organisation (with data-protection approval).
+- Make a feedback loop: dismissed PR comments → labels → a threshold or an off switch for each rule.
+  The real-PR eval shows that advisory noise comes from a few rules (JRFC-0010.1). Collect
   `health.json` across PRs to see the unknown rates and near misses over time.
+- Profile the evidence search and the known effects on large repositories (15–40 minutes now), and
+  move the blocking `git grep` calls out of the event loop.
 - Grow `effects.yaml` from real repositories (an agent can draft entries from package docs;
-  owners approve). Test the code graph on a large repository.
-- Add a cheap Jev check of advisory findings before the system posts them.
+  owners approve).
+- Add more code checks for mechanical rules.
 - Review the diffs that add a spec file as `spec` chunks, not as `diff` chunks.
 - Split this repository into the organisation corpus and the tooling (the CI template already
   treats them as two checkouts).

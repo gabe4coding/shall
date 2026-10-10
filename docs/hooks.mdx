@@ -12,9 +12,9 @@ The level of the rule and the status of its standard select the action.
 
 | When | What shall checks | Possible actions | Time |
 | --- | --- | --- | --- |
-| Before a Bash or MCP call | `tool` rules ([JRFC-0012](../corpus/rfcs/JRFC-0012-agent-tool-use.md)): regex patterns, then Jev | deny, ask, warn | ~0.3 s |
+| Before a Bash or MCP call | `tool` rules ([JRFC-0012](../corpus/rfcs/JRFC-0012-agent-tool-use.md)): regex patterns, then Jev. The text of a local script that the call runs counts as part of the call. | deny, ask, warn | ~0.3 s |
 | Before a Write or Edit | Secret scanner (code, not Jev) | deny | ~1 ms |
-| After a Write or Edit | Code rules on the written lines and the lines around them | warn only | ~0.3 s |
+| After a Write or Edit | Code rules on the written lines: code checks, then Jev with the full file as context (15 lines around each edit in a large file) | warn only | ~0.3 s |
 | End of the turn of the agent (Stop) | The full change, with `shall review` | block (verified findings only) | Some seconds. shall skips it when nothing changed. |
 
 ## Default actions
@@ -92,6 +92,30 @@ Code checks the rules with `Enforcement: linter` exactly, without Jev:
 
 Jev judges the other rules. It uses the line `Violated when:` as the criterion.
 
+## Scripts that a call runs
+
+A violation can be split over two calls: the agent writes a script, then it runs the script. When a
+Bash call runs a local file (`bash deploy.sh`, `./scripts/cleanup.sh`, `python3 tools/purge.py`,
+`source env.sh`), shall reads the file. It removes the secrets, and it adds the text to the input of
+Jev as `runs_files`. The regex patterns also search this text. Thus `bash deploy.sh` is denied when
+`deploy.sh` contains `git push --force`.
+
+shall reads at most 2 files of 1 MB or less for each call. It sends at most `hooks.max_script_chars`
+(6000) characters of each file. A call without such a file sends the same questions as before, so
+its cached answers stay valid.
+
+## Code rules after a write
+
+After a Write or an Edit, shall checks the code rules on the lines that the call wrote:
+
+- **Code checks.** A rule with `Enforcement: linter` and a `Check:` name runs that check on the file,
+  without Jev. An example is JRFC-0011.1 with `python-typed-public`. shall reports only the hits on
+  the written lines. Read [Standards](./standards.mdx#code-checks).
+- **Jev.** When the file has `hooks.whole_file_chars` (8000) characters or less, Jev sees the full
+  file, with the written lines marked. The setting that makes an edit correct is frequently in the
+  same file, for example a session that has a timeout. In a larger file, Jev sees
+  `hooks.context_lines` (15) lines around each edit.
+
 ## Try draft rules
 
 To try the tool rules of a draft standard before its owner approves them, add a `draft` action
@@ -106,9 +130,10 @@ hooks:
 
 ## Limits
 
-The hooks see one call at a time. A violation can be split over many calls, for example "write a
-script, then run it". shall judges each call alone. The Stop review sees the files that result, not
-the commands. After a write, Jev judges the written lines and 15 lines around them only.
+The hooks see one call at a time. shall reads the local scripts that a Bash call runs, but it does
+not follow other chains of calls. For example, a script that a different script starts, a file that
+the command downloads, or `cd other && ./x.sh`. The Stop review sees the files that result, not the
+commands. In a file larger than `hooks.whole_file_chars`, Jev sees only 15 lines around each edit.
 
 The settings are in [Configuration](./configuration.mdx#hooks). The design and the measurements are
 in [Architecture](./architecture.mdx#hooks-standards-on-an-agents-tool-calls) and

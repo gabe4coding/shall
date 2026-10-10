@@ -4,7 +4,7 @@ JRFC := plugins/shall/bin/shall
 # the root resolves to .shall/; organisation targets pass --config explicitly.
 ORG := $(JRFC) --config shall.yaml
 
-.PHONY: check lint build test eval eval-scale eval-facts eval-hooks eval-triage review-example self-check self-conflicts self-review
+.PHONY: check lint build test eval eval-scale eval-facts eval-hooks eval-triage eval-realpr review-example self-check self-conflicts self-review
 
 check: lint          ## organisation corpus: deterministic CI checks (no model calls)
 	$(ORG) build --check
@@ -33,6 +33,12 @@ eval-triage:         ## triage of AI review comments on eval/triage (needs TYPES
 
 eval-hooks:          ## hook judge: 75 labelled tool calls and writes (eval/hooks, needs TYPESAFE_API_KEY)
 	$(ORG) eval-hooks --out .shall-out/eval-hooks.json
+
+eval-realpr:         ## real public PRs with AI-bot comments: review + triage graded (needs gh, TYPESAFE_API_KEY, claude; ~$16)
+	uv run --quiet --project plugins/shall/tooling python eval/realpr/run.py fetch
+	uv run --quiet --project plugins/shall/tooling python eval/realpr/run.py run
+	uv run --quiet --project plugins/shall/tooling python eval/realpr/run.py label
+	uv run --quiet --project plugins/shall/tooling python eval/realpr/run.py grade
 
 review-example:      ## full pipeline on one case (needs TYPESAFE_API_KEY and claude)
 	$(ORG) review eval/cases/01-booking-endpoint.diff --out-dir .shall-out/example --format github

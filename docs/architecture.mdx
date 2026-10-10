@@ -75,7 +75,7 @@ The reviewer sees one chunk. A finding can be wrong because of code in another p
    - generic tree rules for what tags miss (`this.x =` / `self.x =` members, top-level constants, nested declarators, base-class nodes);
    - import resolution by path suffix. A package listed in a dependency manifest is external.
 
-   shall parses files lazily (`git grep` first). It marks hops that it resolved only by name with "(by name)". A keyword search runs at the same time. The search uses the YAML key path, `depends_on`, code spans of the statement and identifiers of the quote (code before docs). The search also covers files that have no grammar.
+   shall parses files lazily (`git grep` first). It marks hops that it resolved only by name with "(by name)". A keyword search runs at the same time. The search uses the YAML key path, `depends_on`, code spans of the statement and identifiers of the quote (code before docs). The search also covers files that have no grammar. For a diff, it also covers the file of the finding, except the lines that the verifier sees as the chunk: a diff shows only the changed hunks, and the setting that decides a finding (a variable, a client configuration) is frequently in another part of the same file.
 3. **Jev filters the excerpts** when there are more than 6 (one Noul per excerpt).
 4. **The `shall-verifier` agent** (no tools) answers confirmed / refuted / unknown. It must cite excerpt ids.
 5. **Code applies the verdict. Severity only goes down.** Refuted → code drops the finding only if the cited evidence exists. Unknown or confirmed-without-evidence → advisory. Confirmed → unchanged.
@@ -97,10 +97,13 @@ Trade-off: an answer is stable until its input changes. A wrong finding on an un
 `shall triage` uses the same split of work for the comments that Copilot, CodeRabbit and similar bots left on the pull request. The goal is the opposite of a review. It does not find problems. It keeps the real problems of the bots, sets the noise aside, and gives a reason for each. For usage, see [triage](./triage.mdx).
 
 ```
-open review threads (gh, read only) or a JSON file
+open review threads + PR-level comments (gh, read only) or a JSON file
    ├─ code   keep threads started by a bot (GraphQL type Bot, triage.authors), not shall's own,
    │         not resolved; strip folded extras (<details>, HTML comments); anchor on the diff
    │         → outdated when the file or the line is gone
+   ├─ code   PR-level bot comments: the findings they list per file with a line range
+   │         (`<summary>path (n)</summary>` + `` `L-L`: ``) become comments on that line (outside
+   │         the hunks: code from the file); the rest are summaries, counted, not sorted
    ├─ Jev    selection of the commented chunk (the review's questions, shared cache)
    ├─ Jev    per comment: actionable? + one Noul per selected statement: does it cover the concern?
    ├─ Jev    per pair on nearby lines (shall findings first, then earlier comments): same problem?
@@ -184,11 +187,16 @@ PreToolUse   (Bash | Write | Edit | … | mcp__.*)
    │         `Enforcement: agent`, RFC status with an action table
    ├─ Jev    one request: per candidate "does the call break it?" (criterion: `Violated when:`)
    │         and "is the call about it?"; p = min(both). State: tool, redacted input, cwd,
-   │         git branch (a plain `git push` pushes the current branch)
+   │         git branch (a plain `git push` pushes the current branch), and `runs_files`: the
+   │         redacted text of the local scripts a Bash call runs (`bash deploy.sh`), which the
+   │         `Pattern:` regexes also search
    └─ code   action = hooks.actions[status][level] at p → deny | ask | warn (additionalContext) | log
 PostToolUse  (Write | Edit | MultiEdit)
-   ├─ code   the written lines, found in the file on disk, as a synthetic diff with 15 lines
-   │         of context → the same chunk and prefilter (`Selector.eligible`) as a review
+   ├─ code   the written lines, found in the file on disk, as a synthetic diff: the whole file
+   │         as context up to `hooks.whole_file_chars` (8000), else 15 lines around each edit
+   │         → the same chunk and prefilter (`Selector.eligible`) as a review
+   ├─ code   `Check:` of `Enforcement: linter` code statements (`checks.py`) on the file,
+   │         hits on the written lines only: p = 1
    ├─ Jev    one request per chunk: "do the added lines break it?" and "does it apply?"
    └─ code   warn at p ≥ hooks.code_warn, never deny: the lines are not evidence (JTOOL-0002.6)
 Stop
@@ -213,8 +221,9 @@ Reasons for these choices:
 
 `shall scan` (`scan.py`) lists files with `git ls-files` (tracked and untracked, not ignored) or with a directory walk. It keeps known code and config languages (not Markdown). It applies `scan.exclude` and `scan.max_file_chars`. For each file, it does these steps:
 
-1. The secret scanner checks the raw text. This check is exact. A hit on an enforced MUST is the only blocking finding.
-2. shall sends the whole file, redacted, as one added-lines chunk through `Hooks.judge_code`. This is the loop that the post-write hook uses: prefilter, one Jev request, p = min(applies, violates). shall gives a warning at p >= `scan.threshold` (0.7).
+1. The secret scanner checks the raw text. This check is exact. A hit on a blocking rule (enforced MUST) blocks.
+2. The `Check:` code checks of the linter rules run on the raw text (`checks.py`). They are exact too, so a hit has the severity of its rule.
+3. shall sends the whole file, redacted, as one added-lines chunk through `Hooks.judge_code`. This is the loop that the post-write hook uses: prefilter, one Jev request, p = min(applies, violates). shall gives a warning at p >= `scan.threshold` (0.7).
 
 shall lists Jev failures and exits 3. It does not fail open, because a scan that silently skipped files would look clean. `eval/scan` measured this path on 100 files before the command existed. Its hill-climb changed only rule criteria (`applies_when`, `Violated when:`), not code.
 
@@ -226,7 +235,7 @@ shall lists Jev failures and exits 3. It does not fail open, because a scan that
 | Unstable statement ids | Ids are in the source. `lint --against` fails on silent removal. `retired:` list. |
 | Duplicates / conflicts | `shall conflicts`: one Jev request for each statement pair. |
 | Rot | `owner` + `review_by` are required. Lint warns when a date is overdue. |
-| Mechanical rules via AI | shall never sends `Enforcement: linter` statements to Jev or the agent. |
+| Mechanical rules via AI | shall never sends `Enforcement: linter` statements to Jev or the agent. Tool rules use `Pattern:`, code rules use a named `Check:`. |
 | Index needs an agent | No. `shall build` is deterministic. The semantic text is in the reviewed source. |
 | Jev is not an embedding model | One **Noul for each candidate** (absolute, multi-label). Not Choice-as-similarity. |
 | Size limits (32k/64k tokens) | Chunking + automatic request packing under the token budget. |

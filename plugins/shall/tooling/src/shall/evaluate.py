@@ -369,6 +369,10 @@ async def run_hooks_eval(cfg: Config, corpus: Corpus, jev: Jev, cases_path: Path
                 event["tool_input"].setdefault("file_path", str(path))
                 if case["tool"] == "Write":
                     event["tool_input"].setdefault("content", case["content"])
+            for rel, text in (case.get("files") or {}).items():  # e.g. a script the call runs
+                f = Path(event["cwd"]) / rel
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_text(text, encoding="utf-8")
             hooks.git_branch = lambda cwd, b=case.get("branch", ""): b
             record: dict = {}
             t0 = time.perf_counter()

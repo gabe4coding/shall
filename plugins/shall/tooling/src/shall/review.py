@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import re
+import tempfile
 import time
 from pathlib import Path
 
@@ -41,6 +42,10 @@ FINDINGS_SCHEMA = {
     },
     "required": ["findings"],
 }
+
+
+# one more try for agent failures that a second call usually does not repeat
+RETRY_ERRORS = ("error_max_structured_output_retries", "no stdin data received")
 
 
 def plugin_root() -> Path:
@@ -191,21 +196,30 @@ async def run_claude(cfg: Config, prompt: str, system: str, schema: dict,
         "--strict-mcp-config",
         "--setting-sources", "",
     ]
-    async with sem:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-            # a pipeline agent never triggers shall hooks: its Stop would start another review
-            env={**os.environ, "SHALL_HOOKS_DISABLED": "1"},
-        )
-        try:
-            out, err = await asyncio.wait_for(proc.communicate(prompt.encode()),
-                                              timeout=float(cfg.get("review.timeout")))
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
-            return None, {"error": f"agent timed out after {cfg.get('review.timeout')}s"}
-    if proc.returncode != 0:
-        return None, {"error": err.decode()[-2000:] or out.decode()[-2000:]}
+    for attempt in range(2):
+        async with sem:
+            # the prompt is a file on stdin: it is there when the process starts. Written through
+            # the event loop, it could come after `claude -p` stopped to wait for it (3 s), when
+            # blocking work (git grep for evidence) held the loop.
+            with tempfile.TemporaryFile() as fh:
+                fh.write(prompt.encode())
+                fh.seek(0)
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd, stdin=fh, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                    # a pipeline agent never triggers shall hooks: its Stop would start another review
+                    env={**os.environ, "SHALL_HOOKS_DISABLED": "1"},
+                )
+                try:
+                    out, err = await asyncio.wait_for(proc.communicate(), timeout=float(cfg.get("review.timeout")))
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    await proc.wait()
+                    return None, {"error": f"agent timed out after {cfg.get('review.timeout')}s"}
+        if proc.returncode == 0:
+            break
+        error = err.decode()[-2000:] or out.decode()[-2000:]
+        if attempt or not any(m in error for m in RETRY_ERRORS):
+            return None, {"error": error}
     data = json.loads(out.decode())
     result = data.get("structured_output")
     if result is None:  # fall back to parsing the text result

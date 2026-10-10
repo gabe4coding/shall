@@ -15,7 +15,11 @@ extras, the same concern two times, or a claim that code in a different file alr
 
 1. **Code** keeps the open threads that a bot started. A bot has the GitHub type `Bot`, or its login
    is in `triage.authors`. Code sets aside the comments on code that changed after the comment
-   (outdated).
+   (outdated). Code also reads the PR-level comments of bots (review bodies and comments on the
+   pull request). Some bots list more findings there, each with a file and a line range. An example
+   is the "Nitpick" and "Outside diff range" sections of CodeRabbit. Each of these findings becomes
+   a comment on its file and line. For a line outside the diff, the code comes from the file in the
+   repository. shall counts the other PR-level comments as summaries and does not sort them.
 2. **Jev** selects the rules that apply to the file of the comment. Then it asks these questions for
    each comment:
    - Does the comment name a real problem in this code?
@@ -48,6 +52,9 @@ shall triage /tmp/pr.diff --comments threads.json                         # offl
 With `--findings`, a bot comment that repeats a shall finding counts as noise. `--comments` reads
 the threads from a JSON file in the format of `shall triage --pr`.
 
+In the JSON file, put the PR-level comments in `pr_level`: `{"comments": [...], "pr_level": [{"id",
+"author", "body", "url"}]}`.
+
 `shall triage` writes these files:
 
 | File | Content |
@@ -77,4 +84,6 @@ In CI, `shall-pr-review --post 123 --triage` adds the triage to the summary comm
   actionable and duplicates cost only Jev.
 - shall sees the bot comments that exist when the job runs. If a bot comments after the shall job,
   shall sorts the comment on the next push.
-- shall reads only inline review threads, not the comments on the full pull request.
+- In PR-level comments, shall reads only the findings that have a file and a line (see above). It
+  counts the other PR-level comments as summaries. It cannot resolve a PR-level comment, because it
+  is not a thread.

@@ -179,6 +179,21 @@ class GitHub:
                 return out
             cursor = page["pageInfo"]["endCursor"]
 
+    def pr_level_comments(self) -> list[dict]:
+        """Review bodies and PR (issue) comments: {id, kind, author, author_type, body, url}. Bots
+        put summaries there, and some list more findings per file (`triage.pr_level_items`)."""
+        out = []
+        for kind, path in (("review", f"repos/{self.repo}/pulls/{self.pr}/reviews"),
+                           ("issue_comment", f"repos/{self.repo}/issues/{self.pr}/comments")):
+            for page in json.loads(self.api(["--paginate", "--slurp", path]) or "[]"):
+                for r in page:
+                    if r.get("body"):
+                        user = r.get("user") or {}
+                        out.append({"id": f"{kind}-{r['id']}", "kind": kind, "author": user.get("login") or "ghost",
+                                    "author_type": user.get("type") or "User", "body": r["body"],
+                                    "url": r.get("html_url")})
+        return out
+
     def summary_comment_id(self) -> int | None:
         out = self.api(["--paginate", f"repos/{self.repo}/issues/{self.pr}/comments",
                         "--jq", f'.[] | select(.body | contains("{SUMMARY_MARKER}")) | .id'])
