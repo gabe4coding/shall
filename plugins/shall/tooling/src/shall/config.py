@@ -75,7 +75,11 @@ DEFAULTS: dict[str, Any] = {
         "code_tools": "Write|Edit|MultiEdit|NotebookEdit",
         "timeout": 3.0,           # seconds for the Jev step; past it the call runs (fail-open)
         "max_input_chars": 12000,  # longer tool inputs are cut before they reach Jev
-        "context_lines": 15,      # lines kept around an edit for code statements
+        "context_lines": 15,      # lines kept around an edit for code statements in a large file
+        # a file up to this size goes to Jev whole after a write: the setting that makes an edit
+        # fine (a session with a timeout, a validated input) is often elsewhere in the same file
+        "whole_file_chars": 8000,
+        "max_script_chars": 6000,  # a local script that a Bash call runs: its text goes to Jev up to this size
         # status -> level -> [[min p, action], ...] (first match wins). A status without an
         # entry is not checked; add e.g. `draft:` in a workspace to trial draft rules.
         "actions": {

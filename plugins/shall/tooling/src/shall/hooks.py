@@ -1,10 +1,12 @@
 """Claude Code hooks: corpus statements applied to an agent's tool calls, judged by Jev.
 
   PreToolUse   secret scan (code) on every hooked tool, then the `tool` statements whose
-               `Tools:` regex matches, judged by Jev on the call itself
+               `Tools:` regex matches, judged by Jev on the call itself and on the text of the
+               local scripts a Bash call runs (`bash deploy.sh`)
                -> deny | ask | warn | log, from RFC status + statement level (`hooks.actions`)
   PostToolUse  after a Write/Edit: the code statements eligible for the file, judged by Jev on
-               the written lines plus context -> warn | log only. A fragment is not evidence
+               the written lines plus context (the whole file when it is small) -> warn | log
+               only. A fragment is not evidence
                (JTOOL-0002.6): the setting that makes it fine may live in another file.
   Stop         the working-tree change through `shall review` (selection, reviewer, verification)
                -> block only on verified blocking findings, at most `stop.max_blocks` per session
@@ -130,6 +132,55 @@ def mask_quotes(text: str) -> str:
     return QUOTED_RE.sub(lambda m: m.group(0)[0] * 2, text)
 
 
+INTERPRETERS = {"bash", "sh", "zsh", "dash", "ksh", "source", ".", "python", "python3", "node", "ruby", "perl",
+                "deno", "bun", "tsx", "ts-node", "pwsh", "php"}
+WRAPPERS = {"sudo", "exec", "env", "time", "nohup", "command", "run", "uv", "npx", "pnpm", "poetry", "pipenv"}
+SCRIPT_EXT = (".sh", ".bash", ".zsh", ".py", ".js", ".mjs", ".cjs", ".ts", ".rb", ".pl", ".ps1", ".php")
+ASSIGNMENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*")
+
+
+def run_files(command: str) -> list[str]:
+    """Local files a shell command runs: `bash x.sh`, `./x.sh`, `python tool.py`, `source env.sh`.
+    A violation can be split over two calls (write a script, then run it), so the hook reads them."""
+    import shlex
+    try:
+        lex = shlex.shlex(command, posix=True, punctuation_chars=";&|()<>")
+        lex.whitespace_split = True
+        tokens = list(lex)
+    except ValueError:  # unbalanced quotes: the call fails anyway
+        return []
+    out: list[str] = []
+    first, after_interpreter, skip = True, False, False
+    for tok in tokens:
+        if skip:  # the target of a redirection is not run
+            skip = False
+            continue
+        if tok and set(tok) <= set("<>"):
+            skip = True
+            continue
+        if tok and set(tok) <= set(";&|()"):
+            first, after_interpreter = True, False
+            continue
+        if after_interpreter:
+            if tok in ("-c", "-e", "-m", "eval"):  # inline code is already in the command
+                after_interpreter = False
+            elif not tok.startswith("-") and tok != "run":
+                out.append(tok)
+                after_interpreter = False
+            continue
+        if not first:
+            continue
+        name = tok.rsplit("/", 1)[-1]
+        if ASSIGNMENT_RE.fullmatch(tok) or name in WRAPPERS:
+            continue
+        if name in INTERPRETERS:
+            after_interpreter = True
+        elif tok.startswith(("./", "/", "~/")) or tok.endswith(SCRIPT_EXT):
+            out.append(tok)
+        first = False
+    return list(dict.fromkeys(out))
+
+
 def written_text(tool_input: dict) -> str:
     """The text a tool call puts somewhere. `old_string` is left out: removing a secret is fine."""
     parts = []
@@ -147,21 +198,29 @@ def written_text(tool_input: dict) -> str:
 
 # ---------------------------------------------------------------- questions and actions
 
-def tool_question(st: Statement):
+# Added only when the state has `runs_files`, so the questions of every other call (and their
+# cached answers) stay the same.
+RUNS_FILES = (" The call runs the local files in `runs_files`: what those files do counts as what "
+              "the call does.")
+
+
+def tool_question(st: Statement, runs_files: bool = False):
     return noul(
         f"Does this tool call break the requirement? Requirement: \"{st.text}\" "
         "Answer yes only when the tool call itself, as written, does what the requirement forbids. "
-        "Answer no when the call follows the requirement or has nothing to do with it.",
+        "Answer no when the call follows the requirement or has nothing to do with it."
+        + (RUNS_FILES if runs_files else ""),
         true=st.violated_when or "The tool call clearly does what the requirement forbids.",
         false="The tool call follows the requirement, or it is about something else.",
     )
 
 
-def tool_applies_question(rfc: Rfc, st: Statement):
+def tool_applies_question(rfc: Rfc, st: Statement, runs_files: bool = False):
     return noul(
         f"Is this requirement about the kind of action this tool call does? Requirement: \"{st.text}\" "
         "Answer yes when the call does the kind of thing the requirement is about, whether or not it "
-        "follows the requirement. Answer no when the call does nothing of that kind.",
+        "follows the requirement. Answer no when the call does nothing of that kind."
+        + (RUNS_FILES if runs_files else ""),
         true=st.applies_when or rfc.applies_when,
         false=st.not_applies_when or rfc.not_applies_when,
     )
@@ -202,7 +261,7 @@ def strongest(findings: list[dict]) -> str | None:
 
 
 def _line(f: dict) -> str:
-    p = f["by"] if f["by"] in ("scanner", "pattern") else f"p={f['p']:.2f}"
+    p = f["by"] if f["by"] in ("scanner", "pattern", "check") else f"p={f['p']:.2f}"
     where = f" (lines {f['lines']})" if f.get("lines") else ""
     return (f"- {f['id']} {f['title']} [{f['level']}, {f['status']}, {p}]{where}: "
             f"{f['text'][:300]}{' Found: ' + ', '.join(f['secrets']) if f.get('secrets') else ''}")
@@ -424,8 +483,26 @@ class Hooks:
             out.append((rfc, st))
         return out
 
-    def patterns(self, tool: str, tool_input: dict) -> list[dict]:
-        """`Enforcement: linter` tool statements with a `Pattern:`: a regex, no model."""
+    def script_texts(self, cwd: str, command: str) -> dict[str, str]:
+        """{path: redacted text} of the local files a Bash command runs (at most 2)."""
+        out: dict[str, str] = {}
+        cap = int(self.cfg.get("hooks.max_script_chars"))
+        for name in run_files(command)[:2]:
+            path = Path(os.path.expanduser(name))
+            path = path if path.is_absolute() else Path(cwd) / path
+            try:
+                if not path.is_file() or path.stat().st_size > 1_000_000:
+                    continue
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            text, _ = redact(text)
+            out[name] = text if len(text) <= cap else text[:cap] + f"…[cut {len(text) - cap} chars]"
+        return out
+
+    def patterns(self, tool: str, tool_input: dict, scripts: dict[str, str] | None = None) -> list[dict]:
+        """`Enforcement: linter` tool statements with a `Pattern:`: a regex, no model. The text of
+        the scripts a Bash call runs counts as part of the command."""
         text = None
         out = []
         for rfc, st in self.corpus.statements():
@@ -435,6 +512,7 @@ class Hooks:
                 continue
             if text is None:
                 text = mask_quotes(str(tool_input.get("command") or "") if tool == "Bash" else written_text(tool_input))
+                text += "".join("\n" + mask_quotes(s) for s in (scripts or {}).values())
             if re.search(st.pattern, text):
                 out.append(self._finding(rfc, st, 1.0, action_for(self.actions, rfc, st, 1.0), "pattern"))
         return out
@@ -459,7 +537,11 @@ class Hooks:
             return {}
         findings = self.scan(tool, tool_input)
         record["scanner"] = [f["id"] for f in findings]
-        by_pattern = self.patterns(tool, tool_input)
+        scripts = (self.script_texts(event["cwd"], str(tool_input.get("command") or ""))
+                   if tool == "Bash" and event.get("cwd") else {})
+        if scripts:
+            record["runs_files"] = sorted(scripts)
+        by_pattern = self.patterns(tool, tool_input, scripts)
         record["patterns"] = [f["id"] for f in by_pattern]
         findings += by_pattern
         cands = self.tool_candidates(tool)
@@ -474,7 +556,11 @@ class Hooks:
                 branch = self.git_branch(event["cwd"])
                 if branch:
                     state["git_branch"] = branch
-            ps = await self._judge(state, cands, tool_question, tool_applies_question, record)
+            if scripts:
+                state["runs_files"] = scripts
+            runs = bool(scripts)
+            ps = await self._judge(state, cands, lambda st: tool_question(st, runs),
+                                   lambda rfc, st: tool_applies_question(rfc, st, runs), record)
             if ps:
                 record["scores"] = ps
                 for rfc, st in cands:
@@ -484,7 +570,7 @@ class Hooks:
         return pre_output(findings)
 
     # -- PostToolUse
-    def code_chunks(self, event: dict, record: dict) -> tuple[list[Chunk], str] | None:
+    def code_chunks(self, event: dict, record: dict) -> tuple[list[Chunk], str, str] | None:
         tool = event.get("tool_name") or ""
         tool_input = event.get("tool_input") or {}
         raw_path = tool_input.get("file_path")
@@ -503,9 +589,12 @@ class Hooks:
             return None
         rel = os.path.relpath(path, cwd) if path.is_relative_to(cwd) else str(path)
         safe_text, _ = redact(text)
-        diff = synthetic_diff(rel, safe_text, ranges, int(self.cfg.get("hooks.context_lines")))
+        whole = len(safe_text) <= int(self.cfg.get("hooks.whole_file_chars"))
+        context = safe_text.count("\n") + 1 if whole else int(self.cfg.get("hooks.context_lines"))
+        diff = synthetic_diff(rel, safe_text, ranges, context)
         record["lines"] = ",".join(f"{a}-{b}" if a != b else str(a) for a, b in ranges)
-        return parse_diff(diff, int(self.cfg.get("jev.max_chunk_chars"))), rel
+        record["context"] = "file" if whole else "window"
+        return parse_diff(diff, int(self.cfg.get("jev.max_chunk_chars"))), rel, text
 
     async def post(self, event: dict, record: dict) -> dict:
         tool = event.get("tool_name") or ""
@@ -515,22 +604,47 @@ class Hooks:
         built = self.code_chunks(event, record)
         if not built:
             return {}
-        chunks, rel = built
+        chunks, rel, text = built
         record["file"] = rel
         code_warn = float(self.cfg.get("hooks.code_warn"))
         findings = await self.judge_code(
-            chunks, record, lambda rfc, st, p: code_action(self.actions, code_warn, rfc, st, p))
+            chunks, record, lambda rfc, st, p: code_action(self.actions, code_warn, rfc, st, p),
+            texts={chunks[0].path: text} if chunks else None)
         record["findings"] = [{k: f[k] for k in ("id", "p", "action")} for f in findings if f["action"]]
         return post_output(findings, rel)
 
-    async def judge_code(self, chunks: list[Chunk], record: dict, action) -> list[dict]:
+    async def judge_code(self, chunks: list[Chunk], record: dict, action,
+                         texts: dict[str, str] | None = None) -> list[dict]:
         """Code statements eligible for each chunk, judged by Jev (min(applies, violates)).
         Shared by the post-write hook and `shall scan`; `action(rfc, st, p)` names the outcome.
+        With `texts` (path -> whole file), linter statements with a `Check:` run their code check
+        on the file and keep the lines the chunks mark as written (p is 1.0 or 0.0).
         Sets record["scores"] (max p per statement over the chunks) and record["candidates"]."""
+        from .checks import CHECKS
         from .select import Selector, statement_question
         selector = Selector(self.cfg, self.corpus, self.jev, include_status=sorted(self.statuses))
         findings: list[dict] = []
         scores: dict[str, float] = {}
+        written: dict[str, set[int]] = {}
+        for chunk in chunks:
+            written.setdefault(chunk.path, set()).update(chunk.anchor_lines)
+        checked: set[tuple[str, str]] = set()
+        for chunk in chunks:
+            text = (texts or {}).get(chunk.path)
+            for rfc, st in (selector.eligible(chunk, checks=True) if text is not None else []):
+                if (chunk.path, st.id) in checked:
+                    continue  # one check per file, whatever the number of chunks
+                checked.add((chunk.path, st.id))
+                lines = CHECKS[st.check](chunk.path, text)
+                if lines is None:
+                    continue  # the check cannot judge this file
+                lines = [n for n in lines if n in written[chunk.path]]
+                p = 1.0 if lines else 0.0
+                record["candidates"] = record.get("candidates", 0) + 1
+                scores[st.id] = max(scores.get(st.id, 0.0), p)
+                if lines:
+                    findings.append(self._finding(rfc, st, p, action(rfc, st, p), "check",
+                                                  lines=",".join(map(str, lines))))
         for chunk in chunks:
             cands = selector.eligible(chunk)
             record["candidates"] = record.get("candidates", 0) + len(cands)

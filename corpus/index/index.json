@@ -1,5 +1,5 @@
 {
-  "corpus_hash": "5ed0b61292be3409",
+  "corpus_hash": "ae1a83d38d1a8d67",
   "counts": {
     "domains": 11,
     "rfcs": 12,
@@ -628,7 +628,7 @@
       ],
       "layer": "local",
       "level": "MUST",
-      "not_applies_when": "No HTTP endpoint or API contract is added, changed or described.",
+      "not_applies_when": "the code only calls an HTTP API as a client (it builds a URL or sends a request to another service) and defines no route of its own.",
       "rfc": "JRFC-0002",
       "source": "corpus/rfcs/JRFC-0002-http-api-design.md#L31",
       "status": "enforced",
@@ -653,7 +653,7 @@
       "level": "MUST",
       "not_applies_when": "No HTTP endpoint or API contract is added, changed or described.",
       "rfc": "JRFC-0002",
-      "source": "corpus/rfcs/JRFC-0002-http-api-design.md#L38",
+      "source": "corpus/rfcs/JRFC-0002-http-api-design.md#L39",
       "status": "enforced",
       "text": "Handlers MUST use HTTP methods according to RFC 9110: GET and HEAD MUST NOT change server state, and state changes use POST, PUT, PATCH or DELETE.",
       "title": "Methods match semantics"
@@ -676,7 +676,7 @@
       "level": "MUST",
       "not_applies_when": "No HTTP endpoint or API contract is added, changed or described.",
       "rfc": "JRFC-0002",
-      "source": "corpus/rfcs/JRFC-0002-http-api-design.md#L45",
+      "source": "corpus/rfcs/JRFC-0002-http-api-design.md#L46",
       "status": "enforced",
       "text": "Error responses MUST use the `application/problem+json` format of RFC 9457 with at least `type`, `title` and `status`, and MUST NOT expose stack traces or internal exception text.",
       "title": "Problem details for errors"
@@ -699,7 +699,7 @@
       "level": "MUST",
       "not_applies_when": "No HTTP endpoint or API contract is added, changed or described.",
       "rfc": "JRFC-0002",
-      "source": "corpus/rfcs/JRFC-0002-http-api-design.md#L52",
+      "source": "corpus/rfcs/JRFC-0002-http-api-design.md#L53",
       "status": "enforced",
       "text": "Endpoints that return a collection MUST be paginated with a bounded maximum page size.",
       "title": "Paginated collections"
@@ -722,7 +722,7 @@
       "level": "MUST",
       "not_applies_when": "No HTTP endpoint or API contract is added, changed or described.",
       "rfc": "JRFC-0002",
-      "source": "corpus/rfcs/JRFC-0002-http-api-design.md#L58",
+      "source": "corpus/rfcs/JRFC-0002-http-api-design.md#L59",
       "status": "enforced",
       "text": "POST endpoints that create reservations, payments or other resources with business side effects MUST accept an `Idempotency-Key` header and return the original result for a repeated key.",
       "title": "Idempotent creation of money- or booking-related resources"
@@ -745,7 +745,7 @@
       "level": "SHOULD",
       "not_applies_when": "No HTTP endpoint or API contract is added, changed or described.",
       "rfc": "JRFC-0002",
-      "source": "corpus/rfcs/JRFC-0002-http-api-design.md#L66",
+      "source": "corpus/rfcs/JRFC-0002-http-api-design.md#L67",
       "status": "enforced",
       "text": "A breaking change to a public API contract SHOULD be released as a new major version path (for example `/v2/`) while the previous version keeps working during a deprecation period.",
       "title": "Versioning of breaking changes"
@@ -1417,7 +1417,8 @@
       "source": "corpus/rfcs/JRFC-0010-feature-flags.md#L24",
       "status": "approved",
       "text": "A change to a critical user flow (search, booking, payment, login) SHOULD be released behind a feature flag that can be turned off without a deploy.",
-      "title": "Risky changes behind a flag"
+      "title": "Risky changes behind a flag",
+      "violated_when": "the content turns on new or changed behavior of search, booking, payment or login for all users at once, and it shows the place where that behavior is switched on (a route registration, a release configuration) without a flag check. A function, handler, query or client on its own does not show how it is released."
     },
     {
       "applies_when": "the content defines a new feature flag.",
@@ -1437,7 +1438,7 @@
       "level": "MUST",
       "not_applies_when": "no new feature flag is defined; an environment variable or command-line option that a developer tool reads to turn a behavior off for testing, benchmarking or measurement is configuration, not a feature flag.",
       "rfc": "JRFC-0010",
-      "source": "corpus/rfcs/JRFC-0010-feature-flags.md#L31",
+      "source": "corpus/rfcs/JRFC-0010-feature-flags.md#L32",
       "status": "approved",
       "text": "Every new feature flag MUST declare an owning team and an expiry date in its definition.",
       "title": "Owner and expiry"
@@ -1460,7 +1461,7 @@
       "level": "MUST",
       "not_applies_when": "No feature flag is involved and no user-visible production behavior changes.",
       "rfc": "JRFC-0010",
-      "source": "corpus/rfcs/JRFC-0010-feature-flags.md#L38",
+      "source": "corpus/rfcs/JRFC-0010-feature-flags.md#L39",
       "status": "approved",
       "text": "Code that reads a flag MUST behave safely when the flag service is unavailable, using the old behavior as the default value.",
       "title": "Safe default"
@@ -1472,8 +1473,9 @@
         "code"
       ],
       "blocking": false,
+      "check": "python-typed-public",
       "domain": "python",
-      "enforcement": "agent",
+      "enforcement": "linter",
       "id": "JRFC-0011.1",
       "languages": [
         "python"
@@ -1615,7 +1617,7 @@
       ],
       "layer": "local",
       "level": "MUST",
-      "not_applies_when": "The content is not a tool call made by an agent.",
+      "not_applies_when": "the command only downloads a script and runs it or pipes it into an interpreter; JRFC-0012.5 covers that.",
       "rfc": "JRFC-0012",
       "source": "corpus/rfcs/JRFC-0012-agent-tool-use.md#L79",
       "status": "enforced",
@@ -1640,7 +1642,7 @@
       "level": "MUST",
       "not_applies_when": "The content is not a tool call made by an agent.",
       "rfc": "JRFC-0012",
-      "source": "corpus/rfcs/JRFC-0012-agent-tool-use.md#L88",
+      "source": "corpus/rfcs/JRFC-0012-agent-tool-use.md#L89",
       "status": "enforced",
       "text": "Agents MUST NOT change data or schema in a production database, queue or cloud resource (migrations, write queries, deletes, deploys to production).",
       "title": "No writes to production systems",
@@ -1664,7 +1666,7 @@
       "not_applies_when": "The content is not a tool call made by an agent.",
       "pattern": "\\bcurl\\b[^;&|\\n]*(?:\\s--insecure\\b|\\s-[A-Za-z]*k[A-Za-z]*\\b)|--no-check-certificate\\b|\\bGIT_SSL_NO_VERIFY=(?!0\\b|false\\b)\\S|(?i:http\\.sslverify)=false\\b|\\bNODE_TLS_REJECT_UNAUTHORIZED=0\\b|\\bPYTHONHTTPSVERIFY=0\\b|strict-ssl\\s+false\\b",
       "rfc": "JRFC-0012",
-      "source": "corpus/rfcs/JRFC-0012-agent-tool-use.md#L97",
+      "source": "corpus/rfcs/JRFC-0012-agent-tool-use.md#L98",
       "status": "enforced",
       "text": "Agents SHOULD NOT disable TLS certificate verification in commands (`curl -k`, `--insecure`, `wget --no-check-certificate`, `GIT_SSL_NO_VERIFY`, `http.sslVerify=false`, `NODE_TLS_REJECT_UNAUTHORIZED=0`, `PYTHONHTTPSVERIFY=0`, `strict-ssl false`).",
       "title": "TLS verification stays on",
@@ -1686,7 +1688,7 @@
       "level": "MUST",
       "not_applies_when": "The content is not a tool call made by an agent.",
       "rfc": "JRFC-0012",
-      "source": "corpus/rfcs/JRFC-0012-agent-tool-use.md#L107",
+      "source": "corpus/rfcs/JRFC-0012-agent-tool-use.md#L108",
       "status": "enforced",
       "text": "Agents MUST NOT disable a required CI workflow, job or status check (for example with `gh workflow disable` or by removing required checks from branch protection).",
       "title": "Required CI checks stay on",

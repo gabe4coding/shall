@@ -49,6 +49,7 @@ The full format is in [JRFC-0001](../corpus/rfcs/JRFC-0001-rfc-format.md).
 | `Artifacts:` | Optional. Narrower than the `artifacts` of the RFC, for example `spec` for a rule about design documents. |
 | `Enforcement:` | `agent`, `linter` or `human`. shall never sends a `linter` statement to a model. |
 | `Tools:`, `Violated when:`, `Pattern:` | For `tool` rules that the [hooks](./hooks.mdx#tool-rules) check |
+| `Check:` | For a `linter` code rule: the name of a code check that shall runs on the file. Read [Code checks](#code-checks). |
 
 ## Write statements that work
 
@@ -61,6 +62,35 @@ The full format is in [JRFC-0001](../corpus/rfcs/JRFC-0001-rfc-format.md).
 - **Write rules that a person can see in the code.** "MUST set a timeout" is possible to check.
   "MUST be resilient" is not.
 - **Send mechanical rules to linters.** Mark them `Enforcement: linter`.
+
+## Code checks
+
+Some rules are mechanical, for example "public Python functions SHOULD have type hints". Jev cannot
+count which functions have no hints. It judges how typed the file looks. A code check gives the exact
+lines:
+
+```markdown
+### JRFC-0011.1 Typed public functions
+Public functions and methods in Python modules SHOULD have type hints for all parameters
+and the return value.
+
+- Applies when: the content adds or changes a public Python function or method.
+- Enforcement: linter
+- Check: python-typed-public
+```
+
+`shall scan` and the hook after a write run the check of each rule that applies to the file. They
+do not send these rules to Jev. A hit has p = 1 and the lines of the hit. A hit in a scan has the
+severity of the rule, as a secret-scanner hit. After a write, it is a warning, and only for the
+written lines. `shall lint` reports an unknown check name, and a `Check:` without
+`Enforcement: linter`.
+
+| Check | What it finds |
+| --- | --- |
+| `python-typed-public` | Module-level functions and methods of module-level classes with a public name (`__init__` included) that have a parameter or a return value without a type hint. `self`, `cls` and the return value of `__init__` need no hint. |
+
+To add a check, add a function to `shall/checks.py` (`CHECKS`). It gets the path and the text of the
+file and returns the lines that break the rule, or `None` when it cannot judge the file.
 
 ## Lifecycle
 

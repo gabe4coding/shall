@@ -73,6 +73,9 @@ The organisation sets the settings in `shall.yaml`. A repository can change them
 | `hooks.actions` | See [Hooks](./hooks.mdx#default-actions) | Status → level → `[[min p, action]]`. shall does not check a status without a table. |
 | `hooks.code_warn` | `0.7` | After a write, warn at this value or higher. Never deny. |
 | `hooks.timeout` | `3.0` | Seconds for Jev in a hook. After this time, the call runs (fail-open). |
+| `hooks.whole_file_chars` | `8000` | After a write, Jev sees the full file when it has this number of characters or less |
+| `hooks.context_lines` | `15` | In a larger file, Jev sees this number of lines around each edit |
+| `hooks.max_script_chars` | `6000` | The characters of a local script that a Bash call runs that shall sends to Jev |
 | `hooks.pre_matcher` | `Bash\|Write\|Edit\|MultiEdit\|NotebookEdit\|mcp__.*` | The tools that shall checks before the call |
 | `hooks.code_tools` | `Write\|Edit\|MultiEdit\|NotebookEdit` | The tools that shall checks after the call |
 | `hooks.stop` | `enabled, max_blocks 2` | The review at the end of the turn. It blocks two times for each session at most. |

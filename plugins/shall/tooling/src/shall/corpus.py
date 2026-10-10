@@ -24,7 +24,7 @@ STATEMENT_HEAD_RE = re.compile(r"^###\s+([A-Z][A-Z0-9]{1,9}-\d{4}\.\d+)\s+(.+?)\
 LOOSE_HEAD_RE = re.compile(r"^###\s+[A-Z][A-Z0-9]{1,9}-\d")
 SECTION_HEAD_RE = re.compile(r"^#{1,3}\s")
 META_RE = re.compile(
-    r"^-\s+(Applies when|Not applies when|Enforcement|Artifacts|Tools|Violated when|Pattern):\s*(.*)$", re.I)
+    r"^-\s+(Applies when|Not applies when|Enforcement|Artifacts|Tools|Violated when|Pattern|Check):\s*(.*)$", re.I)
 # Longest alternatives first so "MUST NOT" wins over "MUST".
 KEYWORD_RE = re.compile(
     r"\b(MUST NOT|SHALL NOT|SHOULD NOT|NOT RECOMMENDED|MUST|SHALL|REQUIRED|SHOULD|RECOMMENDED|MAY|OPTIONAL)\b"
@@ -79,6 +79,7 @@ class Statement:
     tools: str | None = None            # tool-name regex for `tool` statements, e.g. Bash|mcp__.*
     violated_when: str | None = None    # hook Jev criterion: what a violating tool call looks like
     pattern: str | None = None          # linter `tool` statements: regex searched in the command
+    check: str | None = None            # linter code statements: a check of shall.checks.CHECKS
 
 
 @dataclass
@@ -249,6 +250,7 @@ def _parse_statements(rfc_id: str, body: list[str], offset: int, rel: str, issue
             tools=meta.get("tools") or None,
             violated_when=meta.get("violated when") or None,
             pattern=meta.get("pattern") or None,
+            check=meta.get("check") or None,
         ))
         # lint per statement
         line = offset + start + 1
@@ -280,6 +282,14 @@ def _parse_statements(rfc_id: str, body: list[str], offset: int, rel: str, issue
         if meta.get("pattern") and enf != "linter":
             issues.append(Issue(rel, line, "error", "pattern-enforcement",
                                 f"{sid} has a Pattern, so it is checked by code: use 'Enforcement: linter'"))
+        if meta.get("check"):
+            from .checks import CHECKS
+            if meta["check"] not in CHECKS:
+                issues.append(Issue(rel, line, "error", "check",
+                                    f"{sid} has unknown Check '{meta['check']}' (known: {', '.join(sorted(CHECKS))})"))
+            elif enf != "linter":
+                issues.append(Issue(rel, line, "error", "check-enforcement",
+                                    f"{sid} has a Check, so it is checked by code: use 'Enforcement: linter'"))
         if enf not in ENFORCEMENTS:
             issues.append(Issue(rel, line, "error", "enforcement", f"{sid} has unknown enforcement '{enf}'"))
     return statements

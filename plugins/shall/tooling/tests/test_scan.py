@@ -110,7 +110,13 @@ def test_threshold_and_statuses(org, tmp_path):
     # default statuses (approved, enforced) skip drafts; JRFC-0011 (python typing) is a draft
     untyped = git_repo(tmp_path / "repo2", {"a.py": "def f(x):\n    return x\n"})
     assert "JRFC-0011.1" not in scan(org, FakeJev(), untyped)["files"][0]["scores"]
-    assert "JRFC-0011.1" in scan(org, FakeJev(), untyped, statuses=["draft", "approved", "enforced"])["files"][0]["scores"]
+    drafts = scan(org, jev := FakeJev(), untyped, statuses=["draft", "approved", "enforced"])["files"][0]
+    # JRFC-0011.1 is a code check (`Check: python-typed-public`): exact line, no Jev question about it
+    assert drafts["scores"]["JRFC-0011.1"] == 1.0
+    assert [(f["id"], f["by"], f["lines"]) for f in drafts["findings"]] == [("JRFC-0011.1", "check", "1")]
+    assert not any("JRFC-0011.1" in str(s) for s in jev.states)
+    typed = git_repo(tmp_path / "repo3", {"a.py": "def f(x: int) -> int:\n    return x\n"})
+    assert scan(org, FakeJev(), typed, statuses=["draft"])["files"][0]["scores"]["JRFC-0011.1"] == 0.0
 
 
 def test_jev_failure_is_reported_not_hidden(org, tmp_path):

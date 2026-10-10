@@ -82,6 +82,7 @@ directory of the session, except in temporary directories.
 
 - Applies when: the tool call deletes, moves, overwrites or changes permissions of files.
 - Violated when: the command deletes, overwrites or changes permissions of paths outside the working directory (`cwd`), such as the home directory, / or system folders; paths under /tmp or the working directory are allowed.
+- Not applies when: the command only downloads a script and runs it or pipes it into an interpreter; JRFC-0012.5 covers that.
 - Tools: Bash
 - Enforcement: agent
 

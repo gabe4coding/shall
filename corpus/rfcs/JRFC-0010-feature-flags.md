@@ -26,6 +26,7 @@ A change to a critical user flow (search, booking, payment, login) SHOULD be rel
 behind a feature flag that can be turned off without a deploy.
 
 - Applies when: the content changes the behavior of search, booking, payment or login flows.
+- Violated when: the content turns on new or changed behavior of search, booking, payment or login for all users at once, and it shows the place where that behavior is switched on (a route registration, a release configuration) without a flag check. A function, handler, query or client on its own does not show how it is released.
 - Enforcement: agent
 
 ### JRFC-0010.2 Owner and expiry

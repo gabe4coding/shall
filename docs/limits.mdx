@@ -5,20 +5,33 @@ description: What shall does not do yet, and what to know before you use it on r
 
 # Known limits
 
-- **Proof of concept.** We measured shall on cases that we wrote for it, not on real pull requests.
-  Read [Results](./results.mdx).
-- **Recall is not perfect.** On difficult cases, Jev does not select approximately 1 in 4 rules that
-  apply. `health.json` lists the rules with a score just below the threshold.
+- **Measured on a small real set.** The real-PR eval has 40 merged public pull requests with 121
+  comments of AI reviewers ([Results](./results.mdx#real-pull-requests)). A model (Claude Opus)
+  labelled them. No person has checked these labels yet. The other evals use cases that we wrote.
+- **Recall is not perfect.** On difficult selection cases, Jev does not select approximately 1 in 4
+  rules that apply. `health.json` lists the rules with a score just below the threshold.
+- **Advisory findings are often not worth a fix.** On real pull requests, 20 of 23 blocking findings
+  were true, but only 14 of 26 advisory findings were true. One Jev question
+  does not separate them (measured), so shall does not filter them. Turn off or narrow the rules
+  that cause the noise.
 - **The code graph uses imports and names, not types.** It does not follow dependency injection,
   reflection, or clients that YAML files or environment variables configure.
-- **shall verifies only blocking findings.** It does not check advisory comments against the rest of
-  the repository.
+- **Large repositories are slow.** In repositories with many thousand files, the evidence search
+  and the known effects took 15–40 minutes for each review or triage. Small and medium
+  repositories take 1–5 minutes.
+- **shall verifies only blocking findings and findings with `depends_on`.** It does not check the
+  other advisory comments against the rest of the repository.
+- **Triage keeps most comments of modern AI reviewers.** On real pull requests, triage removed 1 in
+  5 of the comments that the labeller called noise. Developers changed the code for more than half
+  of these comments. "Noise" is a judgment, so shall keeps a comment when it is not sure.
 - **Triage sees the bot comments that exist when the job runs.** If a bot comments after the shall
-  job, shall sorts the comment on the next push. shall reads only inline review threads, not the
-  comments on the full pull request.
+  job, shall sorts the comment on the next push. In PR-level comments, shall reads only the findings
+  that have a file and a line. It counts the other PR-level comments as summaries.
 - **Two external services.** If TypeSafe or Anthropic is not available, the job fails with exit
   code 3.
 - **Data goes out of your machine.** shall sends diffs to TypeSafe and Anthropic.
-- **Hooks see one call at a time.** A violation can be split over many calls, for example "write a
-  script, then run it". shall judges each call alone. The Stop review sees the files that result, not
-  the commands. After a write, Jev judges the written lines and 15 lines around them only.
+- **Hooks see one call at a time.** shall reads the local scripts that a Bash call runs, but it
+  does not follow other chains, for example a script that starts a different script. In a file
+  larger than `hooks.whole_file_chars` (8000 characters), Jev sees only 15 lines around each edit.
+- **Few code checks.** `Check:` gives exact results for mechanical rules, but shall has only one
+  check now (`python-typed-public`).

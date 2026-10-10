@@ -16,7 +16,7 @@ description: Repository layout, code map, tests, evals, the rules of this reposi
 | `plugins/shall/tooling/` | The Python package of the CLI (`uv` project, Python 3.11+, tests) |
 | `ci/github/` | Workflow templates for a corpus repository and for application repositories |
 | `examples/booking-service/.shall/` | The local rules of an example application repository (`BOOK-`) |
-| `eval/` | Labelled cases: `cases/`, `scale/`, `facts/` (selection), `verify/`, `triage/`, `hooks/`, `scan/` |
+| `eval/` | Labelled cases: `cases/`, `scale/`, `facts/` (selection), `verify/`, `triage/`, `hooks/`, `scan/`, `realpr/` (real pull requests, ids only) |
 | `docs/` | This documentation |
 
 ## Three workspaces
@@ -56,6 +56,7 @@ cli.py → config.py → corpus.py → artifact.py → effects.py → select.py 
 | `triage.py` | Sorts the comments of other AI reviewers |
 | `hooks.py` | The Claude Code hooks: `shall hook`, `shall hookd`, `shall hook-config` |
 | `scan.py` | Lints whole files with `Hooks.judge_code` |
+| `checks.py` | Deterministic code checks for `Enforcement: linter` rules with `Check:` |
 | `conflicts.py` | Compares pairs of statements with Jev |
 | `evaluate.py` | The selection eval and the verification eval |
 
@@ -86,7 +87,8 @@ make eval          # selection on 11 cases (needs TYPESAFE_API_KEY)
 make eval-scale    # selection with ~540 rules, 20 cases
 make eval-facts    # known effects on and off, 19 files in 9 languages
 make eval-triage   # triage, 24 labelled comments (needs TYPESAFE_API_KEY and claude)
-make eval-hooks    # hook judge, 75 labelled tool calls and writes (--no-cache to measure latency)
+make eval-hooks    # hook judge, 97 labelled tool calls and writes (--no-cache to measure latency)
+make eval-realpr   # 40 real public PRs with AI-bot comments: review and triage (~$16, ~2 h)
 plugins/shall/bin/shall --config shall.yaml eval-verify --retrieval treesitter   # verification (needs claude)
 ```
 
