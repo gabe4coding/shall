@@ -211,6 +211,58 @@ two clean scripts). Fresh answers for every question that changed.
 - JRFC-0011.1 now uses a code check (`python-typed-public`). Totals did not change: no miss, no wrong
   flag.
 
+## Hooks with Claude as the judge
+
+`make eval-hooks-claude` · the same 97 cases, with `claude-haiku-5-5` as the judge and no Jev key.
+The eval sends the prompts of the hooks module through `claude -p`. The answers are fresh
+(`--no-cache`). Claude answers yes, likely, unlikely or no; shall maps these to p = 0.95, 0.7, 0.3
+and 0.05. Thus the default actions do not change: yes on an enforced MUST denies, likely asks.
+
+| | first prompt | final prompt | Jev (above) |
+| --- | --- | --- | --- |
+| tool calls (72), P / R at p ≥ 0.5 | 0.89 / 0.98 | **1.00 / 1.00** | 1.00 / 1.00 |
+| tool calls, P / R at p ≥ 0.9 | 1.00 / 0.91 | **1.00 / 1.00** | 1.00 / 1.00 |
+| tool calls, deny right / wrong | 30 / 0 | **34 / 0** | – |
+| tool calls, wrong asks | 5 | **0** | 0 |
+| tool calls, missed | 1 | **0** | 0 |
+| code writes (25), P / R at p ≥ 0.5 | 0.84 / 1.00 | 0.81 / 0.81 | 0.73 / – |
+| code writes, P / R at p ≥ 0.9 | 1.00 / 0.88 | 0.92 / 0.75 | 1.00 / 0.81 |
+| code writes, warn right / wrong | 16 / 1 | 13 / 1 | – |
+
+- **The first prompt** had one list: first the violation question of each rule, then the relevance
+  question of each rule, one word for each answer. Haiku mixed up the rules. For example, it
+  answered yes to "push to main" for `gh api -X DELETE …/main/protection/required_status_checks`.
+  It also answered likely when the call showed the answer, for example on `git push origin main`.
+  Each likely on an enforced MUST is an ask: 5 wrong asks.
+- **The final prompt for a tool call** puts the two questions of each rule in one group. Before the
+  answers of a group, Claude writes one reason line of at most 12 words, for example "Deploys k8s
+  manifests to staging context, not production". Claude says likely or unlikely only when the
+  content is not sufficient to decide.
+- **Code writes keep the first prompt.** A write can have 30 candidate rules. The reason lines then
+  take more than `hooks.claude.timeout` (8 s). The grouped form without reason lines lowered the
+  recall to 0.50. The two runs with the first prompt (1.00 and 0.81 recall) show that Haiku changes
+  from run to run. The misses are on log fields, `shell=True` with input and resource paths. The
+  wrong warnings are JRFC-0010.1 on two booking routes (the same cases as with Jev, possibly wrong
+  labels) and JRFC-0008.1 on a migration.
+- **Latency.** In a Claude Code session, through `$.model.complete`: Haiku answers in 2.3–2.7 s
+  before a call (3.4–3.7 s for the full hook), and in 5.2 s after a write with 30 rules (6.5 s for
+  the full hook). Jev takes ~0.3 s. The eval numbers (p50 8.6 s) include the start of `claude -p`.
+- **Cost.** Jev: 359,443 input tokens for the 95 requests of the eval, ~3,800 for each request.
+  At $0.042 for each 1M input tokens, this is ~$0.00016 for each checked call. Haiku, measured with
+  `claude -p --output-format json` on 4 tool calls and 4 code writes: ~$0.0012 for each tool call
+  and ~$0.001 for each code write (the questions of a code write are mostly a cached prefix). This
+  is about 7 times the cost of Jev, or ~$1.1 for 1,000 checked calls instead of ~$0.16. Thinking
+  tokens are 75–85% of the output of Haiku there (550–1,600 tokens). The hooks module sets
+  `effort: low`, so these numbers are an upper limit. In a session with a Claude subscription, the
+  calls of the module count against the usage limits of the plan, not against an API bill.
+- **End to end** (`claude -p --plugin-dir plugins/shall`, no Jev key): the module denied `git push
+  origin main` (JRFC-0012.1, yes). With the enforced MUST action set to ask, the refusal said "asked
+  by plugins cc-plugin-sec-default, shall" with the JRFC-0012.1 reason. After a write of
+  `requests.get(url)`, the model got the JRFC-0006.1 warning (p = 0.95). Without a key, the Stop
+  hook skips the review.
+- Caveat: one run of each prompt; Haiku is less stable than Jev. Run the eval again before a change
+  to the prompt or to `REASONS_UP_TO` (`claude_judge.py`).
+
 ## Whole-file scan (linting)
 
 `eval/scan/run.py` · Can the post-write hook path lint existing code? The path is `Hooks.post` with a `Write` of the whole

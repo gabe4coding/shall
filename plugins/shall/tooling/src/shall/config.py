@@ -87,6 +87,10 @@ DEFAULTS: dict[str, Any] = {
             "approved": {"MUST": [[0.5, "warn"]], "SHOULD": [[0.7, "log"]], "MAY": [[0.7, "log"]]},
         },
         "code_warn": 0.7,         # code statements after a write: warn at or above, never block
+        # the judge without TYPESAFE_API_KEY: Claude through the plugin's hooks module
+        # (claude_judge.py); its answers map to p, so the action tables above still apply.
+        # enabled: false keeps only the code checks without a Jev key (no model calls).
+        "claude": {"enabled": True, "model": "claude-haiku-5-5", "timeout": 8.0},
         "secrets": [],            # [[tool regex, statement id]]: which rule a secret-scanner hit breaks
         "stop": {"enabled": True, "max_blocks": 2, "max_diff_chars": 200000},
         "log": ".shall-cache/hooks/decisions.jsonl",

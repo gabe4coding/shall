@@ -14,6 +14,11 @@
 Fail-open by design: a Jev error or a timeout lets the call run, and the decision log says so.
 The secret scanner redacts every input before it reaches Jev or the log.
 
+The judge: Jev when TYPESAFE_API_KEY is set. Without it, Claude when the event comes from the
+plugin's hooks module (`shall_judge: "claude"`, claude_judge.py): the output then carries the
+requests the module must ask the model (`shall_ask`), and the module sends the event again with
+the replies (`shall_replies`). Without either, only code checks run.
+
 Transports share `Hooks.handle`: `shall hook` (command hook, one process per call) and
 `shall hookd` (a localhost HTTP server for `type: http` hooks; the Jev connection stays warm).
 """
@@ -21,6 +26,7 @@ Transports share `Hooks.handle`: `shall hook` (command hook, one process per cal
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import datetime as dt
 import hashlib
 import json
@@ -33,11 +39,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .artifact import Chunk, parse_diff
+from .claude_judge import ClaudeJudge, NeedsReply
 from .config import Config
 from .corpus import Corpus, Rfc, Statement
 from .jev import Jev, noul
 
 RANK = {"log": 1, "warn": 2, "ask": 3, "deny": 4}
+
+# The Claude judge of the event being handled: one per event, also when `shall hookd` handles
+# several events at the same time.
+_event_judge: contextvars.ContextVar[ClaudeJudge | None] = contextvars.ContextVar("shall_event_judge", default=None)
 
 
 # ---------------------------------------------------------------- secret scanner
@@ -375,10 +386,11 @@ def working_diff(root: Path) -> str:
 class Hooks:
     def __init__(self, cfg: Config, corpus: Corpus, jev: Jev, statuses: list[str] | None = None,
                  timeout: float | None = -1, log: bool = True, score: str = "both",
-                 skip_when_denied: bool = True):
+                 skip_when_denied: bool = True, claude: ClaudeJudge | None = None):
         self.cfg = cfg
         self.corpus = corpus
         self.jev = jev
+        self.claude = claude  # eval: Claude judges every event, with or without a Jev key
         self.actions = cfg.get("hooks.actions") or {}
         self.statuses = set(statuses if statuses is not None else self.actions)
         self.timeout = float(cfg.get("hooks.timeout")) if timeout == -1 else timeout
@@ -401,6 +413,12 @@ class Hooks:
         name = event.get("hook_event_name")
         t0 = time.perf_counter()
         record: dict = {"event": name, "session": event.get("session_id")}
+        # Jev when its key is set; else Claude, when the plugin's hooks module can ask it
+        judge = None
+        if event.get("shall_judge") == "claude" and not self.jev.available() and self.cfg.get("hooks.claude.enabled"):
+            replies = event.get("shall_replies")
+            judge = ClaudeJudge(self.cfg, replies if isinstance(replies, dict) else None)
+        token = _event_judge.set(judge)
         try:
             if name == "PreToolUse":
                 out = await self.pre(event, record)
@@ -413,9 +431,20 @@ class Hooks:
         except Exception as err:  # fail-open: a bug in a hook must not stop the agent
             record["error"] = f"{type(err).__name__}: {redact(str(err))[0][:300]}"
             out = {"systemMessage": f"shall hook error, call not checked: {record['error']}"}
+        finally:
+            _event_judge.reset(token)
         record["ms"] = round((time.perf_counter() - t0) * 1000)
         record["output"] = (out.get("hookSpecificOutput") or {}).get("permissionDecision") or \
             out.get("decision") or ("warn" if out else "none")
+        if judge is not None:
+            judge.save()
+            if judge.missing:
+                record["claude_missing"] = judge.missing
+            if judge.pending and "error" not in record:
+                # the module asks the model and sends the event again; `out` is the decision
+                # of the code checks alone, which it keeps when the model does not answer
+                record["output"] += " (asks claude)"
+                out = {**out, "shall_ask": judge.requests()}
         self._log(record)
         return out
 
@@ -433,7 +462,7 @@ class Hooks:
 
     async def _judge(self, state, cands: list[tuple[Rfc, Statement]], violated, applies,
                      record: dict) -> dict[str, float] | None:
-        """p per statement id that the content breaks it, or None when Jev did not answer."""
+        """p per statement id that the content breaks it, or None when the judge did not answer."""
         questions = {st.id: violated(st) for _, st in cands}
         if self.score == "both":
             questions |= {f"{st.id}#applies": applies(rfc, st) for rfc, st in cands}
@@ -447,7 +476,11 @@ class Hooks:
         return {st.id: min(ans[st.id]["p"], ans[f"{st.id}#applies"]["p"]) for _, st in cands}
 
     async def _ask(self, state, questions: dict, record: dict) -> dict | None:
-        """Jev answers, or None when Jev is slow or down: the call then runs unchecked."""
+        """The judge's answers, or None when it is slow, down or not there yet: the call then
+        runs unchecked by it. Sets record["judge"] (`jev` or `claude`) when it answered."""
+        claude = self.claude or _event_judge.get()
+        if claude is not None:
+            return await self._ask_claude(claude, state, questions, record)
         if not self.jev.available():
             record["jev"] = "no TYPESAFE_API_KEY"  # the secret scanner still runs
             return None
@@ -464,6 +497,20 @@ class Hooks:
             record["jev"] = f"error: {type(err).__name__}: {redact(str(err))[0][:200]}"
             return None
         record["jev"] = "request" if self.jev.usage["requests"] > requests_before else "cached"
+        record["judge"] = "jev"
+        return ans
+
+    async def _ask_claude(self, claude: ClaudeJudge, state, questions: dict, record: dict) -> dict | None:
+        try:
+            ans = await claude.ask(state, questions)
+        except NeedsReply:
+            record["claude"] = "pending"  # in `shall_ask` of the output
+            return None
+        except Exception as err:  # eval: a failed `claude -p`
+            record["claude"] = f"error: {type(err).__name__}: {redact(str(err))[0][:200]}"
+            return None
+        record["claude"] = claude.source  # request | reply | cached
+        record["judge"] = "claude"
         return ans
 
     # -- PreToolUse
@@ -565,7 +612,7 @@ class Hooks:
                 record["scores"] = ps
                 for rfc, st in cands:
                     p = ps[st.id]
-                    findings.append(self._finding(rfc, st, p, action_for(self.actions, rfc, st, p), "jev"))
+                    findings.append(self._finding(rfc, st, p, action_for(self.actions, rfc, st, p), record["judge"]))
         record["findings"] = [{k: f[k] for k in ("id", "p", "action", "by")} for f in findings if f["action"]]
         return pre_output(findings)
 
@@ -657,7 +704,7 @@ class Hooks:
             for rfc, st in cands:
                 p = ps[st.id]
                 scores[st.id] = max(scores.get(st.id, 0.0), p)
-                findings.append(self._finding(rfc, st, p, action(rfc, st, p), "jev", lines=record.get("lines")))
+                findings.append(self._finding(rfc, st, p, action(rfc, st, p), record["judge"], lines=record.get("lines")))
         record["scores"] = scores
         return findings
 
@@ -673,7 +720,12 @@ class Hooks:
         diff = working_diff(root)
         if not diff.strip():
             return {}
-        sha = hashlib.sha256(diff.encode()).hexdigest()[:16]
+        if not self.jev.available():
+            # the review selects its rules with Jev; without a key the tool-call checks still run
+            # (through Claude), and a warning at every stop would only be noise
+            record["skip"] = "no TYPESAFE_API_KEY for the review"
+            return {}
+        sha =hashlib.sha256(diff.encode()).hexdigest()[:16]
         session = re.sub(r"[^A-Za-z0-9_-]", "_", str(event.get("session_id") or "default"))
         state_path = self.cfg.root / ".shall-cache" / "hooks" / f"stop-{session}.json"
         state = json.loads(state_path.read_text()) if state_path.is_file() else {"blocks": 0}
