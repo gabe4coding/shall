@@ -342,8 +342,10 @@ def _pct(values: list[float], q: float) -> int | None:
     return round(ordered[min(len(ordered) - 1, int(q * len(ordered)))])
 
 
-async def run_hooks_eval(cfg: Config, corpus: Corpus, jev: Jev, cases_path: Path, score: str = "both") -> dict:
-    """Jev as the judge of tool calls and written code (eval/hooks/cases.yaml).
+async def run_hooks_eval(cfg: Config, corpus: Corpus, jev: Jev, cases_path: Path, score: str = "both",
+                         claude=None) -> dict:
+    """Jev (or, with `claude`, a ClaudeJudge) as the judge of tool calls and written code
+    (eval/hooks/cases.yaml).
 
     Measures the judgment, not the policy: every status is included (drafts too) and each
     candidate statement's score is compared with the labelled `violates` set at the thresholds
@@ -354,7 +356,7 @@ async def run_hooks_eval(cfg: Config, corpus: Corpus, jev: Jev, cases_path: Path
     from .hooks import Hooks
     data = yaml.safe_load(cases_path.read_text(encoding="utf-8"))
     hooks = Hooks(cfg, corpus, jev, statuses=["draft", "approved", "enforced"], timeout=None, log=False,
-                  score=score, skip_when_denied=False)
+                  score=score, skip_when_denied=False, claude=claude)
     rows = []
     with tempfile.TemporaryDirectory(prefix="shall-hooks-eval-") as tmp:
         for case in data["cases"]:
@@ -381,7 +383,7 @@ async def run_hooks_eval(cfg: Config, corpus: Corpus, jev: Jev, cases_path: Path
             scores = {**record.get("scores", {}),
                       **{sid: 1.0 for sid in record.get("scanner", []) + record.get("patterns", [])}}
             rows.append({"id": case["id"], "kind": kind, "expected": sorted(case.get("violates") or []),
-                         "scores": scores, "ms": round(ms), "jev": record.get("jev", "none"),
+                         "scores": scores, "ms": round(ms), "jev": record.get("claude") or record.get("jev", "none"),
                          "candidates": record.get("candidates", 0), "skip": record.get("skip")})
     summary: dict = {}
     for kind in ("tool", "code"):
@@ -426,8 +428,9 @@ async def run_hooks_eval(cfg: Config, corpus: Corpus, jev: Jev, cases_path: Path
                 errors.append({"case": r["id"], "statement": sid, "p": p, "type": "FP" if not exp else "FN"})
         for sid in set(r["expected"]) - set(r["scores"]):
             errors.append({"case": r["id"], "statement": sid, "p": None, "type": "FN (not a candidate)"})
-    return {"model": cfg.get("jev.model"), "score": score, "cases": len(rows), "summary": summary, "errors": errors,
-            "rows": rows, "usage": dict(jev.usage)}
+    judge = claude or jev
+    return {"model": judge.model, "score": score, "cases": len(rows), "summary": summary, "errors": errors,
+            "rows": rows, "usage": dict(judge.usage)}
 
 
 def render_hooks_eval(report: dict) -> str:
@@ -437,7 +440,7 @@ def render_hooks_eval(report: dict) -> str:
                        for t, v in s["thresholds"].items())
         lat = s["latency_ms"]
         lines.append(f"  {kind:<5} {s['cases']:>3} case(s)  {th}")
-        lines.append(f"        latency of {lat['requests']} Jev request(s): p50 {lat['p50']} ms, "
+        lines.append(f"        latency of {lat['requests']} judge request(s): p50 {lat['p50']} ms, "
                      f"p95 {lat['p95']} ms, max {lat['max']} ms")
         acts = s.get("actions")
         if acts:
@@ -448,5 +451,5 @@ def render_hooks_eval(report: dict) -> str:
         lines.append("  errors at t=0.5:")
         lines += [f"    {e['type']:<3} {e['case']:<28} {e['statement']:<13} p={e['p']}" for e in report["errors"]]
     u = report["usage"]
-    lines.append(f"  jev: {u['requests']} request(s), {u['cached']} cached")
+    lines.append(f"  judge: {u['requests']} request(s), {u['cached']} cached")
     return "\n".join(lines)

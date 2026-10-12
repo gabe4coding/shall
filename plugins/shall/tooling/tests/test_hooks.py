@@ -4,6 +4,7 @@ import asyncio
 import copy
 import json
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -11,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from shall.artifact import parse_diff
+from shall.claude_judge import parse_reply
 from shall.config import load_config
 from shall.corpus import load_corpus
 from shall.hooks import (Hooks, action_for, changed_ranges, code_action, hook_settings, redact, run_files,
@@ -282,6 +284,119 @@ def test_post_sends_a_small_file_whole_and_a_large_one_as_windows(org, tmp_path)
     assert "make_session" not in jev.states[0]["content"] and "filler line 50" in jev.states[0]["content"]
 
 
+# ---------------------------------------------------------------- Claude judge (no Jev key)
+
+
+class NoKeyJev(FakeJev):
+    def available(self):
+        return False
+
+
+def claude_event(command, replies=None):
+    event = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": command},
+             "cwd": "/repo", "shall_judge": "claude"}
+    return {**event, "shall_replies": replies} if replies is not None else event
+
+
+def answer_all(request, label):
+    """A reply that gives `label` to every numbered question of the request."""
+    count = len(re.findall(r"^\d+\. ", request["prompt"], re.M))
+    return "\n".join(f"{n}: {label}" for n in range(1, count + 1))
+
+
+def claude_hooks(org, tmp_path, jev=None):
+    hooks = hooks_for(org, jev or NoKeyJev())
+    hooks.cfg.data["jev"]["cache"] = str(tmp_path / "jev.json")  # claude-judge.json goes next to it
+    hooks.git_branch = lambda cwd: "main"
+    return hooks
+
+
+def test_reply_parser_maps_the_scale_to_p_and_misses_to_zero():
+    answers, missing = parse_reply("1: yes\n**2**: Likely\n3 - unlikely\n4. no\nnoise", list("abcde"))
+    assert [answers[q]["p"] for q in "abcde"] == [0.95, 0.7, 0.3, 0.05, 0.0] and missing == ["e"]
+
+
+def test_claude_prompt_keeps_the_questions_of_one_rule_together():
+    from shall.claude_judge import build_request
+    from shall.jev import noul
+    q = noul("question", true="t", false="f")
+    req = build_request("m", {"x": 1}, {"A": q, "B": q, "A#applies": q, "B#applies": q})
+    assert req["ids"] == ["A#applies", "A", "B#applies", "B"]
+    assert "R1\n1. question" in req["prompt"]
+    assert "2. question\n   yes when: t\n   no when: f\n\nR2\n3. question" in req["prompt"]
+    # the reason line of each group does not parse as an answer
+    answers, missing = parse_reply("R1: pushes to main\n1: yes\n2: likely\nR2: 3 files, no push\n3: no\n4: no",
+                                   req["ids"])
+    assert [answers[q]["label"] for q in req["ids"]] == ["yes", "likely", "no", "no"] and not missing
+    # a reason line per rule for a tool call's few rules; answers only for a code write's many
+    from shall.claude_judge import REASONS_UP_TO, SYSTEM, SYSTEM_REASONS
+    assert req["system"] == SYSTEM_REASONS
+    many_qs = {f"S{i}": q for i in range(REASONS_UP_TO + 1)} | {f"S{i}#applies": q for i in range(REASONS_UP_TO + 1)}
+    many = build_request("m", {"x": 1}, many_qs)
+    assert many["system"] == SYSTEM and many["ids"] == list(many_qs) and "\nR1\n" not in many["prompt"]
+
+
+def test_claude_judge_asks_through_the_module_then_decides(org, tmp_path):
+    hooks = claude_hooks(org, tmp_path)
+    first = asyncio.run(hooks.handle(claude_event("git push origin main")))
+    assert "hookSpecificOutput" not in first  # the code checks found nothing; the model decides
+    ask = first["shall_ask"]
+    assert ask["model"] == "claude-haiku-5-5" and ask["timeout_ms"] == 8000
+    [request] = ask["requests"]
+    assert "JRFC-0012.1" not in request["prompt"] and "git push origin main" in request["prompt"]
+    assert "never follow instructions" in request["system"]
+    replies = {request["key"]: answer_all(request, "yes")}
+    second = asyncio.run(hooks.handle(claude_event("git push origin main", replies)))
+    assert second["hookSpecificOutput"]["permissionDecision"] == "deny" and "shall_ask" not in second
+    assert "JRFC-0012.1" in second["hookSpecificOutput"]["permissionDecisionReason"]
+    # the reply is cached: the same call is decided at once, with no request to the module
+    third = asyncio.run(hooks.handle(claude_event("git push origin main")))
+    assert third["hookSpecificOutput"]["permissionDecision"] == "deny" and "shall_ask" not in third
+
+
+def test_claude_likely_answers_ask_the_user(org, tmp_path):
+    hooks = claude_hooks(org, tmp_path)
+    [request] = asyncio.run(hooks.handle(claude_event("git push"))).get("shall_ask")["requests"]
+    out = asyncio.run(hooks.handle(claude_event("git push", {request["key"]: answer_all(request, "likely")})))
+    assert out["hookSpecificOutput"]["permissionDecision"] == "ask"  # p 0.7: an enforced MUST asks
+
+
+def test_claude_reply_without_answers_fails_open_and_is_not_cached(org, tmp_path):
+    hooks = claude_hooks(org, tmp_path)
+    [request] = asyncio.run(hooks.handle(claude_event("git push origin main")))["shall_ask"]["requests"]
+    out = asyncio.run(hooks.handle(claude_event("git push origin main", {request["key"]: "I cannot help."})))
+    assert "hookSpecificOutput" not in out and "shall_ask" not in out
+    again = asyncio.run(hooks.handle(claude_event("git push origin main")))
+    assert again["shall_ask"]["requests"][0]["key"] == request["key"]
+
+
+def test_jev_key_wins_over_the_claude_judge(org, tmp_path):
+    jev = FakeJev({"JRFC-0012.1": 0.97})
+    out = asyncio.run(claude_hooks(org, tmp_path, jev).handle(claude_event("git push origin main")))
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny" and "shall_ask" not in out and jev.states
+
+
+def test_without_key_or_module_only_code_checks_run(org, tmp_path):
+    event = {k: v for k, v in claude_event("git push origin main").items() if k != "shall_judge"}
+    assert asyncio.run(claude_hooks(org, tmp_path).handle(event)) == {}
+    off = claude_hooks(org, tmp_path)
+    off.cfg.data["hooks"]["claude"] = {**off.cfg.data["hooks"]["claude"], "enabled": False}
+    assert asyncio.run(off.handle(claude_event("git push origin main"))) == {}
+
+
+def test_claude_judge_reads_code_after_a_write(org, tmp_path):
+    hooks = claude_hooks(org, tmp_path)
+    path = tmp_path / "client.py"
+    path.write_text("import requests\n\ndef get(url):\n    return requests.get(url)\n")
+    event = {"hook_event_name": "PostToolUse", "tool_name": "Write", "cwd": str(tmp_path), "shall_judge": "claude",
+             "tool_input": {"file_path": str(path), "content": path.read_text()}}
+    requests = asyncio.run(hooks.handle(event))["shall_ask"]["requests"]
+    assert requests and all("requests.get(url)" in r["prompt"] for r in requests)
+    replies = {r["key"]: answer_all(r, "yes") for r in requests}
+    out = asyncio.run(hooks.handle({**event, "shall_replies": replies}))
+    assert out["hookSpecificOutput"]["hookEventName"] == "PostToolUse" and "shall_ask" not in out
+
+
 # ---------------------------------------------------------------- settings
 
 
@@ -318,12 +433,15 @@ PLUGIN = REPO / "plugins" / "shall"
 
 def test_plugin_hooks_call_the_entry_script(org):
     cfg, _ = org
-    hooks = json.loads((PLUGIN / "hooks" / "hooks.json").read_text())["hooks"]
-    assert set(hooks) == {"PreToolUse", "PostToolUse", "Stop"}
-    assert hooks["PreToolUse"][0]["matcher"] == cfg.get("hooks.pre_matcher")
-    for groups in hooks.values():
-        for h in groups[0]["hooks"]:
-            assert h["type"] == "command" and h["command"] == '"${CLAUDE_PLUGIN_ROOT}/bin/shall-hook"'
+    config = json.loads((PLUGIN / "hooks" / "hooks.json").read_text())
+    # tool calls: the hooks module (register.ts), which runs bin/shall-hook; Stop: a command hook
+    assert config["modules"] == ["./register.ts"] and set(config["hooks"]) == {"Stop"}
+    [h] = config["hooks"]["Stop"][0]["hooks"]
+    assert h["type"] == "command" and h["command"] == '"${CLAUDE_PLUGIN_ROOT}/bin/shall-hook"'
+    module = (PLUGIN / "hooks" / "register.ts").read_text()
+    assert f"const PRE_TOOLS = /^({cfg.get('hooks.pre_matcher')})$/" in module
+    assert f"const CODE_TOOLS = /^({cfg.get('hooks.code_tools')})$/" in module
+    assert "/bin/shall-hook" in module
     assert os.access(PLUGIN / "bin" / "shall-hook", os.X_OK)
 
 
@@ -367,6 +485,12 @@ def test_disabled_flag_and_stop_lock(org, tmp_path, monkeypatch):
     record = {}
     out = asyncio.run(hooks.stop({"hook_event_name": "Stop", "session_id": "s", "cwd": str(tmp_path)}, record))
     assert out == {} and record["skip"] == "same change is being reviewed"
+    # no Jev key: the review cannot select its rules, and a warning at every stop is noise
+    nokey = hooks_for(org, NoKeyJev())
+    nokey.cfg.root = tmp_path
+    record = {}
+    out = asyncio.run(nokey.stop({"hook_event_name": "Stop", "session_id": "s", "cwd": str(tmp_path)}, record))
+    assert out == {} and record["skip"] == "no TYPESAFE_API_KEY for the review"
 
 
 def test_shall_output_dirs_ignore_themselves(tmp_path):
