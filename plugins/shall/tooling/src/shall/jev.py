@@ -10,7 +10,7 @@ from pathlib import Path
 
 from typesafe_sdk import AsyncTypeSafeClient, Choice, Noul, NoulCriteria, RetryPolicy
 
-from .config import Config
+from .config import Config, make_dir
 
 # The API budgets are 64k tokens per request and 32k for state + the longest question.
 STATE_PLUS_QUESTION_TOKENS = 30000
@@ -73,7 +73,7 @@ class Jev:
         cache (CI matrix, two local commands) keep each other's answers."""
         if not self.use_cache:
             return
-        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+        make_dir(self.cache_path.parent)
         merged = {}
         if self.cache_path.is_file():
             try:

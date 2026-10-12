@@ -160,6 +160,20 @@ def test_shall_extends_env_gives_org_corpus_without_local_layer(tmp_path, monkey
     assert "JRFC-0003" in corpus.rfcs
 
 
+def test_init_workspace_loads_and_ignores_caches_and_outputs(tmp_path, monkeypatch):
+    from shall.cli import main
+    app = tmp_path / "app"
+    app.mkdir()
+    monkeypatch.delenv("SHALL_CONFIG", raising=False)
+    monkeypatch.delenv("SHALL_EXTENDS", raising=False)
+    monkeypatch.chdir(app)
+    with pytest.raises(SystemExit) as exit:
+        main(["init", "--prefix", "BOOK", "--path", str(ORG)])
+    assert exit.value.code == 0
+    assert (app / ".shall" / ".gitignore").read_text().split() == [".shall-cache/", ".shall-out/"]
+    assert "JRFC-0003" in load_corpus(load_config()).rfcs
+
+
 def test_github_parent_sources_are_permalinks(tmp_path, monkeypatch, org_repo):
     workspace(tmp_path, monkeypatch, org_repo)
     cfg = load_config()

@@ -493,6 +493,55 @@ def test_disabled_flag_and_stop_lock(org, tmp_path, monkeypatch):
     assert out == {} and record["skip"] == "no TYPESAFE_API_KEY for the review"
 
 
+def test_shall_output_dirs_ignore_themselves(tmp_path):
+    from shall.config import make_dir
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)  # a repository that does not know shall
+    (make_dir(tmp_path / ".shall" / ".shall-out" / "hooks" / "stop-s") / "change.diff").write_text("x\n")
+    (make_dir(tmp_path / ".shall-cache" / "hooks") / "decisions.jsonl").write_text("{}\n")
+    status = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=tmp_path,
+                            capture_output=True, text=True, check=True).stdout
+    assert status == ""
+
+
+def test_hookd_logs_no_error_for_a_connect_without_request(org, tmp_path):
+    import socket
+    from shall.hooks import serve
+    hooks = hooks_for(org, FakeJev())
+    hooks.log_path = tmp_path / "decisions.jsonl"
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    async def connect():
+        for _ in range(250):
+            try:
+                return await asyncio.open_connection("127.0.0.1", port)
+            except OSError:
+                await asyncio.sleep(0.02)
+        raise AssertionError("hookd did not listen")
+
+    async def send(data: bytes):
+        reader, writer = await connect()
+        writer.write(data)
+        writer.write_eof()
+        await reader.read()  # the server closed: its handler is done
+        writer.close()
+
+    async def run():
+        server = asyncio.create_task(serve(hooks, "127.0.0.1", port, tmp_path))
+        try:
+            await send(b"")             # a port probe: no request, no error
+            await send(b"POST /hook")   # a cut request: an error
+        finally:
+            server.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await server
+
+    asyncio.run(run())
+    errors = [json.loads(line)["error"] for line in hooks.log_path.read_text().splitlines()]
+    assert len(errors) == 1 and errors[0].startswith("IncompleteReadError: 10 bytes")
+
+
 # ---------------------------------------------------------------- Pattern (linter tool statements)
 
 

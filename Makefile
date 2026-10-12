@@ -54,5 +54,6 @@ self-conflicts:      ## own rules must not duplicate/weaken/conflict with org ru
 	$(JRFC) conflicts --local
 
 self-review:         ## review this repo's working-tree changes against org + own rules
+	mkdir -p .shall-out
 	git diff --no-color HEAD > .shall-out/self.diff 2>/dev/null || git diff --no-color > .shall-out/self.diff
 	$(JRFC) review .shall-out/self.diff --out-dir .shall-out/self

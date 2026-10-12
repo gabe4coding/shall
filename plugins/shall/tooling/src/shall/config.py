@@ -30,6 +30,18 @@ from .fetch import Parent, resolve_parent
 CONFIG_NAME = "shall.yaml"
 DOT_DIR = ".shall"
 SETTINGS = ("jev", "selection", "review", "conflicts", "codegraph", "triage", "hooks", "scan")
+OUTPUT_DIRS = (".shall-cache", ".shall-out")  # shall's caches and outputs: never part of a change
+
+
+def make_dir(path: Path) -> Path:
+    """`mkdir -p`. A .shall-cache/ or .shall-out/ folder on the path gets a `*` .gitignore, so
+    shall's files never show as changes in any repository, whatever its own .gitignore says."""
+    path.mkdir(parents=True, exist_ok=True)
+    for folder in (path, *path.parents):
+        if folder.name in OUTPUT_DIRS and not (folder / ".gitignore").exists():
+            (folder / ".gitignore").write_text("*\n", encoding="utf-8")
+    return path
+
 
 DEFAULTS: dict[str, Any] = {
     "jev": {
