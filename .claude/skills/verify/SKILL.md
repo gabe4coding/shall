@@ -21,7 +21,7 @@ options.
 
 | Changed | Drive |
 | --- | --- |
-| `hooks.py`, `bin/shall-hook`, `hooks/hooks.json`, a `tool` rule or `hooks.*` setting | `hook`, with and without `--hookd` when the transport can matter |
+| `hooks.py`, `bin/shall-hook`, `hooks/hooks.json`, `hooks/register.ts`, a `tool` rule or `hooks.*` setting | `hook`, with and without `--hookd` when the transport can matter |
 | The Stop review (`Hooks.stop`, `review.py`, `verify.py`, `agents/*.md`) | `hook` without `--no-stop`, a prompt that writes code; or `cli` with `review` |
 | A CLI command | `cli` with that command. `publish` only with `--dry-run`: never write to a real PR. |
 | A skill | `hook` with the slash command as the prompt (`/shall:shall-standards ...`) |
@@ -45,12 +45,12 @@ repository before the first commit, so the Stop review sees only the agent's cha
 | Field | What it shows |
 | --- | --- |
 | `decisions` | The hook decision log: per event the scanner and pattern hits, `candidates`, `jev` (`request`, `cached`, `timeout`, `no TYPESAFE_API_KEY`, `skipped: ...`), `scores`, `findings`, `ms`, `output`; for Stop also `review_exit`, `skip`. Judge here first. |
-| `toolUses`, `toolResults` | What Claude called and got. A deny shows as `PreToolUse:<tool> hook error: shall: ...`. |
-| `hookEvents` | shall's answers as Claude Code got them, and every failed hook (managed hooks run too). |
+| `toolUses`, `toolResults` | What Claude called and got. A deny shows as `<tool_use_error>shall: ...`. |
+| `hookEvents` | shall's Stop answers as Claude Code got them, and every failed command hook (managed hooks run too). The tool hooks run in the hooks module `hooks/register.ts`, so they are not here: see `decisions` and `pluginLog`. |
 | `stopReviews` | Per Stop review: files, findings with verdict, health warnings. |
 | `turns` | Each prompt with its reply. `totalCostUsd` counts the session so far. |
 | `changed` | `git status` of the run's repository, without shall's own folders. |
-| `pluginLog` | Debug lines about the plugin: load, each hook with status and time, errors. |
+| `pluginLog` | Debug lines about the plugin: load, the module's `tool.call` times, each command hook with status and time, errors. |
 
 `cli` prints `exit`, `stdout`, `stderr`, `seconds`, and for `{out}` its files, findings and health warnings.
 
