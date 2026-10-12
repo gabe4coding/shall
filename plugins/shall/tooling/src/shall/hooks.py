@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .artifact import Chunk, parse_diff
-from .config import Config
+from .config import OUTPUT_DIRS, Config, make_dir
 from .corpus import Corpus, Rfc, Statement
 from .jev import Jev, noul
 
@@ -358,7 +358,7 @@ def _git(cwd: str | Path, *args: str, ok=(0,)) -> str | None:
 
 
 # shall's own caches and outputs are never part of the change, even where .gitignore misses them
-NOT_CHANGE = ["--", ".", ":(exclude,glob)**/.shall-cache/**", ":(exclude,glob)**/.shall-out/**"]
+NOT_CHANGE = ["--", ".", *(f":(exclude,glob)**/{d}/**" for d in OUTPUT_DIRS)]
 
 
 def working_diff(root: Path) -> str:
@@ -423,7 +423,7 @@ class Hooks:
         if not self.log_path:
             return
         record = {"ts": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), **record}
-        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        make_dir(self.log_path.parent)
         with self.log_path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
 
@@ -691,7 +691,7 @@ class Hooks:
         if lock.is_file() and time.time() - lock.stat().st_mtime < 900:
             record["skip"] = "same change is being reviewed"
             return {}
-        lock.parent.mkdir(parents=True, exist_ok=True)
+        make_dir(lock.parent)
         lock.write_text(session, encoding="utf-8")
         try:
             return await self._stop_review(diff, sha, session, root, state, state_path, record)
@@ -701,7 +701,7 @@ class Hooks:
     async def _stop_review(self, diff: str, sha: str, session: str, root: Path, state: dict,
                            state_path: Path, record: dict) -> dict:
         out_dir = self.cfg.root / ".shall-out" / "hooks" / f"stop-{session}"
-        out_dir.mkdir(parents=True, exist_ok=True)
+        make_dir(out_dir)
         diff_path = out_dir / "change.diff"
         diff_path.write_text(diff, encoding="utf-8")
         cmd = [sys.executable, "-m", "shall.cli", *(["--config", str(self.cfg.path)] if self.cfg.path else []),
@@ -731,7 +731,7 @@ class Hooks:
         elif findings:
             out = {"systemMessage": f"shall: stop review: {len(findings)} finding(s), {len(blocking)} blocking; "
                                     f"see {out_dir / 'review.md'}"}
-        state_path.parent.mkdir(parents=True, exist_ok=True)
+        make_dir(state_path.parent)
         state_path.write_text(json.dumps(state), encoding="utf-8")
         return out
 
@@ -812,6 +812,9 @@ async def serve(hooks: Hooks, host: str, port: int, root: Path) -> None:
                 else:
                     await respond(writer, "421 Misdirected Request")
         except Exception as err:  # fail-open: Claude Code treats a non-2xx answer as a non-blocking error
+            if isinstance(err, ConnectionResetError) or (
+                    isinstance(err, asyncio.IncompleteReadError) and not err.partial):
+                return  # a connect that sent nothing (a port probe, a readiness check): no request
             hooks._log({"event": "hookd", "error": f"{type(err).__name__}: {redact(str(err))[0][:300]}"})
             try:
                 await respond(writer, "500 Internal Server Error")

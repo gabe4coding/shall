@@ -16,6 +16,7 @@ description: Repository layout, code map, tests, evals, the rules of this reposi
 | `plugins/shall/tooling/` | The Python package of the CLI (`uv` project, Python 3.11+, tests) |
 | `ci/github/` | Workflow templates for a corpus repository and for application repositories |
 | `examples/booking-service/.shall/` | The local rules of an example application repository (`BOOK-`) |
+| `.claude/skills/verify/` | The recipe of `/verify` for this repository: `SKILL.md` and the script `drive.py` |
 | `eval/` | Labelled cases: `cases/`, `scale/`, `facts/` (selection), `verify/`, `triage/`, `hooks/`, `scan/`, `realpr/` (real pull requests, ids only) |
 | `docs/` | This documentation |
 
@@ -76,6 +77,28 @@ To run one test:
 ```bash
 uv run --quiet --project plugins/shall/tooling pytest -q plugins/shall/tooling/tests/test_effects.py -k fetch
 ```
+
+## Verification loop
+
+If you develop with Claude Code, do this loop before each commit:
+
+1. Run `/simplify`. This built-in skill cleans up the diff and applies the fixes.
+2. Run `/code-review`. This built-in skill finds correctness bugs in the diff. Check each finding against the
+   code, and fix the real ones.
+3. Run `make test`, `make check` and `make self-check`. If you have `TYPESAFE_API_KEY` and a Claude login, also
+   run `make self-review`.
+4. Run `/verify` after a change under `plugins/shall/` or to a rule that the hooks apply. This built-in skill
+   drives the change end to end. It has nothing to drive in a change to docs, tests or eval labels only.
+5. If a step changes code, start again at step 1.
+
+`/verify` uses the recipe in `.claude/skills/verify/`. Its script `drive.py` starts a headless Claude Code
+session with the plugin of this repository, or runs one `shall` command. You can also run it yourself:
+
+```bash
+.claude/skills/verify/drive.py hook 'Run exactly this Bash command: git push --force origin main' --no-stop
+```
+
+The Jev paths need `TYPESAFE_API_KEY`. Without it, only the secret scanner and the regex patterns run.
 
 ## Evals
 
@@ -143,6 +166,7 @@ change to a prompt changes the cache keys and the behavior. Run the related eval
 ## Contribute
 
 1. Open an issue or a draft pull request that tells the problem.
-2. Run `make test`, `make check` and `make self-check`.
+2. Do the [verification loop](#verification-loop). Without Claude Code, run `make test`, `make check` and
+   `make self-check`.
 3. For a change to selection, prompts or thresholds, add the eval results to the pull request.
 4. Do not put real company code, names or secrets in tests, evals or docs. This repository is public.

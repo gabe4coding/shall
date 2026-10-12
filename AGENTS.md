@@ -38,3 +38,13 @@ else unchanged chunks reuse old answers.
 - Bump `version` in `plugins/shall/.claude-plugin/plugin.json` when skills, agents or hooks change:
   Claude Code caches plugins per version.
 - This repo is public: no real company code, names, ids or secrets in tests, evals or docs.
+
+## Verification loop
+Before every commit, run these steps in order. If a step changes code, start again at step 1.
+1. `/simplify` (built-in): cleans up the diff and applies the fixes.
+2. `/code-review` (built-in): finds correctness bugs, which `/simplify` does not look for. Check each finding
+   against the code. Fix the real ones. For a finding you keep, say in the commit which code shows it is wrong.
+3. `make test`, `make check`, `make self-check`. With `TYPESAFE_API_KEY` and a Claude login, also
+   `make self-review`.
+4. `/verify` (built-in) after a change under `plugins/shall/` or to a rule that the hooks apply. Its recipe is
+   `.claude/skills/verify/`. If the recipe fails or misses a step, fix it.

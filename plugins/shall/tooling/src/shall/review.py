@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 
 from .artifact import Artifact, Chunk
-from .config import Config
+from .config import Config, make_dir
 from .corpus import Corpus
 
 FINDINGS_SCHEMA = {
@@ -153,7 +153,7 @@ class AnswerCache:
     def save(self) -> None:
         if self.path is None:
             return
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        make_dir(self.path.parent)
         merged: dict = {}
         if self.path.is_file():
             try:
@@ -247,7 +247,7 @@ async def run_agents(cfg: Config, corpus: Corpus, artifact: Artifact, selection:
             continue
         prompt = chunk_prompt(corpus, chunks[c["id"]], c["selected"], c.get("known_effects"))
         if prompts_dir:
-            prompts_dir.mkdir(parents=True, exist_ok=True)
+            make_dir(prompts_dir)
             (prompts_dir / f"{c['id']}.md").write_text(prompt, encoding="utf-8")
         jobs.append((c["id"], _run_agent(cfg, prompt, sem, cache)))
     results = await asyncio.gather(*(job for _, job in jobs))

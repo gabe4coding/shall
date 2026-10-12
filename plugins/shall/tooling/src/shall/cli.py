@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 from .artifact import build_artifact, detect_kind, read_source
-from .config import load_config
+from .config import OUTPUT_DIRS, load_config, make_dir
 from .corpus import check_against, load_corpus
 
 EXIT_OK, EXIT_ERROR, EXIT_BLOCKING, EXIT_SERVICE = 0, 1, 2, 3
@@ -20,7 +20,7 @@ EXIT_OK, EXIT_ERROR, EXIT_BLOCKING, EXIT_SERVICE = 0, 1, 2, 3
 def _dump(data, path: str | None) -> None:
     text = json.dumps(data, indent=2, ensure_ascii=False)
     if path:
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        make_dir(Path(path).parent)
         Path(path).write_text(text + "\n", encoding="utf-8")
     else:
         print(text)
@@ -225,7 +225,7 @@ def cmd_init(args) -> int:
         extends = f"  repo: {args.repo}\n  ref: {args.ref}   # pin a tag or commit sha"
     (dot / "rfcs").mkdir(parents=True)
     (dot / "shall.yaml").write_text(INIT_CONFIG.format(prefix=args.prefix, extends=extends), encoding="utf-8")
-    (dot / ".gitignore").write_text(".shall-cache/\n", encoding="utf-8")
+    (dot / ".gitignore").write_text("".join(f"{d}/\n" for d in OUTPUT_DIRS), encoding="utf-8")
     (dot / "rfcs" / ".gitkeep").write_text("", encoding="utf-8")
     print(f"created {dot}/ (shall.yaml, rfcs/, .gitignore). Next: shall fetch && shall new --domain <d> --title <t>")
     return EXIT_OK
@@ -304,7 +304,7 @@ def _load_selection_artifact(args, cfg, selection: dict):
 def _write_outputs(cfg, out_dir: Path, artifact, selection, findings, dropped, fmt: str,
                    health: dict | None = None) -> int:
     from .review import render_github, render_markdown
-    out_dir.mkdir(parents=True, exist_ok=True)
+    make_dir(out_dir)
     _dump({"findings": findings, "dropped": dropped}, str(out_dir / "findings.json"))
     if health is not None:
         _dump(health, str(out_dir / "health.json"))
