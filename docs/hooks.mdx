@@ -5,17 +5,19 @@ description: Check each tool call of a Claude Code agent against the standards w
 
 # Hooks
 
-The hooks apply the rules to each tool call of an agent, at the time of the call. Jev is the judge.
-The level of the rule and the status of its standard select the action.
+The hooks apply the rules to each tool call of an agent, at the time of the call. The judge is Jev
+when `TYPESAFE_API_KEY` is set. Without the key, the judge is Claude, through the hooks module of the
+plugin (see [The judge](#the-judge)). The level of the rule and the status of its standard select the
+action.
 
 ## What the hooks check
 
 | When | What shall checks | Possible actions | Time |
 | --- | --- | --- | --- |
-| Before a Bash or MCP call | `tool` rules ([JRFC-0012](../corpus/rfcs/JRFC-0012-agent-tool-use.md)): regex patterns, then Jev. The text of a local script that the call runs counts as part of the call. | deny, ask, warn | ~0.3 s |
-| Before a Write or Edit | Secret scanner (code, not Jev) | deny | ~1 ms |
-| After a Write or Edit | Code rules on the written lines: code checks, then Jev with the full file as context (15 lines around each edit in a large file) | warn only | ~0.3 s |
-| End of the turn of the agent (Stop) | The full change, with `shall review` | block (verified findings only) | Some seconds. shall skips it when nothing changed. |
+| Before a Bash or MCP call | `tool` rules ([JRFC-0012](../corpus/rfcs/JRFC-0012-agent-tool-use.md)): regex patterns, then the judge. The text of a local script that the call runs counts as part of the call. | deny, ask, warn | Jev ~0.3 s, Claude ~3 s |
+| Before a Write or Edit | Secret scanner (code, not the judge) | deny | ~1 ms |
+| After a Write or Edit | Code rules on the written lines: code checks, then the judge with the full file as context (15 lines around each edit in a large file) | warn only | Jev ~0.3 s, Claude ~3–6 s |
+| End of the turn of the agent (Stop) | The full change, with `shall review` (needs Jev) | block (verified findings only) | Some seconds. shall skips it when nothing changed or when `TYPESAFE_API_KEY` is not set. |
 
 ## Default actions
 
@@ -35,22 +37,65 @@ can block.
 
 ## Safety
 
-- **Redaction.** The secret scanner removes secrets from each input before shall sends it to Jev.
-- **Fail-open.** If Jev is slow (more than `hooks.timeout`, 3 s) or not available, the call runs.
+- **Redaction.** The secret scanner removes secrets from each input before shall sends it to the
+  judge.
+- **Fail-open.** If Jev is slow (more than `hooks.timeout`, 3 s), if Claude does not answer in
+  `hooks.claude.timeout` (8 s), or if the judge is not available, the call runs. The code checks
+  still apply.
 - **Log.** shall adds each decision to `.shall-cache/hooks/decisions.jsonl`.
 - **No loops.** The agents that shall starts get `SHALL_HOOKS_DISABLED=1`. Their hooks do nothing.
 
-Without `TYPESAFE_API_KEY`, only the secret scanner runs.
+## The judge
+
+shall selects the judge for each call:
+
+| Condition | Judge | Time for a checked call |
+| --- | --- | --- |
+| `TYPESAFE_API_KEY` is set | Jev. It gives a probability for each rule. | ~0.3 s |
+| No key, with the plugin, and `hooks.claude.enabled` is `true` (default) | Claude (`hooks.claude.model`, Haiku), through the hooks module of the plugin | ~3 s before a call, ~3–6 s after a write |
+| No key, and no plugin (`shall hook-config`) or `hooks.claude.enabled: false` | None. Only the code checks run: regex patterns, the secret scanner and `Check:` rules. | some ms |
+
+Claude answers each question with one word. For a tool call, it first writes a short reason for
+each rule. shall changes the word to a probability, and the [default actions](#default-actions)
+apply to this probability:
+
+| Answer of Claude | p | Enforced MUST | Enforced SHOULD | Approved MUST |
+| --- | --- | --- | --- | --- |
+| yes | 0.95 | deny | warn | warn |
+| likely | 0.7 | ask | warn | warn |
+| unlikely | 0.3 | log | log | log |
+| no | 0.05 | log | log | log |
+
+For each rule, shall asks two questions: does the rule apply, and does the call break it. p is the
+lower of the two answers, as with Jev. The module calls Claude with the model access of the session
+(`$.model.complete`), so it needs no API key. shall keeps each answer in
+`.shall-cache/claude-judge.json`, so the same call does not ask again. The accuracy of Claude is
+lower than the accuracy of Jev. Read [Results](./results.mdx#hooks-with-claude-as-the-judge).
+
+The Stop review and the commands `shall review`, `shall select` and `shall scan` still need Jev.
+Without the key, the hooks skip the Stop review, and the decision log records the reason.
 
 ## With the plugin
 
-The plugin turns the hooks on. `hooks/hooks.json` runs `bin/shall-hook` for each event:
+The plugin turns the hooks on. It needs a version of Claude Code with hooks modules.
+`hooks/hooks.json` has two parts:
+
+- **A hooks module, `hooks/register.ts`.** It gets each Bash, MCP, Write and Edit call. Before the
+  call, it runs `bin/shall-hook`. When shall needs Claude, `bin/shall-hook` returns the questions; the
+  module sends them to Claude, then runs `bin/shall-hook` again with the answers. A deny refuses the
+  call. An ask goes to the permission decider of the session: the dialog, or the classifier in auto
+  mode. After a write, the module runs `bin/shall-hook` again for the code rules, and the warning
+  goes to the agent with the tool result.
+- **A command hook for Stop.** It runs `bin/shall-hook`.
+
+`bin/shall-hook` does this for each event:
 
 - Outside a shall workspace, it stops in a few milliseconds.
 - If `shall hookd` runs for the repository, it sends the event to that server (~0.3 s for each call).
 - If not, it runs `shall hook` (~0.5 s for each call).
 
-To keep the Jev connection open, start the server. It is optional:
+To keep the Jev connection open, start the server. It is optional, and it also makes the calls with
+Claude faster, because the Python process is ready:
 
 ```bash
 shall hookd &                  # port: hooks.port, 8765
@@ -63,7 +108,8 @@ Claude when the change is new.
 ## Without the plugin
 
 Print a settings block. Merge it into `.claude/settings.json` (project) or `~/.claude/settings.json`
-(user). Do not use the plugin and this block together: if you do, each hook runs two times.
+(user). Do not use the plugin and this block together: if you do, each hook runs two times. These
+hooks cannot call Claude, so without `TYPESAFE_API_KEY` only the code checks run.
 
 ```bash
 shall hook-config                      # http hooks to `shall hookd` (you start the server)
@@ -90,14 +136,15 @@ Code checks the rules with `Enforcement: linter` exactly, without Jev:
 - **With the secret scanner.** JRFC-0012.4 and JRFC-0004.1. `hooks.secrets` maps a tool to the rule
   that a hit breaks.
 
-Jev judges the other rules. It uses the line `Violated when:` as the criterion.
+The judge (Jev or Claude) judges the other rules. It uses the line `Violated when:` as the
+criterion.
 
 ## Scripts that a call runs
 
 A violation can be split over two calls: the agent writes a script, then it runs the script. When a
 Bash call runs a local file (`bash deploy.sh`, `./scripts/cleanup.sh`, `python3 tools/purge.py`,
 `source env.sh`), shall reads the file. It removes the secrets, and it adds the text to the input of
-Jev as `runs_files`. The regex patterns also search this text. Thus `bash deploy.sh` is denied when
+the judge as `runs_files`. The regex patterns also search this text. Thus `bash deploy.sh` is denied when
 `deploy.sh` contains `git push --force`.
 
 shall reads at most 2 files of 1 MB or less for each call. It sends at most `hooks.max_script_chars`
@@ -111,9 +158,9 @@ After a Write or an Edit, shall checks the code rules on the lines that the call
 - **Code checks.** A rule with `Enforcement: linter` and a `Check:` name runs that check on the file,
   without Jev. An example is JRFC-0011.1 with `python-typed-public`. shall reports only the hits on
   the written lines. Read [Standards](./standards.mdx#code-checks).
-- **Jev.** When the file has `hooks.whole_file_chars` (8000) characters or less, Jev sees the full
+- **The judge.** When the file has `hooks.whole_file_chars` (8000) characters or less, the judge sees the full
   file, with the written lines marked. The setting that makes an edit correct is frequently in the
-  same file, for example a session that has a timeout. In a larger file, Jev sees
+  same file, for example a session that has a timeout. In a larger file, the judge sees
   `hooks.context_lines` (15) lines around each edit.
 
 ## Try draft rules
@@ -133,7 +180,9 @@ hooks:
 The hooks see one call at a time. shall reads the local scripts that a Bash call runs, but it does
 not follow other chains of calls. For example, a script that a different script starts, a file that
 the command downloads, or `cd other && ./x.sh`. The Stop review sees the files that result, not the
-commands. In a file larger than `hooks.whole_file_chars`, Jev sees only 15 lines around each edit.
+commands. In a file larger than `hooks.whole_file_chars`, the judge sees only 15 lines around each
+edit. With Claude as the judge, each checked call takes some seconds more, and the accuracy is lower
+than with Jev.
 
 The settings are in [Configuration](./configuration.mdx#hooks). The design and the measurements are
 in [Architecture](./architecture.mdx#hooks-standards-on-an-agents-tool-calls) and

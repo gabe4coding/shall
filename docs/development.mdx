@@ -12,7 +12,7 @@ description: Repository layout, code map, tests, evals, the rules of this reposi
 | `corpus/` | The example organisation corpus: `rfcs/`, `domains.yaml`, `effects.yaml`, the generated `index/` |
 | `shall.yaml` | The configuration of the example organisation corpus |
 | `.shall/` | The rules of this repository for its own code (prefix `JTOOL-`) |
-| `plugins/shall/` | The Claude Code plugin: `skills/`, `agents/`, `hooks/hooks.json`, `bin/` |
+| `plugins/shall/` | The Claude Code plugin: `skills/`, `agents/`, `hooks/` (`hooks.json`, the hooks module `register.ts`), `bin/`, `tests/` (tests of the module) |
 | `plugins/shall/tooling/` | The Python package of the CLI (`uv` project, Python 3.11+, tests) |
 | `ci/github/` | Workflow templates for a corpus repository and for application repositories |
 | `examples/booking-service/.shall/` | The local rules of an example application repository (`BOOK-`) |
@@ -55,6 +55,7 @@ cli.py → config.py → corpus.py → artifact.py → effects.py → select.py 
 | `publish.py` | Posts to GitHub. Deterministic, with `--dry-run`. |
 | `triage.py` | Sorts the comments of other AI reviewers |
 | `hooks.py` | The Claude Code hooks: `shall hook`, `shall hookd`, `shall hook-config` |
+| `claude_judge.py` | The hook judge without Jev: the prompts for Claude (`shall_ask`), the parser of the answers, the cache |
 | `scan.py` | Lints whole files with `Hooks.judge_code` |
 | `checks.py` | Deterministic code checks for `Enforcement: linter` rules with `Check:` |
 | `conflicts.py` | Compares pairs of statements with Jev |
@@ -69,6 +70,8 @@ make test                     # unit tests, no network
 make check                    # example corpus: lint and index are current (no model calls)
 make self-check               # rules of this repository: lint and index
 make build                    # write corpus/index/ again after a change to corpus/
+claude plugin validate plugins/shall   # the plugin manifest, hooks.json and the hooks module
+claude plugin test plugins/shall       # tests of the hooks module (plugins/shall/tests/*.test.ts)
 ```
 
 To run one test:
@@ -88,6 +91,7 @@ make eval-scale    # selection with ~540 rules, 20 cases
 make eval-facts    # known effects on and off, 19 files in 9 languages
 make eval-triage   # triage, 24 labelled comments (needs TYPESAFE_API_KEY and claude)
 make eval-hooks    # hook judge, 97 labelled tool calls and writes (--no-cache to measure latency)
+make eval-hooks-claude  # the same cases with Claude as the judge (needs claude, no Jev key)
 make eval-realpr   # 40 real public PRs with AI-bot comments: review and triage (~$16, ~2 h)
 plugins/shall/bin/shall --config shall.yaml eval-verify --retrieval treesitter   # verification (needs claude)
 ```

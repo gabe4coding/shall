@@ -607,13 +607,22 @@ def cmd_eval(args, cfg) -> int:
 
 
 def cmd_eval_hooks(args, cfg) -> int:
+    from .claude_judge import ClaudeJudge, claude_text
     from .evaluate import render_hooks_eval, run_hooks_eval
     from .jev import Jev
     corpus = load_corpus(cfg)
 
     async def run():
         async with Jev(cfg, use_cache=not args.no_cache) as jev:
-            return await run_hooks_eval(cfg, corpus, jev, Path(args.cases), score=args.score)
+            claude = None
+            if args.judge == "claude":
+                claude = ClaudeJudge(cfg, run=claude_text(cfg, cfg.get("hooks.claude.model")),
+                                     use_cache=not args.no_cache)
+            try:
+                return await run_hooks_eval(cfg, corpus, jev, Path(args.cases), score=args.score, claude=claude)
+            finally:
+                if claude is not None:
+                    claude.save()
 
     report = asyncio.run(run())
     if args.out:
@@ -867,9 +876,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--no-stop", action="store_true", help="leave out the Stop hook (full review at the end of a turn)")
     s.set_defaults(fn=cmd_hook_config)
 
-    s = sub.add_parser("eval-hooks", help="measure Jev as the hook judge on labelled tool calls and writes")
+    s = sub.add_parser("eval-hooks", help="measure the hook judge (Jev or Claude) on labelled tool calls and writes")
     s.add_argument("--cases", default="eval/hooks/cases.yaml")
-    s.add_argument("--no-cache", action="store_true", help="fresh Jev answers (needed to measure latency)")
+    s.add_argument("--judge", choices=["jev", "claude"], default="jev",
+                   help="claude: the prompts of the plugin's hooks module, asked through `claude -p` (hooks.claude.model)")
+    s.add_argument("--no-cache", action="store_true", help="fresh answers (needed to measure latency)")
     s.add_argument("--score", choices=["both", "violation"], default="both",
                    help="both: min(applies, violates) as the hooks use it; violation: that question alone (A/B)")
     s.add_argument("--out")

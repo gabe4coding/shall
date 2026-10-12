@@ -114,7 +114,9 @@ claude plugin install shall@shall
 
 The plugin gives Claude Code the `shall` command, the skills, the reviewer agents and the hooks. In a
 repository with shall standards, Claude finds the rules that apply before it writes code. Ask
-*"check this PR against our standards"* or *"write a standard for idempotent retries"*.
+*"check this PR against our standards"* or *"write a standard for idempotent retries"*. The hooks
+check each tool call of the agent with Jev when `TYPESAFE_API_KEY` is set, and with Claude (Haiku)
+when it is not set. Read [Hooks](docs/hooks.mdx#the-judge).
 
 ## Use it in your repository
 

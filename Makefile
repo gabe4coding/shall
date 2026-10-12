@@ -4,7 +4,7 @@ JRFC := plugins/shall/bin/shall
 # the root resolves to .shall/; organisation targets pass --config explicitly.
 ORG := $(JRFC) --config shall.yaml
 
-.PHONY: check lint build test eval eval-scale eval-facts eval-hooks eval-triage eval-realpr review-example self-check self-conflicts self-review
+.PHONY: check lint build test eval eval-scale eval-facts eval-hooks eval-hooks-claude eval-triage eval-realpr review-example self-check self-conflicts self-review
 
 check: lint          ## organisation corpus: deterministic CI checks (no model calls)
 	$(ORG) build --check
@@ -31,8 +31,11 @@ eval-scale:          ## selection at scale: ~540 statements (eval/scale), layere
 eval-triage:         ## triage of AI review comments on eval/triage (needs TYPESAFE_API_KEY and claude)
 	$(ORG) eval-triage --out .shall-out/eval-triage.json
 
-eval-hooks:          ## hook judge: 75 labelled tool calls and writes (eval/hooks, needs TYPESAFE_API_KEY)
+eval-hooks:          ## hook judge: 97 labelled tool calls and writes (eval/hooks, needs TYPESAFE_API_KEY)
 	$(ORG) eval-hooks --out .shall-out/eval-hooks.json
+
+eval-hooks-claude:   ## the same cases with Claude (hooks.claude.model) as the judge (needs claude)
+	$(ORG) eval-hooks --judge claude --out .shall-out/eval-hooks-claude.json
 
 eval-realpr:         ## real public PRs with AI-bot comments: review + triage graded (needs gh, TYPESAFE_API_KEY, claude; ~$16)
 	uv run --quiet --project plugins/shall/tooling python eval/realpr/run.py fetch
