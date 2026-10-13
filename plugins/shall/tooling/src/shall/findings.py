@@ -6,7 +6,7 @@ Deterministic: no model call in this module (JTOOL-0003.2). The trust boundary:
       -> validate_findings                             statement selected, line or quote found (JTOOL-0002.2)
     Finding           severity from the corpus         (corpus_blocking)
       -> Finding.with_verification(Verification)       (verify.py)
-    Finding.blocking  computed, never stored: verification can only lower it (JTOOL-0002.5, .6)
+    Finding.blocking  computed, never stored: only a `confirmed` verdict keeps it (JTOOL-0002.5, .6)
 
 Only this module makes a Finding from data (tests/test_boundaries.py checks it). `from_json` reads
 back a findings.json that shall itself wrote; agent output always goes through `validate_findings`.
@@ -103,12 +103,13 @@ class Finding:
 
     @property
     def blocking(self) -> bool:
-        """The corpus decides; a verification that is not `confirmed` can only lower it."""
-        return self.corpus_blocking and (self.verification is None or self.verification.verdict == "confirmed")
+        """The corpus decides, and only a `confirmed` verdict keeps it: a finding that was not
+        verified (`--no-verify`, `review.verify: false`, `shall validate`) is advisory (JTOOL-0002.6)."""
+        return self.corpus_blocking and self.verification is not None and self.verification.verdict == "confirmed"
 
     @property
     def downgraded(self) -> bool:
-        """Blocking by the corpus, advisory because its evidence was not seen."""
+        """Blocking by the corpus, advisory because no verifier confirmed it."""
         return self.corpus_blocking and not self.blocking
 
     def with_verification(self, verification: Verification) -> Finding:
@@ -125,7 +126,7 @@ class Finding:
         if self.verification is not None:
             out["verification"] = self.verification.to_json()
         if self.downgraded:
-            out["downgraded"] = True  # evidence not seen: a comment, never a failed check
+            out["downgraded"] = True  # not confirmed: a comment, never a failed check
         return out
 
     @classmethod
@@ -151,7 +152,9 @@ def read_findings(path: Path) -> list[Finding]:
 
 
 def sort_key(f: Finding) -> tuple:
-    return (not f.blocking, f.path, f.line or 0, f.statement_id)
+    # corpus_blocking second: before verification nothing blocks, and the comment cap
+    # (validate_findings) must still keep the findings that can block
+    return (not f.blocking, not f.corpus_blocking, f.path, f.line or 0, f.statement_id)
 
 
 # ---------------------------------------------------------------- prompts and bundle
@@ -168,20 +171,14 @@ def render_statements(corpus: Corpus, ids: list[str]) -> str:
 
 
 def chunk_prompt(corpus: Corpus, chunk: Chunk, ids: list[str], facts: list[str] | None = None) -> str:
-    anchor = (
-        "Only lines marked '+' (added) can carry a finding; use their line number."
-        if chunk.kind == "diff" else
-        "Use the line number shown before '|'. Use line null for a finding about something missing from the whole document."
-    )
+    """The data of one review call. The instructions are only in agents/shall-reviewer.md (JTOOL-0004.2)."""
     return (
         f"<chunk kind=\"{chunk.kind}\" file=\"{chunk.path}\" language=\"{chunk.language}\">\n"
         f"{chunk.rendered}\n</chunk>\n\n"
         + (f"<known_effects>\nFacts found by code (effects registry and code graph) about what the "
            f"code in the chunk calls:\n" + "\n".join(f"- {x}" for x in facts) + "\n</known_effects>\n\n"
            if facts else "")
-        + f"<standards>\n{render_statements(corpus, ids)}\n</standards>\n\n"
-        f"{anchor}\nReturn only violations of the standards listed above. "
-        "Return an empty findings list when the chunk complies."
+        + f"<standards>\n{render_statements(corpus, ids)}\n</standards>"
     )
 
 
@@ -191,10 +188,9 @@ def write_bundle(corpus: Corpus, artifact: Artifact, selection: dict, out: Path)
     parts = [
         f"# shall review bundle — {artifact.source}",
         "",
-        "For each chunk, check only the listed standards. Write all findings to one JSON file",
-        "with the shape `{\"findings\": [{\"chunk\": \"c0\", \"statement_id\": ..., \"line\": ..., "
-        "\"quote\": ..., \"message\": ..., \"suggestion\": ...}]}`, then run",
-        f"`shall validate <findings.json> --selection <selection.json> {artifact.source}`.",
+        "Give each chunk section below to the `shall-reviewer` agent. Collect its findings in one JSON",
+        "file as `{\"findings\": [{\"chunk\": \"c0\", ...}]}`, then run `shall validate` and `shall verify`",
+        "(skill shall-review, references/in-session.md). Only a verified finding blocks.",
         "",
     ]
     for c in selection["chunks"]:
@@ -283,7 +279,7 @@ def validate_findings(corpus: Corpus, artifact: Artifact, selection: dict, raw: 
 def verification_line(f: Finding) -> str:
     v = f.verification
     if v is None:
-        return ""
+        return "_Not verified — not blocking._" if f.corpus_blocking else ""
     where = f" ({', '.join(v.evidence)})" if v.evidence else ""
     if v.verdict == "confirmed":
         return f"_Verified{where}:_ {v.reason}"
@@ -317,8 +313,8 @@ def render_markdown(artifact: Artifact, selection: dict, findings: list[Finding]
         out.append(f"  {f.message}")
         if f.suggestion:
             out.append(f"  _Suggestion:_ {f.suggestion}")
-        if f.verification:
-            out.append(f"  {verification_line(f)}")
+        if note := verification_line(f):
+            out.append(f"  {note}")
     return "\n".join(out).rstrip() + "\n"
 
 
@@ -340,8 +336,8 @@ def comment_body(f: Finding, key: str | None = None, lhash: str | None = None) -
     body = f"{tag} · **{f.statement_id}** {f.title} ({f.level})\n\n{f.message}"
     if f.suggestion:
         body += f"\n\n**Suggestion:** {f.suggestion}"
-    if f.verification:
-        body += f"\n\n{verification_line(f)}"
+    if note := verification_line(f):
+        body += f"\n\n{note}"
     body += f"\n\n> {f.statement_text}\n\n<sub>Standard: `{f.source}`</sub>"
     if key:
         body += f"\n\n<!-- shall:finding key={key} line={lhash} -->"

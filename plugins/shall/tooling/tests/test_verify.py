@@ -105,6 +105,25 @@ def test_confirmed_without_existing_evidence_does_not_block():
     assert kept.verification is not None and kept.verification.verdict == "unknown"
 
 
+def test_a_finding_that_was_not_verified_never_blocks():
+    """JTOOL-0002.6: `--no-verify`, `review.verify: false` and `shall validate` give no verdict,
+    so the exit code, the GitHub review and the Stop hook see an advisory finding."""
+    from shall.findings import Finding, render_github, render_markdown, sort_key
+    f = finding()
+    assert f.blocking is False and f.downgraded is True
+    assert needs_verification(f)  # the corpus still decides what verification looks at
+    data = f.to_json()
+    assert data["blocking"] is False and data["corpus_blocking"] is True
+    assert Finding.from_json(data).blocking is False  # findings.json read back (Stop hook) stays advisory
+    artifact = build_artifact("shall.yaml", "jev:\n  command: [claude, -p]\n", "code", 4000)
+    selection = {"applicable": [], "model": "m", "strategy": "flat"}
+    assert render_github(artifact, selection, [f], [])["event"] == "COMMENT"
+    assert "Not verified — not blocking" in render_markdown(artifact, selection, [f], [])
+    # before verification nothing blocks: the comment cap must still keep what can block
+    advisory = finding(corpus_blocking=False, path="a.yaml")
+    assert sorted([advisory, f], key=sort_key) == [f, advisory]
+
+
 def test_missing_verdict_counts_as_unknown():
     kept, _ = apply_verdict(finding(), None, [])
     assert kept is not None and kept.blocking is False

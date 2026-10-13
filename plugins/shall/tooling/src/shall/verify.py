@@ -2,7 +2,8 @@
 
 The reviewer sees one chunk. A finding such as "claude runs with tools" can be wrong because
 another file adds `--tools ""`. Which findings are verified is decided by code, not by the
-reviewer: every blocking finding, plus advisory findings that declare `depends_on`.
+reviewer: every finding the corpus marks blocking (it blocks only when confirmed), plus advisory
+findings that declare `depends_on`.
 
     terms (depends_on + identifiers of the quote)          code
       -> excerpts from the repository (git grep)           code
@@ -88,7 +89,7 @@ ClaimLike = Finding | Claim
 
 
 def needs_verification(finding: Finding) -> bool:
-    return finding.blocking or bool(finding.depends_on)
+    return finding.corpus_blocking or bool(finding.depends_on)
 
 
 CODE_SPAN_RE = re.compile(r"`([^`]+)`")

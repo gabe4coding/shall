@@ -51,7 +51,7 @@ The organisation sets the settings in `shall.yaml`. A repository can change them
 | `selection.include_status` | `[approved, enforced]` | The statuses that reviews use. `--include-draft` adds drafts. |
 | `selection.facts` | `true` | Add known effects to the input of Jev and to the review |
 | `review.model` | `claude-sonnet-5` | The model of the reviewer and the verifier |
-| `review.verify` | `true` | Verify blocking findings against the repository before they block |
+| `review.verify` | `true` | Verify blocking findings against the repository. Only a verified finding blocks: with `false` or `--no-verify`, all findings are advisory. |
 | `review.cache` | `true` | Use the earlier answer of Claude again when its input is the same. `--no-cache` forces new calls. |
 | `review.max_comments` | `25` | The maximum number of comments for each review |
 | `conflicts.fail_threshold` | `0.75` | `conflicts --local` fails at this value or higher. |
