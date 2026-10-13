@@ -20,21 +20,23 @@ from __future__ import annotations
 
 import asyncio
 import re
-import subprocess
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import git
 from .artifact import Artifact
 from .codegraph import RepoIndex, expand, names_in, numbered_lines
 from .config import Config
 from .corpus import Corpus
-from .jev import Jev, noul
-from .review import agent_prompt, run_claude
+from .claude import agent_prompt, run_claude
+from .findings import VERDICTS, Finding, Verification, sort_key
+from .jev import JevLike, noul
 
 VERDICT_SCHEMA = {
     "type": "object",
     "properties": {
-        "verdict": {"type": "string", "enum": ["confirmed", "refuted", "unknown"]},
+        "verdict": {"type": "string", "enum": list(VERDICTS)},
         "reason": {"type": "string"},
         "evidence": {"type": "array", "items": {"type": "string"}},
     },
@@ -55,7 +57,6 @@ CONTEXT_LINES = 6
 MAX_EXCERPTS = 20
 KEEP_EXCERPTS = 6
 SELECT_THRESHOLD = 0.4
-GREP_TIMEOUT = 30
 SKIP_DIRS = {".git", ".venv", "node_modules", ".shall-out", ".shall-cache", "__pycache__", "dist", "build"}
 
 
@@ -70,8 +71,24 @@ class Excerpt:
     via: list[str] = field(default_factory=list)  # graph path from the flagged line, e.g. [gateway.hold, request]
 
 
-def needs_verification(finding: dict) -> bool:
-    return bool(finding.get("blocking") or finding.get("depends_on"))
+@dataclass(frozen=True)
+class Claim:
+    path: str
+    line: int | None
+    quote: str
+    chunk: str
+    message: str
+    statement_text: str
+    depends_on: tuple[str, ...] = ()
+
+
+# a claim about one line that evidence can confirm or refute: a Finding, or a Claim made from the
+# comment of another reviewer (triage.py)
+ClaimLike = Finding | Claim
+
+
+def needs_verification(finding: Finding) -> bool:
+    return finding.blocking or bool(finding.depends_on)
 
 
 CODE_SPAN_RE = re.compile(r"`([^`]+)`")
@@ -97,7 +114,7 @@ def yaml_key_path(line_text: dict[int, str], line: int | None) -> str | None:
     return ".".join(keys) if len(keys) > 1 else None
 
 
-def search_terms(finding: dict, key_path: str | None = None) -> list[str]:
+def search_terms(finding: ClaimLike, key_path: str | None = None) -> list[str]:
     """Most specific first: the config key path, the reviewer's depends_on, literal code spans
     of the statement (e.g. `--tools ""` -> --tools), then identifiers of the quote."""
     out: list[str] = []
@@ -108,14 +125,14 @@ def search_terms(finding: dict, key_path: str | None = None) -> list[str]:
 
     if key_path:
         add(key_path)
-    for source in finding.get("depends_on", []):
+    for source in finding.depends_on:
         for token in IDENT_RE.findall(source):
             add(token)
             for part in token.split("."):  # the receiver matters too: logger.info -> logger
                 add(part)
-    for span in CODE_SPAN_RE.findall(finding.get("statement_text", "")):
+    for span in CODE_SPAN_RE.findall(finding.statement_text):
         add(span.split()[0].strip("\"'"))
-    for token in IDENT_RE.findall(finding.get("quote", "")):
+    for token in IDENT_RE.findall(finding.quote):
         add(token)
         for part in token.split("."):
             add(part)
@@ -127,27 +144,16 @@ def _priority(path: str) -> int:
     return 1 if Path(path).suffix.lower() in DOC_EXTS else 0
 
 
-def _git_root(start: Path) -> Path | None:
-    try:
-        proc = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=start, capture_output=True,
-                              text=True, timeout=GREP_TIMEOUT)
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    return Path(proc.stdout.strip()) if proc.returncode == 0 else None
-
-
 def _hits(root: Path, term: str, excluded: set[str]) -> list[tuple[str, int]]:
     """(relative path, line) for a fixed-string match; git grep in a repo, a walk otherwise."""
     hits: list[tuple[str, int]] = []
     if (root / ".git").exists():
-        try:
-            proc = subprocess.run(["git", "grep", "-n", "-I", "-F", "--untracked", "-e", term],
-                                  cwd=root, capture_output=True, text=True, timeout=GREP_TIMEOUT)
-            for line in proc.stdout.splitlines():
+        for line in (git.git(root, "grep", "-n", "-I", "-F", "--untracked", "-e", term, ok=(0, 1)) or "").splitlines():
+            try:
                 path, lineno, _ = line.split(":", 2)
                 hits.append((path, int(lineno)))
-        except (OSError, subprocess.TimeoutExpired, ValueError):
-            pass
+            except ValueError:
+                continue
     else:
         for path in sorted(root.rglob("*")):
             if not path.is_file() or any(p in SKIP_DIRS for p in path.relative_to(root).parts):
@@ -204,11 +210,11 @@ def relevance_question():
 CHUNK_RADIUS = 20  # lines around the flagged line that the verifier sees as the chunk
 
 
-def chunk_context(artifact: Artifact, finding: dict, radius: int = CHUNK_RADIUS) -> str:
-    chunk = next((c for c in artifact.chunks if c.id == finding.get("chunk")), None)
+def chunk_context(artifact: Artifact, finding: ClaimLike, radius: int = CHUNK_RADIUS) -> str:
+    chunk = next((c for c in artifact.chunks if c.id == finding.chunk), None)
     if chunk is None:
         return ""
-    line = finding.get("line")
+    line = finding.line
     if line is None:
         return chunk.rendered[:8000]
     numbers = sorted(n for n in chunk.line_text if abs(n - line) <= radius)
@@ -227,43 +233,48 @@ def render_evidence(excerpts: list[Excerpt], notes: list[str] | None = None) -> 
     return evidence
 
 
-def verifier_prompt(finding: dict, context: str, excerpts: list[Excerpt], notes: list[str] | None = None) -> str:
+def verifier_prompt(finding: Finding, context: str, excerpts: list[Excerpt], notes: list[str] | None = None) -> str:
     evidence = render_evidence(excerpts, notes)
     return (
-        f"<finding>\nstatement: {finding['statement_id']} [{finding['level']}] {finding['statement_text']}\n"
-        f"file: {finding['path']}:{finding['line']}\nquote: {finding['quote']}\n"
-        f"reviewer: {finding['message']}\ndepends_on: {', '.join(finding.get('depends_on') or []) or '-'}\n"
-        f"</finding>\n\n<chunk file=\"{finding['path']}\">\n{context}\n</chunk>\n\n<evidence>\n{evidence}\n</evidence>"
+        f"<finding>\nstatement: {finding.statement_id} [{finding.level}] {finding.statement_text}\n"
+        f"file: {finding.path}:{finding.line}\nquote: {finding.quote}\n"
+        f"reviewer: {finding.message}\ndepends_on: {', '.join(finding.depends_on) or '-'}\n"
+        f"</finding>\n\n<chunk file=\"{finding.path}\">\n{context}\n</chunk>\n\n<evidence>\n{evidence}\n</evidence>"
     )
 
 
-def apply_verdict(finding: dict, verdict: dict | None, excerpts: list[Excerpt]) -> tuple[dict | None, dict | None]:
-    """Return (kept finding or None, dropped entry or None). Severity only goes down."""
+def verification_of(verdict: dict | None, excerpts: Sequence[Excerpt]) -> Verification:
+    """The verifier's answer as code accepts it. A refutation or a confirmation that cites no
+    evidence that exists becomes `unknown`: a drop and a block both need it (JTOOL-0002.6).
+    Used for findings (apply_verdict) and for the comments of other reviewers (triage.py)."""
     known = {e.id: e for e in excerpts}
     if verdict is None:
         verdict = {"verdict": "unknown", "reason": "verification did not return a verdict", "evidence": []}
-    cited = [i for i in verdict.get("evidence", []) if i == "chunk" or i in known]
-    record = {
-        "verdict": verdict.get("verdict", "unknown"),
-        "reason": verdict.get("reason", ""),
-        "evidence": [i if i == "chunk" else f"{known[i].path}:{known[i].start}-{known[i].end}" for i in cited],
-        "shown": [f"{e.path}:{e.start}-{e.end}" for e in excerpts],  # audit: what the verifier saw
-    }
-    if record["verdict"] == "refuted" and cited:
-        return None, {**finding, "verification": record, "reason": f"refuted by verification: {record['reason']}"}
-    if record["verdict"] in ("refuted", "confirmed") and not cited:
-        # a drop and a block both need evidence that exists (JTOOL-0002.6)
-        record["reason"] = f"{record['verdict']} without citing evidence: " + record["reason"]
-        record["verdict"] = "unknown"
-    kept = {**finding, "verification": record}
-    if record["verdict"] != "confirmed" and kept["blocking"]:
-        kept["blocking"] = False
-        kept["downgraded"] = True  # evidence not seen: a comment, never a failed check
-    return kept, None
+    cited = [i for i in verdict.get("evidence") or [] if i == "chunk" or i in known]
+    answer = verdict.get("verdict")
+    reason = str(verdict.get("reason", ""))
+    if answer in ("refuted", "confirmed") and not cited:
+        reason, answer = f"{answer} without citing evidence: {reason}", "unknown"
+    return Verification(
+        verdict=answer if answer in VERDICTS else "unknown",
+        reason=reason,
+        evidence=tuple(i if i == "chunk" else f"{known[i].path}:{known[i].start}-{known[i].end}" for i in cited),
+        shown=tuple(f"{e.path}:{e.start}-{e.end}" for e in excerpts),  # audit: what the verifier saw
+    )
+
+
+def apply_verdict(finding: Finding, verdict: dict | None,
+                  excerpts: Sequence[Excerpt]) -> tuple[Finding | None, dict | None]:
+    """Return (kept finding or None, dropped entry or None). Severity only goes down: a kept
+    finding blocks only when the corpus says so and the verdict is `confirmed` (Finding.blocking)."""
+    v = verification_of(verdict, excerpts)
+    if v.verdict == "refuted":
+        return None, {**finding.to_json(), "verification": v.to_json(), "reason": f"refuted by verification: {v.reason}"}
+    return finding.with_verification(v), None
 
 
 def repo_root(search_root: Path | None = None) -> Path:
-    return search_root or _git_root(Path.cwd()) or Path.cwd()
+    return search_root or git.toplevel(Path.cwd()) or Path.cwd()
 
 
 def excluded_paths(corpus: Corpus, root: Path) -> set[str]:
@@ -284,39 +295,39 @@ def repo_index(cfg: Config, corpus: Corpus, root: Path) -> RepoIndex:
                      download_grammars=bool(cfg.get("codegraph.download_grammars", True)))
 
 
-async def gather_evidence(artifact: Artifact, jev: Jev, f: dict, root: Path, excluded: set[str],
+async def gather_evidence(artifact: Artifact, jev: JevLike, f: ClaimLike, root: Path, excluded: set[str],
                           index: RepoIndex | None) -> tuple[list[Excerpt], list[str]]:
     """Excerpts of the repository that help decide `f` (a finding, or any claim about a line):
     the code graph from the calls on the line, then keyword search; Jev keeps the relevant ones
     when there are too many. `f` needs path, line, quote, chunk, statement_text, message and
     depends_on."""
-    chunk = next((c for c in artifact.chunks if c.id == f.get("chunk")), None)
-    key_path = yaml_key_path(chunk.line_text, f.get("line")) if chunk and chunk.language == "yaml" else None
+    chunk = next((c for c in artifact.chunks if c.id == f.chunk), None)
+    key_path = yaml_key_path(chunk.line_text, f.line) if chunk and chunk.language == "yaml" else None
     terms = search_terms(f, key_path)
     notes: list[str] = []
     excerpts: list[Excerpt] = []
     if index is not None:
-        seeds = (index.seeds_at(f["path"], f["line"], f.get("quote", "")) if f.get("line") else
-                 names_in(f.get("quote", ""))) + [t for t in f.get("depends_on", []) if IDENT_RE.fullmatch(t)]
-        hide = {f["path"]} if artifact.kind != "diff" else set()  # a whole file is already in the chunk
-        windows, notes = expand(index, seeds, f["path"], hide=hide)
+        seeds = (index.seeds_at(f.path, f.line, f.quote) if f.line else
+                 names_in(f.quote)) + [t for t in f.depends_on if IDENT_RE.fullmatch(t)]
+        hide = {f.path} if artifact.kind != "diff" else set()  # a whole file is already in the chunk
+        windows, notes = expand(index, seeds, f.path, hide=hide)
         excerpts = [Excerpt(id="", path=w.path, start=w.start, end=w.end, text=w.text, terms=[], via=w.via)
                     for w in windows]
     taken = {(e.path, e.start) for e in excerpts}
     # a diff chunk shows only the changed hunks: the rest of the same file (where a variable is
     # computed, a client configured) is evidence too, except the lines the chunk already shows.
     # A whole-file chunk already has all of it.
-    own = {f["path"]} if artifact.kind != "diff" else set()
-    line = f.get("line")
+    own = {f.path} if artifact.kind != "diff" else set()
+    line = f.line
     shown = range(line - CHUNK_RADIUS, line + CHUNK_RADIUS + 1) if line else range(0)
     excerpts += [e for e in gather_excerpts(root, terms, excluded | own)
                  if (e.path, e.start) not in taken
-                 and not (e.path == f["path"] and e.start >= shown.start and e.end < shown.stop)]
+                 and not (e.path == f.path and e.start >= shown.start and e.end < shown.stop)]
     for i, e in enumerate(excerpts[:MAX_EXCERPTS]):
         e.id = f"e{i}"
     excerpts = excerpts[:MAX_EXCERPTS]
     if len(excerpts) > KEEP_EXCERPTS:  # Jev only cuts down; a short chain goes through whole
-        base = {"requirement": f["statement_text"], "quote": f["quote"], "message": f["message"]}
+        base = {"requirement": f.statement_text, "quote": f.quote, "message": f.message}
         answers = await jev.gather(
             jev.ask({"finding": base, "excerpt_file": e.path, "reached_via": _via(e), "excerpt": e.text},
                     {"relevant": relevance_question()})
@@ -339,38 +350,38 @@ def verification_scope(cfg: Config, corpus: Corpus, index: RepoIndex | None,
     return root, excluded_paths(corpus, root), index
 
 
-async def verify_findings(cfg: Config, corpus: Corpus, artifact: Artifact, jev: Jev, findings: list[dict],
+async def verify_findings(cfg: Config, corpus: Corpus, artifact: Artifact, jev: JevLike, findings: list[Finding],
                           search_root: Path | None = None, agent=None, model: str | None = None,
                           index: RepoIndex | None = None,
-                          cache=None) -> tuple[list[dict], list[dict], dict]:
-    model = model or cfg.get("review.verify_model") or None
+                          cache=None) -> tuple[list[Finding], list[dict], dict]:
     agent = agent or (lambda prompt, sem: run_claude(cfg, prompt, agent_prompt("shall-verifier"),
-                                                     VERDICT_SCHEMA, sem, model=model, cache=cache))
+                                                     VERDICT_SCHEMA, sem, model=model or cfg.verify_model, cache=cache))
     root, excluded, index = verification_scope(cfg, corpus, index, search_root)
     sem = asyncio.Semaphore(int(cfg.get("review.concurrency")))
     stats = {"verified": 0, "confirmed": 0, "refuted": 0, "unknown": 0, "agent_calls": 0, "reused": 0,
              "cost_usd": 0.0}
 
-    async def one(f: dict):
+    async def one(f: Finding) -> tuple[Finding | None, dict | None]:
         if not needs_verification(f):
             return f, None
         excerpts, notes = await gather_evidence(artifact, jev, f, root, excluded, index)
         verdict, meta = await agent(verifier_prompt(f, chunk_context(artifact, f), excerpts, notes), sem)
         stats["reused" if meta.get("cached") else "agent_calls"] += 1
         stats["cost_usd"] = round(stats["cost_usd"] + meta.get("cost_usd", 0.0), 6)
-        return apply_verdict(f, verdict, excerpts)
+        kept, dropped = apply_verdict(f, verdict, excerpts)
+        stats["verified"] += 1
+        stats[kept.verification.verdict if kept and kept.verification else "refuted"] += 1
+        return kept, dropped
 
     results = await asyncio.gather(*(one(f) for f in findings))
-    kept, dropped = [], []
-    for f, (k, d) in zip(findings, results):
-        if needs_verification(f):
-            stats["verified"] += 1
-            stats[(k or d)["verification"]["verdict"] if (k or d).get("verification") else "unknown"] += 1
+    kept: list[Finding] = []
+    dropped: list[dict] = []
+    for k, d in results:
         if k is not None:
             kept.append(k)
         if d is not None:
             dropped.append(d)
-    kept.sort(key=lambda k: (not k["blocking"], k["path"], k["line"] or 0, k["statement_id"]))
-    stats["downgraded"] = sum(1 for k in kept if k.get("downgraded"))
+    kept.sort(key=sort_key)
+    stats["downgraded"] = sum(1 for k in kept if k.downgraded)
     stats["codegraph_events"] = list(index.events) if index is not None else []
     return kept, dropped, stats

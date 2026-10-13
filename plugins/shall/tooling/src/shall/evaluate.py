@@ -8,10 +8,11 @@ from pathlib import Path
 
 import yaml
 
+from . import git
 from .artifact import build_artifact, detect_kind, read_source
 from .config import Config
 from .corpus import Corpus
-from .jev import Jev
+from .jev import JevLike
 from .select import Selector, classify_document
 
 SWEEP = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
@@ -26,7 +27,6 @@ def _pr(expected: set[str], got: set[str]) -> tuple[float, float]:
 def _case_facts(cfg: Config, corpus: Corpus, base: Path, case: dict, artifact) -> dict:
     """known_effects as in a real run; `repo:` (a fixture directory) enables indirect facts."""
     import shutil
-    import subprocess
     import tempfile
 
     from .codegraph import RepoIndex
@@ -37,11 +37,11 @@ def _case_facts(cfg: Config, corpus: Corpus, base: Path, case: dict, artifact) -
     with tempfile.TemporaryDirectory(prefix="shall-eval-") as tmp:
         root = Path(tmp) / "repo"
         shutil.copytree(base / case["repo"], root)
-        subprocess.run(["git", "init", "-q"], cwd=root, check=True)  # the index uses `git grep`
+        git.init(root)  # the index uses `git grep`
         return chunk_facts(corpus.effects, artifact, RepoIndex(root), depth)
 
 
-async def _run_case(cfg: Config, corpus: Corpus, jev: Jev, base: Path, case: dict, strategy: str,
+async def _run_case(cfg: Config, corpus: Corpus, jev: JevLike, base: Path, case: dict, strategy: str,
                     facts: bool = True) -> dict:
     name, raw = read_source(str(base / case["file"]), None)
     kind = case.get("kind") or detect_kind(name, raw)
@@ -71,7 +71,7 @@ LAYERS = ("prefilter", "domain", "rfc", "statement")
 
 def _lost_at(corpus: Corpus, results, sid: str) -> str:
     """The layer that dropped a missed statement: the deepest layer it reached in any chunk."""
-    rfc, _ = corpus.statement(sid)
+    rfc, _ = corpus.require(sid)
     reached = "prefilter"
     for r in results:
         if sid in r.statements:
@@ -83,7 +83,7 @@ def _lost_at(corpus: Corpus, results, sid: str) -> str:
     return reached
 
 
-async def run_eval(cfg: Config, corpus: Corpus, jev: Jev, labels_path: Path, strategies: list[str],
+async def run_eval(cfg: Config, corpus: Corpus, jev: JevLike, labels_path: Path, strategies: list[str],
                    facts: bool = True) -> dict:
     labels = yaml.safe_load(labels_path.read_text(encoding="utf-8"))
     base = labels_path.parent
@@ -148,32 +148,33 @@ def render_eval(report: dict) -> str:
 # ---------------------------------------------------------------- verification eval
 
 
-async def _verify_case(cfg: Config, corpus: Corpus, jev: Jev, case_dir: Path, model: str | None) -> dict:
+async def _verify_case(cfg: Config, corpus: Corpus, jev: JevLike, case_dir: Path, model: str | None) -> dict:
     import shutil
-    import subprocess
     import tempfile
     import time
 
     from .artifact import build_artifact
+    from .findings import RawFinding, validate_findings
     from .verify import verify_findings
 
     meta = yaml.safe_load((case_dir / "case.yaml").read_text(encoding="utf-8"))
     with tempfile.TemporaryDirectory(prefix="shall-verify-") as tmp:
         root = Path(tmp) / "repo"
         shutil.copytree(case_dir / "repo", root)
-        subprocess.run(["git", "init", "-q"], cwd=root, check=True)  # search runs `git grep` like in CI
+        git.init(root)  # search runs `git grep` like in CI
         raw = (root / meta["artifact"]).read_text(encoding="utf-8")
         artifact = build_artifact(meta["artifact"], raw, meta.get("kind", "code"), int(cfg.get("jev.max_chunk_chars")))
         chunk = artifact.chunks[0]
         f = meta["finding"]
         line = next(n for n, t in sorted(chunk.line_text.items()) if f["quote"] in t)
-        rfc, st = corpus.statement(f["statement_id"])
-        finding = {
-            "statement_id": st.id, "rfc": rfc.id, "title": st.title, "level": st.level,
-            "blocking": rfc.statement_blocking(st), "path": meta["artifact"], "line": line,
-            "quote": f["quote"], "message": f["message"], "suggestion": "", "depends_on": f.get("depends_on", []),
-            "chunk": chunk.id, "statement_text": st.text, "source": corpus.source(rfc, st.line),
-        }
+        # the labelled finding goes through the same validation as the reviewer's output
+        selection = {"chunks": [{"id": chunk.id, "selected": [f["statement_id"]]}]}
+        labelled: RawFinding = {"chunk": chunk.id, "statement_id": f["statement_id"], "line": line, "quote": f["quote"],
+                           "message": f["message"], "depends_on": f.get("depends_on", [])}
+        findings, rejected = validate_findings(corpus, artifact, selection, [labelled], 1)
+        if not findings:
+            raise ValueError(f"{case_dir.name}: the labelled finding is not valid: {rejected}")
+        finding = findings[0]
         # expected evidence is "path: text on the evidence line" -> (path, line number)
         targets = []
         for spec in meta["expected"].get("evidence", []):
@@ -184,7 +185,7 @@ async def _verify_case(cfg: Config, corpus: Corpus, jev: Jev, case_dir: Path, mo
         kept, dropped, stats = await verify_findings(cfg, corpus, artifact, jev, [finding], search_root=root,
                                                      model=model)
         seconds = time.perf_counter() - started
-    result = (kept or dropped)[0]["verification"]
+    result = kept[0].verification.to_json() if kept and kept[0].verification else dropped[0]["verification"]
     expected = meta["expected"]
     ranges = []
     for shown in result.get("shown", []):
@@ -202,7 +203,7 @@ async def _verify_case(cfg: Config, corpus: Corpus, jev: Jev, case_dir: Path, mo
     }
 
 
-async def run_verify_eval(cfg: Config, corpus: Corpus, jev: Jev, cases_root: Path, models: list[str],
+async def run_verify_eval(cfg: Config, corpus: Corpus, jev: JevLike, cases_root: Path, models: list[str],
                           retrievals: list[str]) -> dict:
     cases = sorted(p for p in cases_root.iterdir() if (p / "case.yaml").is_file())
     report = {}
@@ -247,9 +248,8 @@ def render_verify_eval(report: dict) -> str:
 
 # ---------------------------------------------------------------- triage of other AI reviewers' comments
 
-async def _triage_case(cfg: Config, corpus: Corpus, jev: Jev, case_dir: Path, cache=None) -> dict:
+async def _triage_case(cfg: Config, corpus: Corpus, jev: JevLike, case_dir: Path, cache=None) -> dict:
     import shutil
-    import subprocess
     import tempfile
 
     from .artifact import build_artifact
@@ -267,7 +267,7 @@ async def _triage_case(cfg: Config, corpus: Corpus, jev: Jev, case_dir: Path, ca
     with tempfile.TemporaryDirectory(prefix="shall-triage-") as tmp:
         root = Path(tmp) / "repo"
         shutil.copytree(case_dir / "repo", root)
-        subprocess.run(["git", "init", "-q"], cwd=root, check=True)  # the code graph runs `git grep`
+        git.init(root)  # the code graph runs `git grep`
         index = repo_index(cfg, corpus, root)
         facts = {}
         if cfg.get("selection.facts") and corpus.effects:
@@ -288,7 +288,7 @@ async def _triage_case(cfg: Config, corpus: Corpus, jev: Jev, case_dir: Path, ca
             "errors": stats.get("errors", [])}
 
 
-async def run_triage_eval(cfg: Config, corpus: Corpus, jev: Jev, cases_root: Path, cache=None) -> dict:
+async def run_triage_eval(cfg: Config, corpus: Corpus, jev: JevLike, cases_root: Path, cache=None) -> dict:
     """Per labelled comment: was a relevant one kept (relevant or unverified), was noise removed?
     The costly error is a relevant comment marked noise: it is counted separately."""
     cases = sorted(p for p in cases_root.iterdir() if (p / "case.yaml").is_file())
@@ -342,7 +342,7 @@ def _pct(values: list[float], q: float) -> int | None:
     return round(ordered[min(len(ordered) - 1, int(q * len(ordered)))])
 
 
-async def run_hooks_eval(cfg: Config, corpus: Corpus, jev: Jev, cases_path: Path, score: str = "both",
+async def run_hooks_eval(cfg: Config, corpus: Corpus, jev: JevLike, cases_path: Path, score: str = "both",
                          claude=None) -> dict:
     """Jev (or, with `claude`, a ClaudeJudge) as the judge of tool calls and written code
     (eval/hooks/cases.yaml).
@@ -412,7 +412,7 @@ async def run_hooks_eval(cfg: Config, corpus: Corpus, jev: Jev, cases_path: Path
         missed = []
         for r in (r for r in rows if r["kind"] == kind):
             for sid, p in r["scores"].items():
-                rfc, st = corpus.statement(sid)
+                rfc, st = corpus.require(sid)
                 act = action_for(policy, rfc, st, p) if kind == "tool" else code_action(policy, code_warn, rfc, st, p)
                 if act in acts:
                     acts[act]["right" if sid in r["expected"] else "wrong"] += 1

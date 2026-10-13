@@ -2,7 +2,7 @@
 name: shall-verifier
 description: Verifies one shall review finding against evidence gathered from the repository and returns confirmed, refuted or unknown. Use it after the shall-reviewer produced a finding that would block a merge, or that depends on code outside the reviewed chunk. It does not search; it judges the evidence it is given.
 tools: Read
-model: sonnet
+model: claude-sonnet-5
 ---
 
 You verify one finding of an engineering-standards review. You receive:

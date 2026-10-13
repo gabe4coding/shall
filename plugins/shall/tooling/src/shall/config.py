@@ -18,10 +18,12 @@ Settings (`jev`, `selection`, `review`, `hooks`, `scan`, ...) are inherited from
 from __future__ import annotations
 
 import copy
+import json
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Literal, get_args
 
 import yaml
 
@@ -30,6 +32,11 @@ from .fetch import Parent, resolve_parent
 CONFIG_NAME = "shall.yaml"
 DOT_DIR = ".shall"
 SETTINGS = ("jev", "selection", "review", "conflicts", "codegraph", "triage", "hooks", "scan")
+LAYER_KEYS = ("extends", "prefix", "corpus", "domains", "index", "effects")   # see _layer
+OPEN_KEYS = ("hooks.actions",)   # keys are RFC statuses and levels, not setting names
+# what a hook does with a statement at or above a threshold (hooks.actions), weakest first
+Action = Literal["log", "warn", "ask", "deny"]
+ACTIONS: tuple[Action, ...] = get_args(Action)
 OUTPUT_DIRS = (".shall-cache", ".shall-out")  # shall's caches and outputs: never part of a change
 
 
@@ -41,6 +48,27 @@ def make_dir(path: Path) -> Path:
         if folder.name in OUTPUT_DIRS and not (folder / ".gitignore").exists():
             (folder / ".gitignore").write_text("*\n", encoding="utf-8")
     return path
+
+
+def load_json(path: Path) -> dict:
+    """A JSON cache file, or {} when it is missing, broken or not an object."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def merge_save_json(path: Path, entries: dict, keep: Callable[[Any], bool] | None = None) -> None:
+    """Merge `entries` into the file on disk, then replace it atomically: parallel runs that share
+    one cache (CI matrix, two local commands) keep each other's entries. `keep` drops old ones."""
+    make_dir(path.parent)
+    merged = {**load_json(path), **entries}
+    if keep is not None:
+        merged = {k: v for k, v in merged.items() if keep(v)}
+    tmp = path.with_suffix(f".{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(merged, sort_keys=True), encoding="utf-8")
+    os.replace(tmp, path)
 
 
 DEFAULTS: dict[str, Any] = {
@@ -116,6 +144,8 @@ DEFAULTS: dict[str, Any] = {
         "timeout": 300,  # seconds per agent call
         "verify": True,  # verify blocking findings (and those with depends_on) before they block
         "cache": True,   # reuse agent answers when the prompt is identical (incremental re-review)
+        "verify_model": None,             # None: review.model verifies too
+        "verify_retrieval": "treesitter",  # treesitter (code graph + keyword) | keyword
     },
     "triage": {
         # comments of other AI reviewers (`shall triage`): authors with GraphQL type Bot always
@@ -127,6 +157,21 @@ DEFAULTS: dict[str, Any] = {
         "verify": True,  # check each actionable comment against repository evidence (agent)
     },
 }
+
+
+def unknown_keys(raw: dict, base: Any = None, prefix: str = "") -> list[str]:
+    """Dotted keys of a shall.yaml that shall does not read: a typo (`reveiw.model`) would else
+    keep the default without a word."""
+    if base is None:
+        base = {**DEFAULTS, **{k: None for k in LAYER_KEYS}}
+    out = []
+    for key, value in raw.items():
+        path = f"{prefix}{key}"
+        if not isinstance(base, dict) or key not in base:
+            out.append(path)
+        elif path not in OPEN_KEYS and isinstance(value, dict) and isinstance(base[key], dict):
+            out.extend(unknown_keys(value, base[key], path + "."))
+    return out
 
 
 def _merge(base: dict, override: dict) -> dict:
@@ -183,6 +228,11 @@ class Config:
         return node
 
     @property
+    def verify_model(self) -> str:
+        """The model of the verifier agents: review.verify_model, else review.model."""
+        return self.get("review.verify_model") or self.get("review.model")
+
+    @property
     def local(self) -> Layer:
         return next(layer for layer in self.layers if layer.local)
 
@@ -237,6 +287,55 @@ def _read(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
+def valid_action_row(row: Any) -> bool:
+    """A hooks.actions row: [min p, action]."""
+    return (isinstance(row, list) and len(row) == 2 and isinstance(row[0], (int, float))
+            and not isinstance(row[0], bool) and row[1] in ACTIONS)
+
+
+def _drop_bad_actions(raw: dict) -> list[str]:
+    """Remove from `raw` the hooks.actions entries that this version cannot read; return them.
+    After this, every row the hooks see is [min p, action]. A null entry stays (it means "none")."""
+    hooks = raw.get("hooks")
+    if not isinstance(hooks, dict) or hooks.get("actions") is None:
+        return []
+    actions = hooks["actions"]
+    if not isinstance(actions, dict):
+        del hooks["actions"]
+        return [f"hooks.actions = {actions!r}"]
+    bad: list[str] = []
+    for status, levels in list(actions.items()):
+        if levels is None:
+            continue
+        if not isinstance(levels, dict):
+            bad.append(f"hooks.actions.{status} = {levels!r}")
+            del actions[status]
+            continue
+        for level, rows in list(levels.items()):
+            if rows is None:
+                continue
+            if not isinstance(rows, list):
+                bad.append(f"hooks.actions.{status}.{level} = {rows!r}")
+                del levels[level]
+                continue
+            bad += [f"hooks.actions.{status}.{level} has {row!r}" for row in rows if not valid_action_row(row)]
+            levels[level] = [row for row in rows if valid_action_row(row)]
+    return bad
+
+
+def _check_keys(path: Path | None, raw: dict) -> None:
+    unknown = unknown_keys(raw)
+    if unknown:
+        raise SystemExit(f"shall: {path or 'config'} has unknown key(s): {', '.join(unknown)}. "
+                         "The keys shall reads and their defaults are DEFAULTS in "
+                         "plugins/shall/tooling/src/shall/config.py.")
+    bad = _drop_bad_actions(copy.deepcopy(raw))
+    if bad:
+        raise SystemExit(f"shall: {path or 'config'}: {bad[0]}; hooks.actions maps status -> level -> rows, "
+                         f"each row is [min p, action] with action one of {', '.join(ACTIONS)} "
+                         "(see hooks.actions in DEFAULTS, plugins/shall/tooling/src/shall/config.py)")
+
+
 def load_config(explicit: str | None = None, update: bool = False) -> Config:
     if explicit:
         os.environ["SHALL_CONFIG"] = explicit
@@ -247,11 +346,11 @@ def load_config(explicit: str | None = None, update: bool = False) -> Config:
             f"{Path.cwd()} upwards, $SHALL_EXTENDS, and ~/.config/shall/config.yaml. "
             "Run `shall init` or pass --config."
         )
-    has_local = kind == "workspace"
+    local = path if kind == "workspace" else None
     # without a workspace file there is no local corpus; relative paths anchor at the cwd
-    root = path.parent if has_local else Path.cwd()
-    in_dot = path.parent.name == DOT_DIR if has_local else True  # no local corpus: .shall/rfcs is absent
-    if not has_local and not raw.get("extends"):
+    root = local.parent if local else Path.cwd()
+    in_dot = local.parent.name == DOT_DIR if local else True  # no local corpus: .shall/rfcs is absent
+    if local is None and not raw.get("extends"):
         raise SystemExit(f"shall: {path} has no `extends:`; nothing to load")
 
     layers: list[Layer] = []
@@ -262,14 +361,22 @@ def load_config(explicit: str | None = None, update: bool = False) -> Config:
                            if c.is_file()), None)
         if parent_cfg is None:
             raise SystemExit(f"shall: extended corpus {parent.name} has no {CONFIG_NAME}")
+        # not _check_keys: the org corpus may set a key or an action that a newer plugin reads.
+        # Its own CI checks it as a local config; here an action row this version cannot read is
+        # dropped, so one bad row does not make every hook fail open.
         parent_raw = _read(parent_cfg)
+        dropped = _drop_bad_actions(parent_raw)
+        if dropped:
+            print(f"shall: {parent.name}: ignored the hooks.actions entries that this version "
+                  f"cannot read: {'; '.join(dropped)}", file=sys.stderr)
         if parent_raw.get("extends"):
             raise SystemExit(f"shall: {parent.name} extends another corpus; only one level is supported")
         layers.append(_layer(parent.name, False, parent_cfg.parent, parent_raw,
                              parent_cfg.parent.name == DOT_DIR, "JRFC", parent))
-    local_raw = raw if has_local else {}
+    local_raw = raw if local else {}
     layers.append(_layer("local", True, root, local_raw, in_dot, None if raw.get("extends") else "JRFC"))
 
+    _check_keys(path, raw)
     settings = copy.deepcopy(DEFAULTS)
     for source in (parent_raw, raw):
         settings = _merge(settings, {k: v for k, v in source.items() if k in SETTINGS})

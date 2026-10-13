@@ -12,7 +12,7 @@ from shall.corpus import load_corpus
 from shall.jev import Jev
 from shall.artifact import build_artifact, detect_kind, read_source
 from shall.select import Selector, classify_document
-from shall.review import run_claude
+from shall.claude import run_claude
 
 SYSTEM = """You label an evaluation set for a classifier that selects engineering standards.
 A statement is APPLICABLE to an artifact when the artifact contains (or, for a task, the work will

@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from fakes import FakeJev
+from shall import git
 from shall.artifact import parse_diff
 from shall.claude_judge import parse_reply
 from shall.config import load_config
@@ -30,26 +32,6 @@ def org():
     corpus = load_corpus(cfg)
     yield cfg, corpus
     mp.undo()
-
-
-class FakeJev:
-    """Answers p per question id from a table; `#applies` questions answer 0.95 by default."""
-
-    def __init__(self, table=None, fail=None, delay=0.0):
-        self.table, self.fail, self.delay = table or {}, fail, delay
-        self.usage = {"requests": 0, "cached": 0}
-        self.states = []
-
-    def available(self):
-        return True
-
-    async def ask(self, state, questions):
-        await asyncio.sleep(self.delay)
-        if self.fail:
-            raise self.fail
-        self.usage["requests"] += 1
-        self.states.append(state)
-        return {q: {"p": self.table.get(q, 0.95 if q.endswith("#applies") else 0.02)} for q in questions}
 
 
 def hooks_for(org, jev, draft_as_enforced=True, **kw):
@@ -472,7 +454,7 @@ def test_disabled_flag_and_stop_lock(org, tmp_path, monkeypatch):
     off.cfg.data["hooks"]["enabled"] = False  # a workspace turns the plugin hooks off
     assert pre(off, "Bash", {"command": "git push origin main"}) == {} and not jev.states
     # a second Stop on a change that is being reviewed (nested session, other window) is skipped
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    git.init(tmp_path)
     (tmp_path / "a.py").write_text("x = 1\n")
     hooks = hooks_for(org, FakeJev())
     hooks.cfg.root = tmp_path
@@ -495,7 +477,7 @@ def test_disabled_flag_and_stop_lock(org, tmp_path, monkeypatch):
 
 def test_shall_output_dirs_ignore_themselves(tmp_path):
     from shall.config import make_dir
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)  # a repository that does not know shall
+    git.init(tmp_path)  # a repository that does not know shall
     (make_dir(tmp_path / ".shall" / ".shall-out" / "hooks" / "stop-s") / "change.diff").write_text("x\n")
     (make_dir(tmp_path / ".shall-cache" / "hooks") / "decisions.jsonl").write_text("{}\n")
     status = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=tmp_path,

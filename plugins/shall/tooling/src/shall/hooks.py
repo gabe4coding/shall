@@ -32,19 +32,20 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import git
 from .artifact import Chunk, parse_diff
 from .claude_judge import ClaudeJudge, NeedsReply
-from .config import OUTPUT_DIRS, Config, make_dir
+from .config import ACTIONS, OUTPUT_DIRS, Action, Config, make_dir
 from .corpus import Corpus, Rfc, Statement
-from .jev import Jev, noul
+from .findings import read_findings
+from .jev import JevLike, noul
 
-RANK = {"log": 1, "warn": 2, "ask": 3, "deny": 4}
+RANK: dict[Action, int] = {action: n for n, action in enumerate(ACTIONS, 1)}
 
 # The Claude judge of the event being handled: one per event, also when `shall hookd` handles
 # several events at the same time.
@@ -97,7 +98,7 @@ def scan_secrets(text: str) -> list[Secret]:
         for m in rx.finditer(text):
             value = m.group("v")
             # a value that repeats its own key name is a key (`jevTokens: 'jevTokens' in view`)
-            name = re.match(r"[\w.-]*", m.group(0)).group(0)
+            name = re.split(r"[^\w.-]", m.group(0), maxsplit=1)[0]
             if PLACEHOLDER_RE.search(value) or _norm(value) == _norm(name):
                 continue
             found.append(Secret(kind, m.start("v"), m.end("v")))
@@ -249,14 +250,15 @@ def code_question(st: Statement):
     )
 
 
-def action_for(actions: dict, rfc: Rfc, st: Statement, p: float) -> str | None:
-    for threshold, action in (actions.get(rfc.status) or {}).get(st.level or "", []):
-        if p >= float(threshold):
+def action_for(actions: dict, rfc: Rfc, st: Statement, p: float) -> Action | None:
+    # load_config checked the rows (local) or dropped the ones it cannot read (org config)
+    for threshold, action in (actions.get(rfc.status) or {}).get(st.level or "") or []:
+        if p >= threshold:
             return action
     return None
 
 
-def code_action(actions: dict, code_warn: float, rfc: Rfc, st: Statement, p: float) -> str | None:
+def code_action(actions: dict, code_warn: float, rfc: Rfc, st: Statement, p: float) -> Action | None:
     """After a write nothing can be denied, and a fragment is not evidence: at most a warning."""
     action = action_for(actions, rfc, st, p)
     if action is None:
@@ -266,7 +268,7 @@ def code_action(actions: dict, code_warn: float, rfc: Rfc, st: Statement, p: flo
     return action
 
 
-def strongest(findings: list[dict]) -> str | None:
+def strongest(findings: list[dict]) -> Action | None:
     acted = [f["action"] for f in findings if f.get("action")]
     return max(acted, key=RANK.__getitem__) if acted else None
 
@@ -360,12 +362,8 @@ def synthetic_diff(rel: str, text: str, ranges: list[tuple[int, int]], context: 
 
 # ---------------------------------------------------------------- git helpers
 
-def _git(cwd: str | Path, *args: str, ok=(0,)) -> str | None:
-    try:
-        r = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, timeout=10)
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    return r.stdout if r.returncode in ok else None
+def _git(cwd: str | Path, *args: str, ok: tuple[int, ...] = (0,)) -> str | None:
+    return git.git(cwd, *args, ok=ok, timeout=10)  # a hook answers in seconds
 
 
 # shall's own caches and outputs are never part of the change, even where .gitignore misses them
@@ -384,7 +382,7 @@ def working_diff(root: Path) -> str:
 # ---------------------------------------------------------------- the hooks
 
 class Hooks:
-    def __init__(self, cfg: Config, corpus: Corpus, jev: Jev, statuses: list[str] | None = None,
+    def __init__(self, cfg: Config, corpus: Corpus, jev: JevLike, statuses: list[str] | None = None,
                  timeout: float | None = -1, log: bool = True, score: str = "both",
                  skip_when_denied: bool = True, claude: ClaudeJudge | None = None):
         self.cfg = cfg
@@ -409,7 +407,7 @@ class Hooks:
     # -- entry point shared by `shall hook` and `shall hookd`
     async def handle(self, event: dict) -> dict:
         if os.environ.get("SHALL_HOOKS_DISABLED") or not self.cfg.get("hooks.enabled", True):
-            return {}  # env: set for the agents shall itself runs (review.run_claude)
+            return {}  # env: set for the agents shall itself runs (claude.run_claude)
         name = event.get("hook_event_name")
         t0 = time.perf_counter()
         record: dict = {"event": name, "session": event.get("session_id")}
@@ -419,6 +417,7 @@ class Hooks:
             replies = event.get("shall_replies")
             judge = ClaudeJudge(self.cfg, replies if isinstance(replies, dict) else None)
         token = _event_judge.set(judge)
+        out: dict
         try:
             if name == "PreToolUse":
                 out = await self.pre(event, record)
@@ -456,7 +455,7 @@ class Hooks:
         with self.log_path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-    def _finding(self, rfc: Rfc, st: Statement, p: float, action: str | None, by: str, **extra) -> dict:
+    def _finding(self, rfc: Rfc, st: Statement, p: float, action: Action | None, by: str, **extra) -> dict:
         return {"id": st.id, "title": st.title, "level": st.level, "status": rfc.status, "text": st.text,
                 "p": round(p, 4), "action": action, "by": by, **extra}
 
@@ -678,10 +677,13 @@ class Hooks:
         checked: set[tuple[str, str]] = set()
         for chunk in chunks:
             text = (texts or {}).get(chunk.path)
-            for rfc, st in (selector.eligible(chunk, checks=True) if text is not None else []):
+            if text is None:
+                continue
+            for rfc, st in selector.eligible(chunk, checks=True):
                 if (chunk.path, st.id) in checked:
                     continue  # one check per file, whatever the number of chunks
                 checked.add((chunk.path, st.id))
+                assert st.check is not None  # eligible(checks=True) keeps only statements with a known Check
                 lines = CHECKS[st.check](chunk.path, text)
                 if lines is None:
                     continue  # the check cannot judge this file
@@ -713,10 +715,9 @@ class Hooks:
         if not self.cfg.get("hooks.stop.enabled"):
             return {}
         cwd = event.get("cwd") or "."
-        top = (_git(cwd, "rev-parse", "--show-toplevel") or "").strip()
-        if not top:
+        root = git.toplevel(cwd, timeout=10)
+        if root is None:
             return {}
-        root = Path(top)
         diff = working_diff(root)
         if not diff.strip():
             return {}
@@ -767,15 +768,15 @@ class Hooks:
         if proc.returncode not in (0, 2) or not findings_path.is_file():
             return {"systemMessage": f"shall: stop review failed (exit {proc.returncode}): "
                                      f"{redact(err.decode(errors='replace').strip()[-300:])[0]}"}
-        findings = json.loads(findings_path.read_text(encoding="utf-8"))["findings"]
-        blocking = [f for f in findings if f.get("blocking")]
+        findings = read_findings(findings_path)
+        blocking = [f for f in findings if f.blocking]
         state["reviewed"] = sha
-        record["findings"] = [{"id": f["statement_id"], "blocking": f["blocking"]} for f in findings]
+        record["findings"] = [{"id": f.statement_id, "blocking": f.blocking} for f in findings]
         out: dict = {}
         if blocking and state.get("blocks", 0) < int(self.cfg.get("hooks.stop.max_blocks")):
             state["blocks"] = state.get("blocks", 0) + 1
-            lines = [f"- {f['statement_id']} {f['title']} at {f['path']}:{f.get('line') or '?'}: "
-                     f"{f['message']}" + (f" Suggestion: {f['suggestion']}" if f.get("suggestion") else "")
+            lines = [f"- {f.statement_id} {f.title} at {f.path}:{f.line or '?'}: "
+                     f"{f.message}" + (f" Suggestion: {f.suggestion}" if f.suggestion else "")
                      for f in blocking]
             out = {"decision": "block",
                    "reason": "shall review found verified blocking findings in the change. Fix them before "

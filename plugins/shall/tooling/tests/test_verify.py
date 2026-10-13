@@ -1,24 +1,20 @@
 """Verification of findings: code picks what is verified and applies verdicts; severity only goes down."""
 
 import asyncio
-import subprocess
+from dataclasses import replace
 from types import SimpleNamespace
 
+from fakes import FakeJev
+from fakes import make_finding as finding
+from shall import git
 from shall.artifact import build_artifact
 from shall.verify import apply_verdict, gather_excerpts, needs_verification, search_terms, verify_findings
 
 
-def finding(**kw):
-    base = {"statement_id": "JTOOL-0002.1", "level": "MUST", "blocking": True, "path": "shall.yaml",
-            "line": 2, "quote": "command: [claude, -p]", "message": "agent runs with tools",
-            "statement_text": "The review agent MUST run with no tools.", "depends_on": [], "chunk": "c0"}
-    return {**base, **kw}
-
-
 def test_what_gets_verified_is_decided_by_code():
     assert needs_verification(finding())                                    # blocking: always
-    assert needs_verification(finding(blocking=False, depends_on=["x"]))    # advisory with depends_on
-    assert not needs_verification(finding(blocking=False))                  # advisory, self-contained
+    assert needs_verification(finding(corpus_blocking=False, depends_on=["x"]))    # advisory with depends_on
+    assert not needs_verification(finding(corpus_blocking=False))                # advisory, self-contained
 
 
 def test_search_terms_use_depends_on_first_and_skip_noise():
@@ -39,7 +35,7 @@ def test_yaml_key_path_and_statement_code_spans_become_terms():
 def test_code_ranks_before_docs(tmp_path):
     (tmp_path / "README.md").write_text("Run claude with review.command.\n")
     (tmp_path / "run.py").write_text("x = cfg.get('review.command')\n")
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    git.init(tmp_path)
     assert [e.path for e in gather_excerpts(tmp_path, ["review.command"], set())] == ["run.py", "README.md"]
 
 
@@ -50,7 +46,7 @@ def test_gather_excerpts_finds_other_files_and_skips_own_file_and_standards(tmp_
     (tmp_path / "src" / "review.py").write_text(
         "def run():\n    cmd = list(cfg.get('review.command')) + [\n        '--tools', '',\n    ]\n")
     (tmp_path / "corpus" / "rule.md").write_text("The review.command MUST run with no tools.\n")
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    git.init(tmp_path)
     ex = gather_excerpts(tmp_path, ["review.command", "claude"], {"shall.yaml", "corpus"})
     assert [e.path for e in ex] == ["src/review.py"]
     assert "'--tools', ''" in ex[0].text and ex[0].start == 1
@@ -61,7 +57,7 @@ def test_excerpts_stay_small_on_one_line_files(tmp_path):
     (tmp_path / "cache.json").write_text('{"review.command": "' + "x" * 400_000 + '"}\n')
     (tmp_path / "run.py").write_text("\n".join(f"cmd{i} = cfg.get('review.command')  # {'y' * 300}"
                                               for i in range(200)) + "\n")
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    git.init(tmp_path)
     ex = {e.path: e for e in gather_excerpts(tmp_path, ["review.command"], set())}
     assert set(ex) == {"cache.json", "run.py"}
     assert len(ex["cache.json"].text) < 500 and "…[cut " in ex["cache.json"].text
@@ -81,43 +77,45 @@ def test_refuted_with_evidence_is_dropped():
     kept, dropped = apply_verdict(finding(), {"verdict": "refuted", "reason": "review.py adds --tools ''",
                                               "evidence": ["e0"]}, [SimpleNamespace(id="e0", path="src/review.py",
                                                                                      start=1, end=4)])
-    assert kept is None and dropped["verification"]["evidence"] == ["src/review.py:1-4"]
+    assert kept is None and dropped is not None and dropped["verification"]["evidence"] == ["src/review.py:1-4"]
 
 
 def test_refuted_without_evidence_is_kept_but_not_blocking():
     kept, dropped = apply_verdict(finding(), {"verdict": "refuted", "reason": "trust me", "evidence": ["e9"]}, [])
-    assert dropped is None and kept["blocking"] is False and kept["verification"]["verdict"] == "unknown"
+    assert dropped is None and kept is not None and kept.blocking is False
+    assert kept.verification is not None and kept.verification.verdict == "unknown"
 
 
 def test_unknown_downgrades_a_blocking_finding():
     kept, _ = apply_verdict(finding(), {"verdict": "unknown", "reason": "SDK default not shown", "evidence": []}, [])
-    assert kept["blocking"] is False and kept["downgraded"] is True
+    assert kept is not None and kept.blocking is False and kept.downgraded is True
 
 
 def test_confirmed_keeps_blocking_and_never_upgrades_an_advisory():
     kept, _ = apply_verdict(finding(), {"verdict": "confirmed", "reason": "r", "evidence": ["chunk"]}, [])
-    assert kept["blocking"] is True
-    kept, _ = apply_verdict(finding(blocking=False, depends_on=["x"]),
+    assert kept is not None and kept.blocking is True
+    kept, _ = apply_verdict(finding(corpus_blocking=False, depends_on=["x"]),
                             {"verdict": "confirmed", "reason": "r", "evidence": ["chunk"]}, [])
-    assert kept["blocking"] is False
+    assert kept is not None and kept.blocking is False
 
 
 def test_confirmed_without_existing_evidence_does_not_block():
     kept, _ = apply_verdict(finding(), {"verdict": "confirmed", "reason": "r", "evidence": ["e7"]}, [])
-    assert kept["blocking"] is False and kept["verification"]["verdict"] == "unknown"
+    assert kept is not None and kept.blocking is False
+    assert kept.verification is not None and kept.verification.verdict == "unknown"
 
 
 def test_missing_verdict_counts_as_unknown():
     kept, _ = apply_verdict(finding(), None, [])
-    assert kept["blocking"] is False and kept["verification"]["verdict"] == "unknown"
+    assert kept is not None and kept.blocking is False
+    assert kept.verification is not None and kept.verification.verdict == "unknown"
 
 
-class FakeJev:
-    async def gather(self, aws):
-        return list(await asyncio.gather(*aws))
+class ExcerptJev(FakeJev):
+    """Relevant: an excerpt that shows `--tools`."""
 
-    async def ask(self, state, questions):
-        return {"relevant": {"p": 0.9 if "--tools" in state["excerpt"] else 0.1}}
+    def p(self, state, qid):
+        return 0.9 if "--tools" in state["excerpt"] else 0.1
 
 
 def test_end_to_end_only_verifies_what_code_selects(tmp_path):
@@ -133,11 +131,11 @@ def test_end_to_end_only_verifies_what_code_selects(tmp_path):
     cfg = SimpleNamespace(get=lambda key: 2)
     corpus = SimpleNamespace(layers=[])
     blocking = finding(depends_on=["review.command"])
-    advisory = finding(statement_id="JTOOL-0001.4", blocking=False, line=1, quote="review:")
-    kept, dropped, stats = asyncio.run(verify_findings(cfg, corpus, art, FakeJev(), [blocking, advisory],
+    advisory = finding(statement_id="JTOOL-0001.4", corpus_blocking=False, line=1, quote="review:")
+    kept, dropped, stats = asyncio.run(verify_findings(cfg, corpus, art, ExcerptJev(), [blocking, advisory],
                                                        search_root=tmp_path, agent=agent))
     assert len(prompts) == 1 and "review.py" in prompts[0]      # only the blocking one was verified
-    assert [k["statement_id"] for k in kept] == ["JTOOL-0001.4"]
+    assert [k.statement_id for k in kept] == ["JTOOL-0001.4"]
     assert dropped[0]["statement_id"] == "JTOOL-0002.1"
     assert stats["refuted"] == 1 and stats["verified"] == 1
 
@@ -152,10 +150,10 @@ def test_a_diff_finding_gets_evidence_from_the_rest_of_its_own_file(tmp_path):
     art = build_artifact("pr.diff", diff, "diff", 40000)
     f = finding(path="api.ts", line=83, quote="return client.get(`/items/${id}`);", depends_on=["client"],
                 statement_text="Every outbound call MUST set a timeout.", chunk=art.chunks[0].id)
-    excerpts, _ = asyncio.run(gather_evidence(art, FakeJev(), f, tmp_path, set(), None))
+    excerpts, _ = asyncio.run(gather_evidence(art, ExcerptJev(), f, tmp_path, set(), None))
     assert any(e.path == "api.ts" and e.start == 1 for e in excerpts)        # the client setup, 80 lines up
     assert not any(e.path == "api.ts" and e.start >= 63 for e in excerpts)  # not the lines the chunk shows
     whole = build_artifact("api.ts", (tmp_path / "api.ts").read_text(), "code", 40000)
-    excerpts, _ = asyncio.run(gather_evidence(whole, FakeJev(), {**f, "chunk": whole.chunks[0].id},
+    excerpts, _ = asyncio.run(gather_evidence(whole, ExcerptJev(), replace(f, chunk=whole.chunks[0].id),
                                               tmp_path, set(), None))
     assert not any(e.path == "api.ts" for e in excerpts)                     # a whole file is already shown

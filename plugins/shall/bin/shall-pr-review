@@ -32,13 +32,14 @@ while [[ $# -gt 0 ]]; do
     --triage) triage=1; shift ;;
     --resolve-noise) resolve_noise="--resolve-noise"; shift ;;
     -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
-    *) echo "unknown argument: $1" >&2; exit 64 ;;
+    *) echo "shall-pr-review: unknown argument: $1" >&2; exit 1 ;;   # exit codes 0/1/2/3 only (JTOOL-0003.1)
   esac
 done
 
 mkdir -p "$out_dir"
 rm -f "$out_dir/triage.json" "$out_dir/triage.md"   # never publish the triage of an earlier run
-git diff --no-color "$base"...HEAD > "$out_dir/pr.diff"
+git diff --no-color "$base"...HEAD > "$out_dir/pr.diff" \
+  || { echo "shall-pr-review: git diff against $base failed" >&2; exit 1; }
 if [[ ! -s "$out_dir/pr.diff" ]]; then
   echo "shall-pr-review: empty diff against $base, nothing to review"
   exit 0

@@ -398,7 +398,7 @@ def label(args) -> None:
     import random as rnd
 
     from shall.config import load_config
-    from shall.review import run_claude
+    from shall.claude import run_claude
     cfg = load_config(str(ROOT / "shall.yaml"))
     path = OUT / "labels" / "proposed.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -20,8 +20,10 @@ Plain `shall` resolves to `.shall/` (this repo's `JTOOL-` rules). The example or
 
 ## Commands
 ```bash
-make test         # unit tests, no network
-make check        # org corpus lint + index current, no model calls
+make test         # unit + boundary tests, no network
+make typecheck    # pyright (Literal types, exhaustive match)
+make lint-imports # deterministic modules import no model module
+make check        # typecheck + lint-imports + org corpus lint + index current, no model calls
 make build        # after editing corpus/ (index is committed)
 make self-check   # this repo's own rules
 ```

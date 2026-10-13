@@ -20,6 +20,17 @@ not_applies_when: >
 
 # JTOOL-0003: shall CLI contract
 
+## Checks in code
+
+Code checks part of these rules. Review checks the rest.
+
+- JTOOL-0003.1: `ExitCode` in `plugins/shall/tooling/src/shall/cli.py`, and `plugins/shall/tooling/tests/test_boundaries.py`
+  (`test_every_command_returns_an_exit_code`, `test_usage_error_exits_1_not_2`,
+  `test_scripts_exit_with_shall_codes_only`).
+- JTOOL-0003.2: `make check` (import-linter contract "Deterministic modules call no model"), and `plugins/shall/tooling/tests/test_boundaries.py`
+  (`test_deterministic_commands_reach_no_model_module`, `test_deterministic_commands_do_not_load_the_sdk`).
+- JTOOL-0003.3: `make check` and `make self-check` (`shall build --check`).
+
 ## Requirements
 
 ### JTOOL-0003.1 Stable exit codes

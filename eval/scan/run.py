@@ -36,7 +36,7 @@ from shall.config import load_config
 from shall.corpus import load_corpus
 from shall.hooks import Hooks, redact
 from shall.jev import Jev
-from shall.review import run_claude
+from shall.claude import run_claude
 from shall.select import Selector
 
 ROOT = Path(__file__).resolve().parents[2]

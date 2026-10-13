@@ -2,11 +2,12 @@
 
 import asyncio
 import copy
-import subprocess
 from pathlib import Path
 
 import pytest
 
+from fakes import FakeJev
+from shall import git
 from shall.config import load_config
 from shall.corpus import load_corpus
 from shall.scan import excluded, list_files, render_lines, render_markdown, run_scan
@@ -24,28 +25,6 @@ def org():
     mp.undo()
 
 
-class FakeJev:
-    """p per question id from a table (or per file: {path: table}); `#applies` answers 0.95,
-    violations 0.02 by default."""
-
-    def __init__(self, table=None, fail=None, per_file=None):
-        self.table, self.fail, self.per_file = table or {}, fail, per_file or {}
-        self.usage = {"requests": 0, "cached": 0, "input_tokens": 0}
-        self.states = []
-
-    def available(self):
-        return True
-
-    async def ask(self, state, questions):
-        if self.fail:
-            raise self.fail
-        self.usage["requests"] += 1
-        self.usage["input_tokens"] += 1000
-        self.states.append(state)
-        table = {**self.table, **self.per_file.get(state.get("file"), {})}
-        return {q: {"p": table.get(q, 0.95 if q.endswith("#applies") else 0.02)} for q in questions}
-
-
 def write(root: Path, files: dict[str, str]) -> None:
     for rel, text in files.items():
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -53,7 +32,8 @@ def write(root: Path, files: dict[str, str]) -> None:
 
 
 def git_repo(root: Path, files: dict[str, str]) -> Path:
-    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    root.mkdir(parents=True, exist_ok=True)
+    git.init(root)
     write(root, files)
     return root
 
