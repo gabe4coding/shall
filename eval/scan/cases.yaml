@@ -3,7 +3,7 @@
 repos:
   sca-gap-map:
     url: git@github.com:gabe4coding/sca-gap-map.git
-    checkout: ~/Repositories/thefork/sca-gap-map
+    checkout: ~/Repositories/sca-gap-map
     sha: fc89f0d0476403d0a5b620029bd1d79e3969164b
   plainwright:
     url: git@github.com:gabe4coding/plainwright.git

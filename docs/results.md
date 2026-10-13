@@ -182,7 +182,7 @@ Actions the user would see before that change, with JRFC-0012 trialled as enforc
 
 `eval/scan/run.py` · can the post-write hook path (`Hooks.post` with a `Write` of the whole
 file: code prefilter, then one Jev request with min(applies, violates)) lint existing code?
-100 real files from two repositories (sca-gap-map, Python; plainwright, TypeScript and
+100 real files from two repositories (a private Python tool; plainwright, TypeScript and
 JavaScript), 2 fresh reps, ~31 candidate statements per file (all statuses), 6,270 pairs.
 `cases.yaml` holds only repository, sha and path; the runner reads the files with `git show`.
 Labels: Claude Opus 5.5 labelled every pair without seeing Jev's scores; a person ruled on 3
@@ -206,7 +206,7 @@ per-item check, so treat the labels as Claude's.
 - Every violation Claude found was scored ≥ 0.5 by Jev at least once, and none of the 30 random
   clean pairs was a violation: the scan misses little at 0.5; the threshold trades noise, not recall.
 - Harness checks: an oracle (scores = labels) gives 1.00 / 1.00, a null gives no flags.
-- **Hill-climb on the criteria** (`.claude/hillclimb/scan/`, 50/50 train/test split stratified
+- **Hill-climb on the criteria** (local `.claude/hillclimb/scan/`, not committed; 50/50 train/test split stratified
   by language and gold violation; the analyzer read train only; deltas paired over the test files):
 
   | round | change | test precision@0.7 | test recall@0.7 |
