@@ -3,11 +3,5 @@
 .venv/
 __pycache__/
 *.pyc
-# eval output (.claude/hillclimb): derived files, and traces/review that hold source code
-.claude/hillclimb/**/traces/
-.claude/hillclimb/**/report.html
-.claude/hillclimb/**/review.yaml
-.claude/hillclimb/**/trajectory/
-.claude/hillclimb/**/results.jsonl
-.claude/hillclimb/**/errors.jsonl
-.claude/hillclimb/**/proposed.rubric*.jsonl
+# eval output: hillclimb runs are local only
+.claude/hillclimb/
