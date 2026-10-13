@@ -1,9 +1,11 @@
 # Whole-file scan eval: ids only. File content is read with `git show <sha>:<path>`
 # from a local checkout, so no source code is stored in this repository.
-# The private repo key is private-py. Its git URL is not in this file.
+# private-py has no url or checkout here. The runner reads this file, then
+# eval/scan/repos.local.yaml (gitignored), then SHALL_SCAN_URL_<KEY> and
+# SHALL_SCAN_CHECKOUT_<KEY>. KEY is the repo key in uppercase, a hyphen written
+# as an underscore. The default checkout is ~/Repositories/<key>. The sha stays here.
 repos:
   private-py:
-    checkout: ~/Repositories/private-py
     sha: fc89f0d0476403d0a5b620029bd1d79e3969164b
   plainwright:
     url: git@github.com:gabe4coding/plainwright.git

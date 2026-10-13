@@ -4,7 +4,9 @@
 
 ## private-py @ fc89f0d (39 files)
 
-The git URL of this repository is not stored here. The paths below are the paths at that sha.
+The git URL of private-py is not stored here. The checkout is local:
+`SHALL_SCAN_CHECKOUT_PRIVATE_PY`, or `~/Repositories/private-py` when that variable is unset.
+The paths below are the paths at that sha.
 
 | id | path | lang | area | lines | rules |
 |---|---|---|---|---|---|

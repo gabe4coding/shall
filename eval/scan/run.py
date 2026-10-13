@@ -2,8 +2,9 @@
 
 The app under test is the post-write hook path (`Hooks.post` with a `Write` of the whole
 file): the code prefilter, then one Jev request with min(applies, violates) per candidate
-statement. Files are read with `git show <sha>:<path>` from the local checkouts named in
-cases.yaml, so no source code is stored in this repository.
+statement. Files are read with `git show <sha>:<path>` from a local checkout
+(`SHALL_SCAN_CHECKOUT_<KEY>`, else `eval/scan/repos.local.yaml`, else `cases.yaml`, else
+`~/Repositories/<key>`), so no source code is stored in this repository.
 
 Steps (each resumes where it stopped):
   approve              record the harness sha (the user runs this, after reading the harness)
@@ -41,6 +42,7 @@ from shall.select import Selector
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES = ROOT / "eval/scan/cases.yaml"
+LOCAL_REPOS = ROOT / "eval/scan/repos.local.yaml"  # gitignored: url and checkout, never the sha
 LABELS = ROOT / "eval/scan/labels.yaml"          # human-reviewed gold (ids, verdicts, reasons: no code)
 FLOW = ROOT / ".claude/hillclimb/scan"
 STATUSES = ["draft", "approved", "enforced"]     # measure the judgment, not the policy (as eval-hooks)
@@ -67,8 +69,40 @@ def append(path: Path, row: dict) -> None:
         f.write(json.dumps(row, sort_keys=True) + "\n")
 
 
+def repo_env_key(key: str) -> str:
+    """private-py -> PRIVATE_PY, the suffix of SHALL_SCAN_CHECKOUT_PRIVATE_PY."""
+    return re.sub(r"[^A-Za-z0-9]", "_", key).upper()
+
+
+def overlay_repos(repos: dict) -> dict:
+    """url and checkout are local. cases.yaml, then repos.local.yaml, then the environment.
+    The sha is never overlaid: every run must read the same commit."""
+    local: dict = {}
+    if LOCAL_REPOS.is_file():
+        loaded = yaml.safe_load(LOCAL_REPOS.read_text(encoding="utf-8")) or {}
+        if not isinstance(loaded, dict) or not isinstance(loaded.get("repos") or {}, dict):
+            sys.exit(f"scan eval: {LOCAL_REPOS.relative_to(ROOT)} must be a mapping with a repos: key")
+        local = loaded.get("repos") or {}
+    out = {}
+    for key, repo in repos.items():
+        merged = dict(repo)
+        over = local.get(key) or {}
+        if not isinstance(over, dict):
+            sys.exit(f"scan eval: repos.{key} in {LOCAL_REPOS.relative_to(ROOT)} must be a mapping")
+        for field in ("url", "checkout"):
+            if over.get(field):
+                merged[field] = over[field]
+        ek = repo_env_key(key)
+        for field, name in (("url", f"SHALL_SCAN_URL_{ek}"), ("checkout", f"SHALL_SCAN_CHECKOUT_{ek}")):
+            if os.environ.get(name):
+                merged[field] = os.environ[name]
+        out[key] = merged
+    return out
+
+
 def load_cases(only: str | None) -> tuple[dict, list[dict]]:
     doc = yaml.safe_load(CASES.read_text(encoding="utf-8"))
+    repos = overlay_repos(doc["repos"])
     cases = doc["cases"]
     if only:
         want = set(only.split(","))
@@ -76,13 +110,27 @@ def load_cases(only: str | None) -> tuple[dict, list[dict]]:
         missing = want - {c["id"] for c in cases}
         if missing:
             raise SystemExit(f"unknown case id(s): {sorted(missing)}")
-    return doc["repos"], cases
+    return repos, cases
+
+
+def checkout_of(key: str, repo: dict) -> str:
+    return os.path.expanduser(repo.get("checkout") or f"~/Repositories/{key}")
 
 
 def read_file(repos: dict, case: dict) -> str:
-    repo = repos[case["repo"]]
-    checkout = os.path.expanduser(repo["checkout"])
-    return subprocess.check_output(["git", "-C", checkout, "show", f"{repo['sha']}:{case['path']}"], text=True)
+    key = case["repo"]
+    repo = repos[key]
+    checkout = checkout_of(key, repo)
+    ek = repo_env_key(key)
+    if not os.path.isdir(checkout):
+        sys.exit(f"scan eval: checkout for {key} is not at {checkout}. "
+                 f"Set SHALL_SCAN_CHECKOUT_{ek}, or set checkout under repos.{key} "
+                 f"in {LOCAL_REPOS.relative_to(ROOT)}.")
+    try:
+        return subprocess.check_output(["git", "-C", checkout, "show", f"{repo['sha']}:{case['path']}"], text=True)
+    except subprocess.CalledProcessError as e:
+        sys.exit(f"scan eval: git show failed for {key} ({case['path']}) in {checkout} "
+                 f"(exit {e.returncode}). Check the sha and SHALL_SCAN_CHECKOUT_{ek}.")
 
 
 def harness_sha() -> str:
