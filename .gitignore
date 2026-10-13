@@ -5,3 +5,5 @@ __pycache__/
 *.pyc
 # eval output: hillclimb runs are local only
 .claude/hillclimb/
+# local scan-eval git urls and checkout paths
+eval/scan/repos.local.yaml

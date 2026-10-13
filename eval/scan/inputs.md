@@ -2,7 +2,9 @@
 
 100 files, one Jev request each (all fit in one chunk). Rules asked per file: the code prefilter's candidates, all statuses (draft included).
 
-## sca-gap-map @ fc89f0d (39 files)
+## private-py @ fc89f0d (39 files)
+
+The git URL of this repository is not stored here. The paths below are the paths at that sha.
 
 | id | path | lang | area | lines | rules |
 |---|---|---|---|---|---|
@@ -114,7 +116,7 @@
 
 ## Left out
 
-- `sca-gap-map/sca_gap_map/baseline_data.py`: embedded BlackDuck audit data (vulnerability rows); must not go to TypeSafe
+- `private-py/sca_gap_map/baseline_data.py`: embedded third-party data; must not go to TypeSafe
 - `tests, fixtures, generated`: not the code a scan must judge first
 - `plainwright/examples/*.yaml, examples/mobile/`: plainwright test specs, not code
 - `plainwright/plugins/*/bin/launch.mjs`: 3 byte-identical copies of scripts/plugin-launcher.mjs

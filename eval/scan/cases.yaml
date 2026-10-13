@@ -1,292 +1,292 @@
-# Whole-file scan eval: ids only, file content is read with `git show <sha>:<path>`
-# from the local checkout, so no source code is stored in this repository.
+# Whole-file scan eval: ids only. File content is read with `git show <sha>:<path>`
+# from a local checkout, so no source code is stored in this repository.
+# The private repo key is private-py. Its git URL is not in this file.
 repos:
-  sca-gap-map:
-    url: git@github.com:gabe4coding/sca-gap-map.git
-    checkout: ~/Repositories/sca-gap-map
+  private-py:
+    checkout: ~/Repositories/private-py
     sha: fc89f0d0476403d0a5b620029bd1d79e3969164b
   plainwright:
     url: git@github.com:gabe4coding/plainwright.git
     checkout: ~/Repositories/plainwright
     sha: b18d4e359917b23e8bcd6fa027e2715a4e4bae24
 excluded:
-  sca-gap-map/sca_gap_map/baseline_data.py: embedded BlackDuck audit data (vulnerability rows); must not go to TypeSafe
+  private-py/sca_gap_map/baseline_data.py: embedded third-party data; must not go to TypeSafe
   tests, fixtures, generated: not the code a scan must judge first
   plainwright/examples/*.yaml, examples/mobile/: plainwright test specs, not code
   plainwright/plugins/*/bin/launch.mjs: 3 byte-identical copies of scripts/plugin-launcher.mjs
 cases:
 - id: sgm-001
-  repo: sca-gap-map
+  repo: private-py
   path: .github/workflows/daily-report.yml
   tags:
   - yaml
-  - sca-gap-map
+  - private-py
   - github
 - id: sgm-002
-  repo: sca-gap-map
+  repo: private-py
   path: investigations/2026-09-17/claude-verification/report-fixed-code-2026-09-17-cold/compare_today.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - investigations
 - id: sgm-003
-  repo: sca-gap-map
+  repo: private-py
   path: investigations/2026-09-17/claude-verification/report-fixed-code-2026-09-17-cold/manual_vs_fixed.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - investigations
 - id: sgm-004
-  repo: sca-gap-map
+  repo: private-py
   path: investigations/2026-09-17/claude-verification/scripts/assemble.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - investigations
 - id: sgm-005
-  repo: sca-gap-map
+  repo: private-py
   path: investigations/2026-09-17/claude-verification/scripts/build_summary.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - investigations
 - id: sgm-006
-  repo: sca-gap-map
+  repo: private-py
   path: investigations/2026-09-17/claude-verification/scripts/check_lock.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - investigations
 - id: sgm-007
-  repo: sca-gap-map
+  repo: private-py
   path: investigations/2026-09-17/claude-verification/scripts/check_protobufjs.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - investigations
 - id: sgm-008
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/__init__.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - package
 - id: sgm-009
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/__main__.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - package
 - id: sgm-010
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/advisories.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - package
 - id: sgm-011
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/alerts.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - package
 - id: sgm-012
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/audit_source.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - package
 - id: sgm-013
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/cache.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - package
 - id: sgm-014
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/cli.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - package
 - id: sgm-015
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/deep_sweep.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - package
 - id: sgm-016
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/fix_prs.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - package
 - id: sgm-017
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/github_api.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - package
 - id: sgm-018
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/manifests.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - package
 - id: sgm-019
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/naming.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - package
 - id: sgm-020
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/osv.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - package
 - id: sgm-021
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/ownership.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - package
 - id: sgm-022
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/pipeline/__init__.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - pipeline
 - id: sgm-023
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/pipeline/alerts_discovery.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - pipeline
 - id: sgm-024
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/pipeline/audit_ingestion.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - pipeline
 - id: sgm-025
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/pipeline/ghost_alerts.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - pipeline
 - id: sgm-026
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/pipeline/installed_scan.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - pipeline
 - id: sgm-027
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/pipeline/inventory.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - pipeline
 - id: sgm-028
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/pipeline/long_rows.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - pipeline
 - id: sgm-029
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/pipeline/scoreboards.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - pipeline
 - id: sgm-030
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/pipeline/state.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - pipeline
 - id: sgm-031
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/pipeline/summary.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - pipeline
 - id: sgm-032
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/pipeline/triage.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - pipeline
 - id: sgm-033
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/pipeline/unplaced.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - pipeline
 - id: sgm-034
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/repos.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - package
 - id: sgm-035
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/sbom.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - package
 - id: sgm-036
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/util.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - package
 - id: sgm-037
-  repo: sca-gap-map
+  repo: private-py
   path: sca_gap_map/versions.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - package
 - id: sgm-038
-  repo: sca-gap-map
+  repo: private-py
   path: tools/compare_reports.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - tools
 - id: sgm-039
-  repo: sca-gap-map
+  repo: private-py
   path: tools/leadership_summary.py
   tags:
   - python
-  - sca-gap-map
+  - private-py
   - tools
 - id: pw-040
   repo: plainwright
