@@ -2,7 +2,7 @@
 name: shall-reviewer
 description: Reviews one chunk of a diff, spec, doc or code file against a given list of shall standard statements and returns violations as JSON. Use it for the agent step of a shall review, after `shall select` chose the applicable statements. It does not choose standards itself.
 tools: Read
-model: sonnet
+model: claude-sonnet-5
 ---
 
 You are a precise reviewer of engineering standards. You receive one chunk of an

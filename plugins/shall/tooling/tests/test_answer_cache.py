@@ -3,7 +3,7 @@
 import asyncio
 import sys
 
-from shall.review import AnswerCache, run_claude
+from shall.claude import AnswerCache, run_claude
 
 FAKE = """
 import json, pathlib, sys
@@ -86,3 +86,13 @@ def test_a_known_flaky_failure_is_retried_once_and_others_are_not(tmp_path):
     cfg, calls = setup(tmp_path / "x") if (tmp_path / "x").mkdir() is None else None
     out, meta = ask(cfg, "FAIL chunk", AnswerCache(None))
     assert out is None and "error" in meta and n_calls(calls) == 1    # an unknown failure: no retry
+
+
+def test_a_cache_file_that_is_not_an_object_starts_empty(tmp_path):
+    path = tmp_path / "review.json"
+    path.write_text("[]")
+    cache = AnswerCache(path)
+    assert cache.get("k") is None
+    cache.put("k", {"findings": []})
+    cache.save()
+    assert AnswerCache(path).get("k") == {"findings": []}

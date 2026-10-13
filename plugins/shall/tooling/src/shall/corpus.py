@@ -6,12 +6,15 @@ import datetime as dt
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal, TypeGuard, get_args
 
 import yaml
 
+from .checks import CHECKS
 from .config import Config, Layer
 
-STATUSES = ("draft", "approved", "enforced", "deprecated")
+Status = Literal["draft", "approved", "enforced", "deprecated"]
+STATUSES: tuple[Status, ...] = get_args(Status)
 ARTIFACTS = ("diff", "code", "spec", "doc", "tool")  # tool: an agent tool call (hooks.py)
 ENFORCEMENTS = ("agent", "linter", "human")
 REQUIRED_FRONT = (
@@ -31,19 +34,21 @@ KEYWORD_RE = re.compile(
 )
 CODE_SPAN_RE = re.compile(r"`[^`]*`")
 LOWER_KEYWORD_RE = re.compile(r"\b(must|shall|should)\b")
-LEVEL_OF = {
+Level = Literal["MUST", "SHOULD", "MAY"]
+Severity = Literal["error", "warning"]
+LEVEL_OF: dict[str, Level] = {
     "MUST": "MUST", "MUST NOT": "MUST", "SHALL": "MUST", "SHALL NOT": "MUST", "REQUIRED": "MUST",
     "SHOULD": "SHOULD", "SHOULD NOT": "SHOULD", "RECOMMENDED": "SHOULD", "NOT RECOMMENDED": "SHOULD",
     "MAY": "MAY", "OPTIONAL": "MAY",
 }
-LEVEL_RANK = {"MUST": 3, "SHOULD": 2, "MAY": 1}
+LEVEL_RANK: dict[Level, int] = {"MUST": 3, "SHOULD": 2, "MAY": 1}
 
 
 @dataclass
 class Issue:
     path: str
     line: int
-    severity: str  # error | warning
+    severity: Severity
     code: str
     message: str
     layer: str = "local"
@@ -69,7 +74,7 @@ class Statement:
     rfc_id: str
     title: str
     text: str
-    level: str | None
+    level: Level | None
     keywords: list[str]
     applies_when: str | None
     not_applies_when: str | None
@@ -86,7 +91,7 @@ class Statement:
 class Rfc:
     id: str
     title: str
-    status: str
+    status: Status | None   # None: not a valid status (a lint error); matches no status filter
     domain: str
     artifacts: list[str]
     languages: list[str]
@@ -101,6 +106,10 @@ class Rfc:
     path: Path
     statements: list[Statement] = field(default_factory=list)
     layer: str = "local"
+
+    @property
+    def status_label(self) -> str:
+        return self.status or "invalid"
 
     def statement_blocking(self, st: Statement) -> bool:
         return self.status == "enforced" and st.level == "MUST"
@@ -117,6 +126,13 @@ class Corpus:
 
     def statements(self) -> list[tuple[Rfc, Statement]]:
         return [(r, s) for r in self.rfcs.values() for s in r.statements]
+
+    def require(self, sid: str) -> tuple[Rfc, Statement]:
+        """The statement of an id that code already checked (selected, validated); KeyError if not."""
+        found = self.statement(sid)
+        if found is None:
+            raise KeyError(f"unknown statement {sid}")
+        return found
 
     def statement(self, sid: str) -> tuple[Rfc, Statement] | None:
         rfc = self.rfcs.get(sid.split(".")[0])
@@ -234,7 +250,8 @@ def _parse_statements(rfc_id: str, body: list[str], offset: int, rel: str, issue
         text = " ".join(text_lines)
         normative = CODE_SPAN_RE.sub("", text)  # `MUST` in backticks is a mention, not a use
         keywords = KEYWORD_RE.findall(normative)
-        levels = sorted({LEVEL_OF[k] for k in keywords}, key=lambda lv: -LEVEL_RANK[lv])
+        found: set[Level] = {LEVEL_OF[k] for k in keywords}
+        levels = sorted(found, key=lambda lv: -LEVEL_RANK[lv])
         statements.append(Statement(
             id=sid,
             rfc_id=rfc_id,
@@ -250,7 +267,8 @@ def _parse_statements(rfc_id: str, body: list[str], offset: int, rel: str, issue
             tools=meta.get("tools") or None,
             violated_when=meta.get("violated when") or None,
             pattern=meta.get("pattern") or None,
-            check=meta.get("check") or None,
+            # an unknown name is a lint error below; never stored, so CHECKS[st.check] cannot fail
+            check=meta.get("check") if meta.get("check") in CHECKS else None,
         ))
         # lint per statement
         line = offset + start + 1
@@ -283,7 +301,6 @@ def _parse_statements(rfc_id: str, body: list[str], offset: int, rel: str, issue
             issues.append(Issue(rel, line, "error", "pattern-enforcement",
                                 f"{sid} has a Pattern, so it is checked by code: use 'Enforcement: linter'"))
         if meta.get("check"):
-            from .checks import CHECKS
             if meta["check"] not in CHECKS:
                 issues.append(Issue(rel, line, "error", "check",
                                     f"{sid} has unknown Check '{meta['check']}' (known: {', '.join(sorted(CHECKS))})"))
@@ -293,6 +310,10 @@ def _parse_statements(rfc_id: str, body: list[str], offset: int, rel: str, issue
         if enf not in ENFORCEMENTS:
             issues.append(Issue(rel, line, "error", "enforcement", f"{sid} has unknown enforcement '{enf}'"))
     return statements
+
+
+def _is_status(value: str) -> TypeGuard[Status]:
+    return value in STATUSES
 
 
 def parse_rfc(path: Path, root: Path, issues: list[Issue], prefix: str | None = "JRFC") -> Rfc | None:
@@ -312,9 +333,10 @@ def parse_rfc(path: Path, root: Path, issues: list[Issue], prefix: str | None = 
         issues.append(Issue(rel, 1, "error", "rfc-id", f"id '{rid}' must look like {prefix}-0000 in this corpus"))
     elif not path.name.startswith(rid):
         issues.append(Issue(rel, 1, "error", "file-name", f"file name must start with '{rid}'"))
-    status = str(front.get("status", ""))
-    if status not in STATUSES:
-        issues.append(Issue(rel, 1, "error", "status", f"status '{status}' not in {STATUSES}"))
+    raw_status = str(front.get("status", ""))
+    status: Status | None = raw_status if _is_status(raw_status) else None
+    if status is None:
+        issues.append(Issue(rel, 1, "error", "status", f"status '{raw_status}' not in {STATUSES}"))
     artifacts = _as_list(front.get("artifacts"))
     for a in artifacts:
         if a not in ARTIFACTS:
@@ -419,7 +441,7 @@ def load_corpus(cfg: Config) -> Corpus:
                                     f"{rfc.id} and {sup} are in different corpus layers; a local RFC cannot "
                                     "supersede an organisation RFC (propose the change upstream)", rfc.layer))
     from .effects import load_effects
-    effects = load_effects([layer.effects_file for layer in cfg.layers], issues)
+    effects = load_effects([layer.effects_file for layer in cfg.layers if layer.effects_file], issues)
     return Corpus(root=cfg.root, domains=domains, rfcs=rfcs, issues=issues, layers=cfg.layers, effects=effects)
 
 

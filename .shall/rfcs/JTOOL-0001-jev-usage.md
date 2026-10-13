@@ -27,6 +27,14 @@ unrelated state. The first conflict checker put the whole corpus in one state an
 about `existing[i]`: almost every pair came back as a conflict. A Choice split 0.51 / 0.49
 between two failing classes and hid a real weakening. These rules keep those lessons.
 
+## Checks in code
+
+Code checks part of these rules. Review checks the rest.
+
+- JTOOL-0001.1: `make check` (import-linter contract "Only shall.jev imports the TypeSafe SDK").
+- JTOOL-0001.4: `plugins/shall/tooling/tests/test_boundaries.py` (`test_default_models_are_pinned_and_defined_once`).
+- JTOOL-0001.2 and JTOOL-0001.3: review only.
+
 ## Requirements
 
 ### JTOOL-0001.1 One client, one wrapper

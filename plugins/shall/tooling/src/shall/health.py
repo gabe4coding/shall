@@ -7,7 +7,12 @@ warnings, so a quiet review can be told apart from a blind one.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from .config import Config
+
+if TYPE_CHECKING:
+    from .findings import Finding
 
 EVENT_TEXT = {
     "parse_error": "file(s) could not be parsed (less evidence and fewer facts)",
@@ -29,7 +34,7 @@ def near_threshold(cfg: Config, selection: dict) -> list[dict]:
     return sorted(out, key=lambda x: -x["p"])
 
 
-def build_health(cfg: Config, selection: dict, stats: dict, findings: list[dict], dropped: list[dict],
+def build_health(cfg: Config, selection: dict, stats: dict, findings: list[Finding], dropped: list[dict],
                  events: list[dict]) -> dict:
     chunks = selection["chunks"]
     near = near_threshold(cfg, selection)
@@ -53,7 +58,7 @@ def build_health(cfg: Config, selection: dict, stats: dict, findings: list[dict]
             "reused": stats.get("reused", 0) + int(v.get("reused", 0)),   # incremental re-review
             "agent_errors": len(stats.get("errors", [])),
             "findings": len(findings),
-            "blocking": sum(1 for f in findings if f["blocking"]),
+            "blocking": sum(1 for f in findings if f.blocking),
             "dropped": len(dropped),
         },
         "verification": {

@@ -51,7 +51,7 @@ def load_effects(files: list[Path], issues: list | None = None) -> list[Effect]:
     out: list[Effect] = []
     seen: set[str] = set()
     for path in files:
-        if path is None or not path.is_file():
+        if not path.is_file():
             continue
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         for i, raw in enumerate(data.get("effects") or [], 1):

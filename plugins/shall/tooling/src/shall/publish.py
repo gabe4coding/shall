@@ -25,7 +25,7 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Callable
 
-from .review import MARKER_RE, SUMMARY_MARKER
+from .findings import MARKER_RE, SUMMARY_MARKER
 
 Runner = Callable[[list[str], str | None], str]
 

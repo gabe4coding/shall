@@ -13,13 +13,12 @@ layered: domain Nouls -> RFC Nouls -> statement Nouls. Fewer tokens, but a domai
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
 
 from .artifact import Artifact, Chunk
 from .config import Config
 from .corpus import Corpus, Rfc, Statement
-from .jev import Jev, choice, noul
+from .jev import JevLike, choice, noul
 
 APPLIES_NOTE = (
     "Answer yes when the content contains the kind of code or text this is about, "
@@ -78,7 +77,7 @@ DOC_KIND_QUESTION = choice(
 )
 
 
-async def classify_document(jev: Jev, name: str, raw: str) -> tuple[str, dict]:
+async def classify_document(jev: JevLike, name: str, raw: str) -> tuple[str, dict]:
     head = raw[:12000]
     ans = await jev.ask({"file": name, "content": head}, {"kind": DOC_KIND_QUESTION})
     return ans["kind"]["choice"], ans["kind"]
@@ -96,7 +95,7 @@ class ChunkSelection:
 
 
 class Selector:
-    def __init__(self, cfg: Config, corpus: Corpus, jev: Jev, strategy: str | None = None,
+    def __init__(self, cfg: Config, corpus: Corpus, jev: JevLike, strategy: str | None = None,
                  include_status: list[str] | None = None, facts: dict[str, list[str]] | None = None):
         self.cfg = cfg
         self.corpus = corpus
@@ -155,7 +154,7 @@ class Selector:
 
 
 def selection_to_json(artifact: Artifact, results: list[ChunkSelection], corpus: Corpus,
-                      strategy: str, cfg: Config, jev: Jev, extra: dict | None = None) -> dict:
+                      strategy: str, cfg: Config, jev: JevLike, extra: dict | None = None) -> dict:
     applicable: dict[str, dict] = {}
     for r in results:
         for sid in r.selected:
@@ -163,7 +162,7 @@ def selection_to_json(artifact: Artifact, results: list[ChunkSelection], corpus:
             entry["p_max"] = max(entry["p_max"], r.statements[sid])
             entry["chunks"].append(r.chunk.id)
     for sid, entry in applicable.items():
-        rfc, st = corpus.statement(sid)
+        rfc, st = corpus.require(sid)
         entry.update({"rfc": rfc.id, "title": st.title, "level": st.level,
                       "blocking": rfc.statement_blocking(st), "status": rfc.status})
     return {

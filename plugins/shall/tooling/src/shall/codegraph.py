@@ -28,9 +28,14 @@ it may be a different symbol. No model is involved.
 from __future__ import annotations
 
 import re
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+from . import git
+
+if TYPE_CHECKING:
+    from tree_sitter import Node, Query
 
 MAX_DEPTH = 3
 MAX_GLOBAL_DEFS = 3       # a name with more same-named definitions than this is too ambiguous
@@ -43,7 +48,6 @@ MAX_FILE_BYTES = 400_000
 # cache must not make an excerpt larger than the request budget.
 MAX_LINE_CHARS = 400
 MAX_EXCERPT_CHARS = 12_000
-GIT_TIMEOUT = 30
 
 SKIP_PARTS = {".git", ".venv", "venv", "node_modules", ".shall-out", ".shall-cache", "__pycache__", "dist",
               "build", "target", "vendor", ".gradle", ".idea"}
@@ -178,7 +182,7 @@ class RepoIndex:
         self._grep_cache: dict[str, list[str]] = {}
         self._all_files: list[str] | None = None
         self._manifest_text: str | None = None
-        self._queries: dict[str, object] = {}
+        self._queries: dict[str, list[Query]] = {}
 
     # ------------------------------------------------------------ repository access
 
@@ -189,13 +193,9 @@ class RepoIndex:
     def all_files(self) -> list[str]:
         if self._all_files is None:
             files: list[str] = []
-            try:
-                proc = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"],
-                                      cwd=self.root, capture_output=True, text=True, timeout=GIT_TIMEOUT)
-                if proc.returncode == 0:
-                    files = proc.stdout.splitlines()
-            except (OSError, subprocess.TimeoutExpired):
-                pass
+            listed = git.git(self.root, "ls-files", "--cached", "--others", "--exclude-standard")
+            if listed is not None:
+                files = listed.splitlines()
             if not files:
                 files = [str(p.relative_to(self.root)) for p in self.root.rglob("*") if p.is_file()]
             self._all_files = sorted(f for f in files if not self._skip(f))
@@ -205,14 +205,11 @@ class RepoIndex:
         """Files that mention `name` as a word (candidates for its definition)."""
         if name not in self._grep_cache:
             found: list[str] = []
-            try:
-                proc = subprocess.run(["git", "grep", "-l", "-I", "-w", "-F", "--untracked", "-e", name],
-                                      cwd=self.root, capture_output=True, text=True, timeout=GIT_TIMEOUT)
-                if proc.returncode in (0, 1):
-                    found = proc.stdout.splitlines()
-                else:
-                    raise OSError
-            except (OSError, subprocess.TimeoutExpired):
+            listed = git.git(self.root, "grep", "-l", "-I", "-w", "-F", "--untracked", "-e", name,
+                             ok=(0, 1))  # 1: no match
+            if listed is not None:
+                found = listed.splitlines()
+            else:  # not a git work tree, or git failed
                 pattern = re.compile(rf"\b{re.escape(name)}\b")
                 for rel in self.all_files():
                     try:
@@ -267,7 +264,7 @@ class RepoIndex:
         self._cached_grammars.add(lang)
         return True
 
-    def _tags_queries(self, lang: str) -> list:
+    def _tags_queries(self, lang: str) -> list[Query]:
         """The language's tags query plus its parents'; each compiled on its own so one
         pattern that does not fit the grammar cannot disable the rest."""
         if lang not in self._queries:
@@ -413,7 +410,7 @@ class _Extractor:
         return self.src[node.start_byte:node.end_byte].decode("utf-8", "replace")
 
     def run(self) -> None:
-        defs: list[tuple[object, object, str]] = []   # (range node, name node, kind)
+        defs: list[tuple[Node, Node | str, str]] = []   # (range node, name node or text, kind)
         from tree_sitter import QueryCursor
         for query in self.index._tags_queries(self.lang):
             for _, caps in QueryCursor(query).matches(self.tree.root_node):
@@ -531,7 +528,7 @@ class _Extractor:
                     continue
             # top-level constants and variables: `_session = make_session()`, `const http = ...`
             top = parent is not None and (parent == root or (parent.parent == root and "export" in parent.type))
-            if top and any(k in t for k in ("assignment", "declaration", "expression_statement")):
+            if parent is not None and top and any(k in t for k in ("assignment", "declaration", "expression_statement")):
                 for name in self._declared_names(n):
                     defs.append((parent if "export" in parent.type else n, name, "definition.constant"))
             # class fields and properties

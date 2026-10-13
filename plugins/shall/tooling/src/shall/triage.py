@@ -24,17 +24,20 @@ import asyncio
 import json
 import re
 from pathlib import Path
+from typing import Literal, Sequence, get_args
 
 from .artifact import Artifact, Chunk
 from .config import Config
 from .corpus import Corpus
-from .jev import Jev, noul
+from .jev import JevLike, noul
 from .publish import is_bot, is_shall, login_matches
-from .review import agent_prompt, run_claude
+from .claude import agent_prompt, run_claude
+from .findings import Finding, Verification
 from .select import Selector
-from .verify import VERDICT_SCHEMA, gather_evidence, render_evidence, verification_scope
+from .verify import VERDICT_SCHEMA, Claim, Excerpt, gather_evidence, render_evidence, verification_of, verification_scope
 
-STATUSES = ("relevant", "unverified", "noise", "outdated")
+TriageStatus = Literal["relevant", "unverified", "noise", "outdated"]
+TRIAGE_STATUSES: tuple[TriageStatus, ...] = get_args(TriageStatus)
 MAX_JEV_TEXT = 4000
 MAX_AGENT_TEXT = 8000
 DUPLICATE_WINDOW = 5      # lines: two comments further apart are never compared
@@ -188,7 +191,7 @@ def bot_comments(cfg: Config, threads: list[dict]) -> tuple[list[dict], dict]:
     return kept, skipped
 
 
-def anchor(artifact: Artifact, c: dict, file_lines: list[str] | None = None) -> tuple[Chunk | None, str | None]:
+def anchor(artifact: Artifact, c: dict, file_lines: list[str] | None = None) -> tuple[Chunk, None] | tuple[None, str]:
     """The chunk that shows the commented line, or why there is none (the comment is outdated).
     A PR-level item may point outside the diff hunks of its file: with the file's lines it keeps
     the file's first chunk (for the selection) and takes its code from the file."""
@@ -226,7 +229,7 @@ def read_lines(root: Path | None, path: str | None) -> list[str] | None:
 
 # ---------------------------------------------------------------- triage
 
-def _item(c: dict, status: str, reason: str, **extra) -> dict:
+def _item(c: dict, status: TriageStatus, reason: str, **extra) -> dict:
     return {"id": c["id"], "thread": c.get("thread"), "comment_id": c.get("comment_id"), "url": c.get("url"),
             "author": c["author"], "path": c.get("path"), "line": c.get("line"),
             "summary": summary_of(c["text"]), "status": status, "reason": reason,
@@ -241,34 +244,32 @@ def comment_prompt(c: dict, context: str, standard: dict | None, evidence: str) 
             f"<chunk file=\"{c['path']}\">\n{context}\n</chunk>\n\n<evidence>\n{evidence}\n</evidence>")
 
 
-def apply_comment_verdict(verdict: dict | None, excerpts) -> tuple[str, dict]:
+def status_of(v: Verification) -> TriageStatus:
+    # exhaustive: a new Verdict without a case fails `make typecheck` (reportMatchNotExhaustive)
+    match v.verdict:
+        case "refuted":
+            return "noise"
+        case "confirmed":
+            return "relevant"
+        case "unknown":
+            return "unverified"
+
+
+def apply_comment_verdict(verdict: dict | None, excerpts: Sequence[Excerpt]) -> tuple[TriageStatus, dict]:
     """(status, verification record). Noise needs a refutation that cites evidence that exists;
     relevant needs a confirmation that cites it; everything else stays as unverified."""
-    known = {e.id: e for e in excerpts}
-    if verdict is None:
-        verdict = {"verdict": "unknown", "reason": "verification did not return a verdict", "evidence": []}
-    cited = [i for i in verdict.get("evidence", []) if i == "chunk" or i in known]
-    record = {
-        "verdict": verdict.get("verdict", "unknown"),
-        "reason": verdict.get("reason", ""),
-        "evidence": [i if i == "chunk" else f"{known[i].path}:{known[i].start}-{known[i].end}" for i in cited],
-        "shown": [f"{e.path}:{e.start}-{e.end}" for e in excerpts],
-    }
-    if record["verdict"] in ("refuted", "confirmed") and not cited:
-        record["reason"] = f"{record['verdict']} without citing evidence: " + record["reason"]
-        record["verdict"] = "unknown"
-    return {"refuted": "noise", "confirmed": "relevant"}.get(record["verdict"], "unverified"), record
+    v = verification_of(verdict, excerpts)
+    return status_of(v), v.to_json()
 
 
-async def triage_comments(cfg: Config, corpus: Corpus, artifact: Artifact, jev: Jev, comments: list[dict],
-                          findings: list[dict] | None = None, agent=None, index=None,
+async def triage_comments(cfg: Config, corpus: Corpus, artifact: Artifact, jev: JevLike, comments: list[dict],
+                          findings: list[Finding] | None = None, agent=None, index=None,
                           cache=None, search_root: Path | None = None,
                           facts: dict[str, list[str]] | None = None) -> tuple[list[dict], dict]:
     th = {"actionable": 0.5, "statement": 0.5, "duplicate": 0.7, **(cfg.get("triage.thresholds") or {})}
     verify = bool(cfg.get("triage.verify", True))
-    model = cfg.get("review.verify_model") or None
     agent = agent or (lambda prompt, sem: run_claude(cfg, prompt, agent_prompt("shall-comment-verifier"),
-                                                     VERDICT_SCHEMA, sem, model=model, cache=cache))
+                                                     VERDICT_SCHEMA, sem, model=cfg.verify_model, cache=cache))
     # the same selection as `shall review` (same Jev questions, so cached answers are shared):
     # a comment is matched only against the statements that apply to its chunk
     selector = Selector(cfg, corpus, jev, facts=facts)
@@ -284,12 +285,12 @@ async def triage_comments(cfg: Config, corpus: Corpus, artifact: Artifact, jev: 
     for c in comments:
         c["text"] = clean_body(c.get("body", ""))
         lines = read_lines(file_root, c.get("path")) if c.get("pr_level") else None
-        chunk, reason = anchor(artifact, c, lines)
-        if reason:
-            items[c["id"]] = _item(c, "outdated", reason)
+        found = anchor(artifact, c, lines)
+        if found[0] is None:
+            items[c["id"]] = _item(c, "outdated", found[1])
         else:
-            c["context"] = code_context(chunk, c.get("line"), file_lines=lines)
-            live.append((c, chunk))
+            c["context"] = code_context(found[0], c.get("line"), file_lines=lines)
+            live.append((c, found[0]))
 
     # 2. Jev: which statements apply to the chunk (as in review)? is the comment actionable?
     #    which of the applicable statements covers its concern?
@@ -297,7 +298,7 @@ async def triage_comments(cfg: Config, corpus: Corpus, artifact: Artifact, jev: 
     selections = dict(zip(chunks, await jev.gather(selector.select_chunk(ch) for ch in chunks.values())))
 
     async def ask(c: dict, chunk: Chunk):
-        cands = [corpus.statement(sid)[1] for sid in selections[chunk.id].selected]
+        cands = [corpus.require(sid)[1] for sid in selections[chunk.id].selected]
         state = {"review_comment": c["text"][:MAX_JEV_TEXT], "file": c["path"], "language": chunk.language,
                  "code": c["context"]}
         return await jev.ask(state, {"actionable": ACTIONABLE, **{st.id: covers_question(st) for st in cands}})
@@ -309,7 +310,7 @@ async def triage_comments(cfg: Config, corpus: Corpus, artifact: Artifact, jev: 
         standards = []
         for sid, a in sorted(ans.items(), key=lambda kv: -kv[1].get("p", 0)):
             if sid != "actionable" and a["p"] >= th["statement"] and len(standards) < MAX_STANDARDS:
-                rfc, st = corpus.statement(sid)
+                rfc, st = corpus.require(sid)
                 standards.append({"id": sid, "level": st.level, "title": st.title, "text": st.text,
                                   "p": round(a["p"], 2)})
         c["p_actionable"], c["standards"] = round(p_act, 2), standards
@@ -320,9 +321,9 @@ async def triage_comments(cfg: Config, corpus: Corpus, artifact: Artifact, jev: 
             actionable.append((c, chunk))
 
     # 3. Jev: the same concern as a shall finding or an earlier comment? (nearby lines only)
-    earlier: list[dict] = [{"id": f"shall:{f['statement_id']}:{f['path']}:{f.get('line')}", "path": f["path"],
-                            "line": f.get("line"), "text": f"{f['title']}: {f['message']}",
-                            "label": f"shall finding {f['statement_id']}"} for f in findings or []]
+    earlier: list[dict] = [{"id": f"shall:{f.statement_id}:{f.path}:{f.line}", "path": f.path,
+                            "line": f.line, "text": f"{f.title}: {f.message}",
+                            "label": f"shall finding {f.statement_id}"} for f in findings or []]
     pairs = []
     for c, _ in actionable:
         for e in earlier:
@@ -362,11 +363,12 @@ async def triage_comments(cfg: Config, corpus: Corpus, artifact: Artifact, jev: 
 
         async def check(c: dict, chunk: Chunk):
             top = c["standards"][0] if c["standards"] else None
-            claim = {"path": c["path"], "line": c.get("line"), "chunk": chunk.id,
-                     "quote": chunk.line_text.get(c.get("line"), "") if c.get("line") else "",
-                     "message": c["text"][:MAX_JEV_TEXT],
-                     "statement_text": top["text"] if top else c["text"][:MAX_JEV_TEXT],
-                     "depends_on": [s for s in CODE_SPAN_RE.findall(c["text"]) if len(s) <= 80][:8]}
+            line = c.get("line")
+            claim = Claim(path=c["path"], line=line, chunk=chunk.id,
+                          quote=chunk.line_text.get(line, "") if line else "",
+                          message=c["text"][:MAX_JEV_TEXT],
+                          statement_text=top["text"] if top else c["text"][:MAX_JEV_TEXT],
+                          depends_on=tuple(s for s in CODE_SPAN_RE.findall(c["text"]) if len(s) <= 80)[:8])
             excerpts, notes = await gather_evidence(artifact, jev, claim, root, excluded, index)
             verdict, meta = await agent(comment_prompt(c, c["context"], top, render_evidence(excerpts, notes)), sem)
             return excerpts, verdict, meta
@@ -384,10 +386,10 @@ async def triage_comments(cfg: Config, corpus: Corpus, artifact: Artifact, jev: 
                                    verification=record)
         stats["codegraph_events"] = list(index.events) if index is not None else []
 
-    order = {s: i for i, s in enumerate(STATUSES)}
+    order = {s: i for i, s in enumerate(TRIAGE_STATUSES)}
     out = sorted(items.values(), key=lambda i: (order[i["status"]], not i.get("standards"),
                                                 i["path"] or "", i["line"] or 0, i["id"]))
-    stats.update({s: sum(1 for i in out if i["status"] == s) for s in STATUSES})
+    stats.update({s: sum(1 for i in out if i["status"] == s) for s in TRIAGE_STATUSES})
     return out, stats
 
 

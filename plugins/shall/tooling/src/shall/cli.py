@@ -8,13 +8,34 @@ import datetime as dt
 import json
 import re
 import sys
+from enum import IntEnum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .artifact import build_artifact, detect_kind, read_source
 from .config import OUTPUT_DIRS, load_config, make_dir
 from .corpus import check_against, load_corpus
 
-EXIT_OK, EXIT_ERROR, EXIT_BLOCKING, EXIT_SERVICE = 0, 1, 2, 3
+if TYPE_CHECKING:
+    from .artifact import Artifact
+    from .findings import Finding
+
+
+class ExitCode(IntEnum):
+    """The only exit codes of shall (JTOOL-0003.1). Every `cmd_*` returns one of them."""
+    OK = 0
+    ERROR = 1
+    BLOCKING = 2  # blocking findings: never use it for a usage error
+    SERVICE = 3   # a Jev request failed after retries
+
+
+class Parser(argparse.ArgumentParser):
+    """argparse exits 2 on a usage error, which is ExitCode.BLOCKING here: CI would read a typo in a
+    flag as "blocked by a standard". A usage error is an error (exit 1)."""
+
+    def error(self, message: str):  # type: ignore[override]
+        self.print_usage(sys.stderr)
+        self.exit(ExitCode.ERROR, f"{self.prog}: error: {message}\n")
 
 
 def _dump(data, path: str | None) -> None:
@@ -29,7 +50,7 @@ def _dump(data, path: str | None) -> None:
 # ---------------------------------------------------------------- corpus
 
 
-def cmd_lint(args, cfg) -> int:
+def cmd_lint(args, cfg) -> ExitCode:
     corpus = load_corpus(cfg)
     issues = [i for i in corpus.issues if args.all or i.layer == "local"]
     if args.against:
@@ -43,29 +64,29 @@ def cmd_lint(args, cfg) -> int:
     parent = f" (+ {len(corpus.rfcs) - len(local)} from {cfg.parent.name})" if cfg.parent else ""
     print(f"shall lint: {len(local)} local RFCs{parent}, {len(corpus.local_statements())} local statements, "
           f"{errors} error(s), {warnings} warning(s)", file=sys.stderr)
-    return EXIT_ERROR if errors or (args.strict and warnings) else EXIT_OK
+    return ExitCode.ERROR if errors or (args.strict and warnings) else ExitCode.OK
 
 
-def cmd_build(args, cfg) -> int:
+def cmd_build(args, cfg) -> ExitCode:
     from .index import build_index, check_index, write_index
     corpus = load_corpus(cfg)
     if corpus.errors:
         for issue in corpus.errors:
             print(issue)
         print("shall build: fix lint errors first", file=sys.stderr)
-        return EXIT_ERROR
+        return ExitCode.ERROR
     index = build_index(corpus)
     if args.check:
         stale = check_index(index, cfg.index_dir)
         if stale:
             print(f"shall build --check: stale index files: {', '.join(stale)} — run `shall build`", file=sys.stderr)
-            return EXIT_ERROR
+            return ExitCode.ERROR
         print("shall build --check: index is up to date", file=sys.stderr)
-        return EXIT_OK
+        return ExitCode.OK
     import os
     for path in write_index(index, cfg.index_dir):
         print(f"wrote {os.path.relpath(path, Path.cwd())}")
-    return EXIT_OK
+    return ExitCode.OK
 
 
 TEMPLATE = """---
@@ -102,15 +123,15 @@ TODO one requirement with exactly one level of RFC 2119 keyword (MUST, SHOULD or
 """
 
 
-def cmd_new(args, cfg) -> int:
+def cmd_new(args, cfg) -> ExitCode:
     corpus = load_corpus(cfg)
     prefix = cfg.prefix
     if prefix is None:
         print("this workspace has no `prefix:` in its shall.yaml; add one (e.g. prefix: BOOK)", file=sys.stderr)
-        return EXIT_ERROR
+        return ExitCode.ERROR
     if args.domain not in corpus.domains:
         print(f"unknown domain '{args.domain}'. Known: {', '.join(sorted(corpus.domains))}", file=sys.stderr)
-        return EXIT_ERROR
+        return ExitCode.ERROR
     used = [int(r.id.split("-")[1]) for r in corpus.rfcs.values() if r.layer == "local"]
     used += [int(m.group(1)) for p in cfg.corpus_dir.glob(f"{prefix}-*.md")
              if (m := re.match(rf"{prefix}-(\d{{4}})", p.name))]
@@ -125,17 +146,17 @@ def cmd_new(args, cfg) -> int:
     ), encoding="utf-8")
     import os
     print(os.path.relpath(path, Path.cwd()))
-    return EXIT_OK
+    return ExitCode.OK
 
 
-def cmd_show(args, cfg) -> int:
+def cmd_show(args, cfg) -> ExitCode:
     corpus = load_corpus(cfg)
     for ident in args.ids:
         if "." in ident:
             found = corpus.statement(ident)
             if not found:
                 print(f"{ident}: not found", file=sys.stderr)
-                return EXIT_ERROR
+                return ExitCode.ERROR
             rfc, st = found
             if args.json:
                 _dump({"id": st.id, "rfc": rfc.id, "title": st.title, "text": st.text, "level": st.level,
@@ -143,7 +164,7 @@ def cmd_show(args, cfg) -> int:
                        "applies_when": st.applies_when or rfc.applies_when,
                        "layer": rfc.layer, "source": corpus.source(rfc, st.line)}, None)
             else:
-                print(f"{st.id} [{st.level}, {rfc.status}{', blocking' if rfc.statement_blocking(st) else ''}] {st.title}")
+                print(f"{st.id} [{st.level}, {rfc.status_label}{', blocking' if rfc.statement_blocking(st) else ''}] {st.title}")
                 print(f"  {st.text}")
                 print(f"  Applies when: {st.applies_when or rfc.applies_when}")
                 print(f"  Source: {corpus.source(rfc, st.line)}")
@@ -151,12 +172,12 @@ def cmd_show(args, cfg) -> int:
             rfc = corpus.rfcs.get(ident)
             if not rfc:
                 print(f"{ident}: not found", file=sys.stderr)
-                return EXIT_ERROR
+                return ExitCode.ERROR
             print(rfc.path.read_text(encoding="utf-8"))
-    return EXIT_OK
+    return ExitCode.OK
 
 
-def cmd_list(args, cfg) -> int:
+def cmd_list(args, cfg) -> ExitCode:
     corpus = load_corpus(cfg)
     for rfc in sorted(corpus.rfcs.values(), key=lambda r: r.id):
         if args.domain and rfc.domain != args.domain:
@@ -164,38 +185,38 @@ def cmd_list(args, cfg) -> int:
         if args.status and rfc.status != args.status:
             continue
         layer = "" if rfc.layer == "local" else f"  [{rfc.layer}]"
-        print(f"{rfc.id:<10} {rfc.status:<10} {rfc.domain:<14} {rfc.title}  ({len(rfc.statements)} statements){layer}")
-    return EXIT_OK
+        print(f"{rfc.id:<10} {rfc.status_label:<10} {rfc.domain:<14} {rfc.title}  ({len(rfc.statements)} statements){layer}")
+    return ExitCode.OK
 
 
-def cmd_prefetch(args) -> int:
+def cmd_prefetch(args) -> ExitCode:
     """Download the tree-sitter grammars for the languages in this repository (CI caches them)."""
     from .codegraph import RepoIndex, treesitter_available
     if not treesitter_available():
         print("tree-sitter is not installed; verification uses keyword search only", file=sys.stderr)
-        return EXIT_OK
+        return ExitCode.OK
     from tree_sitter_language_pack import cache_dir, detect_language_from_path, download
     langs = sorted({lang for f in RepoIndex(Path.cwd()).all_files() if (lang := detect_language_from_path(f))})
     count = download(langs) if langs else 0
     print(f"grammars for {', '.join(langs) or 'no language'} ({count} downloaded) in {cache_dir()}")
-    return EXIT_OK
+    return ExitCode.OK
 
 
-def cmd_catalog(args, cfg) -> int:
+def cmd_catalog(args, cfg) -> ExitCode:
     from .index import build_index, render_catalog
     corpus = load_corpus(cfg)
     print(render_catalog(build_index(corpus, {layer.name for layer in cfg.layers})), end="")
-    return EXIT_OK
+    return ExitCode.OK
 
 
-def cmd_fetch(args, cfg) -> int:
+def cmd_fetch(args, cfg) -> ExitCode:
     parent = cfg.parent
     if parent is None:
         print("no `extends:` in this workspace; nothing to fetch")
-        return EXIT_OK
+        return ExitCode.OK
     p = parent.parent
     print(f"{parent.name} -> {p.root}" + (f" (commit {p.sha[:12]})" if p.sha else ""))
-    return EXIT_OK
+    return ExitCode.OK
 
 
 INIT_CONFIG = """# shall workspace: repository-specific standards on top of the organisation corpus.
@@ -209,14 +230,14 @@ extends:
 """
 
 
-def cmd_init(args) -> int:
+def cmd_init(args) -> ExitCode:
     dot = Path.cwd() / ".shall"
     if (dot / "shall.yaml").exists():
         print(f"{dot / 'shall.yaml'} already exists", file=sys.stderr)
-        return EXIT_ERROR
+        return ExitCode.ERROR
     if not re.fullmatch(r"[A-Z][A-Z0-9]{1,9}", args.prefix) or args.prefix == "JRFC":
         print("prefix must be 2-10 characters A-Z/0-9 and not JRFC (e.g. BOOK)", file=sys.stderr)
-        return EXIT_ERROR
+        return ExitCode.ERROR
     if args.path:
         import os
         # stored relative to .shall/, where the config is resolved from
@@ -228,7 +249,7 @@ def cmd_init(args) -> int:
     (dot / ".gitignore").write_text("".join(f"{d}/\n" for d in OUTPUT_DIRS), encoding="utf-8")
     (dot / "rfcs" / ".gitkeep").write_text("", encoding="utf-8")
     print(f"created {dot}/ (shall.yaml, rfcs/, .gitignore). Next: shall fetch && shall new --domain <d> --title <t>")
-    return EXIT_OK
+    return ExitCode.OK
 
 
 # ---------------------------------------------------------------- selection and review
@@ -275,7 +296,7 @@ def _selection_summary(sel: dict) -> str:
     return "\n".join(lines)
 
 
-def cmd_select(args, cfg) -> int:
+def cmd_select(args, cfg) -> ExitCode:
     from .jev import Jev
     corpus = load_corpus(cfg)
 
@@ -290,7 +311,7 @@ def cmd_select(args, cfg) -> int:
         _dump(sel, None)
     else:
         print(_selection_summary(sel))
-    return EXIT_OK
+    return ExitCode.OK
 
 
 def _load_selection_artifact(args, cfg, selection: dict):
@@ -301,11 +322,12 @@ def _load_selection_artifact(args, cfg, selection: dict):
     return artifact
 
 
-def _write_outputs(cfg, out_dir: Path, artifact, selection, findings, dropped, fmt: str,
-                   health: dict | None = None) -> int:
-    from .review import render_github, render_markdown
+def _write_outputs(cfg, out_dir: Path, artifact, selection, findings: list[Finding], dropped: list[dict],
+                   fmt: str, health: dict | None = None) -> int:
+    """Write findings.json, review.md (and github-review.json); return the number of blocking findings."""
+    from .findings import render_github, render_markdown
     make_dir(out_dir)
-    _dump({"findings": findings, "dropped": dropped}, str(out_dir / "findings.json"))
+    _dump({"findings": [f.to_json() for f in findings], "dropped": dropped}, str(out_dir / "findings.json"))
     if health is not None:
         _dump(health, str(out_dir / "health.json"))
     md = render_markdown(artifact, selection, findings, dropped, health)
@@ -313,20 +335,20 @@ def _write_outputs(cfg, out_dir: Path, artifact, selection, findings, dropped, f
     if fmt == "github":
         _dump(render_github(artifact, selection, findings, dropped, health), str(out_dir / "github-review.json"))
     print(md)
-    return sum(1 for f in findings if f["blocking"])
+    return sum(1 for f in findings if f.blocking)
 
 
-def cmd_bundle(args, cfg) -> int:
-    from .review import write_bundle
+def cmd_bundle(args, cfg) -> ExitCode:
+    from .findings import write_bundle
     corpus = load_corpus(cfg)
     selection = json.loads(Path(args.selection).read_text(encoding="utf-8"))
     artifact = _load_selection_artifact(args, cfg, selection)
     print(write_bundle(corpus, artifact, selection, Path(args.out)))
-    return EXIT_OK
+    return ExitCode.OK
 
 
-def cmd_validate(args, cfg) -> int:
-    from .review import validate_findings
+def cmd_validate(args, cfg) -> ExitCode:
+    from .findings import validate_findings
     corpus = load_corpus(cfg)
     selection = json.loads(Path(args.selection).read_text(encoding="utf-8"))
     artifact = _load_selection_artifact(args, cfg, selection)
@@ -334,12 +356,14 @@ def cmd_validate(args, cfg) -> int:
     raw = raw.get("findings", raw) if isinstance(raw, dict) else raw
     findings, dropped = validate_findings(corpus, artifact, selection, raw, int(cfg.get("review.max_comments")))
     blocking = _write_outputs(cfg, Path(args.out_dir), artifact, selection, findings, dropped, args.format)
-    return EXIT_BLOCKING if (blocking and args.fail_on_blocking) else EXIT_OK
+    return ExitCode.BLOCKING if (blocking and args.fail_on_blocking) else ExitCode.OK
 
 
-def cmd_review(args, cfg) -> int:
+def cmd_review(args, cfg) -> ExitCode:
+    from .claude import answer_cache
+    from .findings import validate_findings
     from .jev import Jev
-    from .review import answer_cache, run_agents, validate_findings
+    from .review import run_agents
     from .verify import verify_findings
     corpus = load_corpus(cfg)
     out_dir = Path(args.out_dir)
@@ -347,7 +371,7 @@ def cmd_review(args, cfg) -> int:
     # incremental re-review: unchanged chunks and unchanged evidence reuse earlier answers
     cache = answer_cache(cfg, enabled=not args.no_cache)
 
-    async def run():
+    async def run() -> tuple[Artifact, dict, list[Finding], list[dict], dict]:
         async with Jev(cfg, use_cache=not args.no_cache) as jev:
             index = _index(cfg, corpus, args)
             artifact, selection = await _select(args, cfg, corpus, jev, index)
@@ -373,9 +397,9 @@ def cmd_review(args, cfg) -> int:
     finally:
         cache.save()  # also after a failure: answers already paid for are kept
     if args.dry_run:
-        from .review import write_bundle
+        from .findings import write_bundle
         print(write_bundle(corpus, artifact, selection, out_dir / "bundle.md"))
-        return EXIT_OK
+        return ExitCode.OK
     for err in stats.get("errors", []):
         print(f"shall review: agent error on {err['chunk']}: {err['error'][:300]}", file=sys.stderr)
     from .health import build_health
@@ -391,11 +415,11 @@ def cmd_review(args, cfg) -> int:
     print(f"shall review: {stats['agent_calls']} review call(s){vtext}{rtext}, ${stats.get('cost_usd', 0):.4f}, "
           f"outputs in {out_dir}", file=sys.stderr)
     if stats.get("errors"):
-        return EXIT_ERROR
-    return EXIT_BLOCKING if (blocking and args.fail_on_blocking) else EXIT_OK
+        return ExitCode.ERROR
+    return ExitCode.BLOCKING if (blocking and args.fail_on_blocking) else ExitCode.OK
 
 
-def cmd_scan(args, cfg) -> int:
+def cmd_scan(args, cfg) -> ExitCode:
     """Lint whole files: secret scanner + Jev per file. Warnings never block; scanner hits can."""
     from .jev import Jev
     from .scan import render_lines, render_markdown, run_scan
@@ -422,38 +446,43 @@ def cmd_scan(args, cfg) -> int:
           f"{s['files_with_warnings']} file(s), {s['blocking']} blocking; {s['jev_requests']} Jev request(s) "
           f"({s['jev_cached']} cached), ~${s['jev_cost_usd']:.4f}; outputs in {out_dir}", file=sys.stderr)
     if report["errors"]:
-        return EXIT_SERVICE
+        return ExitCode.SERVICE
     if (args.fail_on_blocking and s["blocking"]) or (args.fail_on_warn and s["warnings"]):
-        return EXIT_BLOCKING
-    return EXIT_OK
+        return ExitCode.BLOCKING
+    return ExitCode.OK
 
 
-def cmd_verify(args, cfg) -> int:
-    """Verify already-validated findings (in-session flow: bundle -> agent -> validate -> verify)."""
+def cmd_verify(args, cfg) -> ExitCode:
+    """Verify validated findings (in-session flow: bundle -> agent -> validate -> verify)."""
+    from .findings import validate_findings
     from .jev import Jev
     from .verify import verify_findings
     corpus = load_corpus(cfg)
     selection = json.loads(Path(args.selection).read_text(encoding="utf-8"))
     artifact = _load_selection_artifact(args, cfg, selection)
     data = json.loads(Path(args.findings).read_text(encoding="utf-8"))
+    # validated again: the file came from an agent session, and severity comes from the corpus
+    findings, dropped = validate_findings(corpus, artifact, selection, data["findings"],
+                                          int(cfg.get("review.max_comments")))
 
     async def run():
         async with Jev(cfg) as jev:
-            return await verify_findings(cfg, corpus, artifact, jev, data["findings"],
+            return await verify_findings(cfg, corpus, artifact, jev, findings,
                                          Path(args.search_root) if args.search_root else None)
 
     findings, refuted, stats = asyncio.run(run())
     blocking = _write_outputs(cfg, Path(args.out_dir), artifact, selection, findings,
-                              data.get("dropped", []) + refuted, args.format)
+                              data.get("dropped", []) + dropped + refuted, args.format)
     print(f"shall verify: {stats}", file=sys.stderr)
-    return EXIT_BLOCKING if (blocking and args.fail_on_blocking) else EXIT_OK
+    return ExitCode.BLOCKING if (blocking and args.fail_on_blocking) else ExitCode.OK
 
 
-def cmd_triage(args, cfg) -> int:
+def cmd_triage(args, cfg) -> ExitCode:
     """Triage the comments of other AI reviewers on a PR: relevant, unverified, noise, outdated."""
     import os
+    from .claude import answer_cache
+    from .findings import read_findings
     from .jev import Jev
-    from .review import answer_cache
     from .triage import bot_comments, load_pr_level, load_threads, pr_level_items, render_triage, triage_comments
     corpus = load_corpus(cfg)
     if bool(args.comments) == bool(args.pr):
@@ -478,9 +507,8 @@ def cmd_triage(args, cfg) -> int:
     comments += [item for items in per_comment for item in items]
     skipped["pr_level_summary"] = sum(1 for items in per_comment if not items)
     findings = None
-    if args.findings:
-        findings = json.loads(Path(args.findings).read_text(encoding="utf-8"))
-        findings = findings.get("findings", findings) if isinstance(findings, dict) else findings
+    if args.findings:  # shall's own findings.json: only compared with the comments, never published
+        findings = read_findings(Path(args.findings))
     if args.no_verify:
         cfg.data.setdefault("triage", {})["verify"] = False
     cache = answer_cache(cfg, enabled=not args.no_cache)
@@ -506,10 +534,10 @@ def cmd_triage(args, cfg) -> int:
     print(f"shall triage: {len(items)} AI comment(s) ({', '.join(f'{v} {k}' for k, v in skipped.items() if v) or 'none'}"
           f" skipped), {stats.get('agent_calls', 0)} verification call(s), {stats.get('reused', 0)} reused, "
           f"${stats.get('cost_usd', 0):.4f}, outputs in {out_dir}", file=sys.stderr)
-    return EXIT_ERROR if stats.get("errors") else EXIT_OK
+    return ExitCode.ERROR if stats.get("errors") else ExitCode.OK
 
 
-def cmd_publish(args, cfg) -> int:
+def cmd_publish(args, cfg) -> ExitCode:
     import os
     from .publish import publish
     repo = args.repo or os.environ.get("GITHUB_REPOSITORY")
@@ -539,10 +567,10 @@ def cmd_publish(args, cfg) -> int:
         t = tplan.to_json()
         print(f"shall publish ({repo}#{args.pr}): {verb} reply to and resolve {len(t['resolve'])} noise thread(s); "
               f"{len(t['human'])} left alone (a person replied), {len(t['done'])} already handled", file=sys.stderr)
-    return EXIT_OK
+    return ExitCode.OK
 
 
-def cmd_conflicts(args, cfg) -> int:
+def cmd_conflicts(args, cfg) -> ExitCode:
     from .conflicts import FAILING, find_conflicts, find_local_conflicts
     from .jev import Jev
     if bool(args.file) == bool(args.local):
@@ -565,13 +593,13 @@ def cmd_conflicts(args, cfg) -> int:
             mark = "FAIL" if f["relation"] in FAILING else "info"
             print(f"[{mark}] {f['new']} ~ {f['existing']}: {f['relation']} (p={f['p']:.2f})\n"
                   f"    {f['existing_text']}")
-    return EXIT_ERROR if any(f["relation"] in FAILING for f in found) else EXIT_OK
+    return ExitCode.ERROR if any(f["relation"] in FAILING for f in found) else ExitCode.OK
 
 
-def cmd_eval_triage(args, cfg) -> int:
+def cmd_eval_triage(args, cfg) -> ExitCode:
+    from .claude import answer_cache
     from .evaluate import render_triage_eval, run_triage_eval
     from .jev import Jev
-    from .review import answer_cache
     corpus = load_corpus(cfg)
     cache = answer_cache(cfg, enabled=not args.no_cache)
 
@@ -586,10 +614,10 @@ def cmd_eval_triage(args, cfg) -> int:
     if args.out:
         _dump(report, args.out)
     print(render_triage_eval(report))
-    return EXIT_OK
+    return ExitCode.OK
 
 
-def cmd_eval(args, cfg) -> int:
+def cmd_eval(args, cfg) -> ExitCode:
     from .evaluate import render_eval, run_eval
     from .jev import Jev
     corpus = load_corpus(cfg)
@@ -603,10 +631,10 @@ def cmd_eval(args, cfg) -> int:
     if args.out:
         _dump(report, args.out)
     print(render_eval(report))
-    return EXIT_OK
+    return ExitCode.OK
 
 
-def cmd_eval_hooks(args, cfg) -> int:
+def cmd_eval_hooks(args, cfg) -> ExitCode:
     from .claude_judge import ClaudeJudge, claude_text
     from .evaluate import render_hooks_eval, run_hooks_eval
     from .jev import Jev
@@ -628,13 +656,13 @@ def cmd_eval_hooks(args, cfg) -> int:
     if args.out:
         _dump(report, args.out)
     print(render_hooks_eval(report))
-    return EXIT_OK
+    return ExitCode.OK
 
 
 # ---------------------------------------------------------------- hooks
 
 
-def cmd_hook(args, cfg) -> int:
+def cmd_hook(args, cfg) -> ExitCode:
     """One Claude Code hook event on stdin (a `command` hook); the decision JSON on stdout."""
     from .hooks import Hooks
     from .jev import Jev
@@ -651,10 +679,10 @@ def cmd_hook(args, cfg) -> int:
         print(json.dumps(out, ensure_ascii=False))
     # JTOOL-0003.1: a failed Jev request exits 3, which Claude Code treats as a non-blocking
     # error, so the call runs (fail-open). A decision already made (secret scanner) exits 0.
-    return EXIT_SERVICE if hooks.jev_failed and not out.get("hookSpecificOutput") else EXIT_OK
+    return ExitCode.SERVICE if hooks.jev_failed and not out.get("hookSpecificOutput") else ExitCode.OK
 
 
-def cmd_hookd(args, cfg) -> int:
+def cmd_hookd(args, cfg) -> ExitCode:
     """Serve hook events over localhost HTTP with one warm Jev connection."""
     from .hooks import Hooks, serve
     from .jev import Jev
@@ -670,10 +698,10 @@ def cmd_hookd(args, cfg) -> int:
         asyncio.run(run())
     except KeyboardInterrupt:
         pass
-    return EXIT_OK
+    return ExitCode.OK
 
 
-def cmd_hook_config(args, cfg) -> int:
+def cmd_hook_config(args, cfg) -> ExitCode:
     """Print the `hooks` block for .claude/settings.json. Deterministic: no model call."""
     import os
     from .hooks import hook_settings
@@ -681,14 +709,14 @@ def cmd_hook_config(args, cfg) -> int:
     command = str(Path(root) / "bin" / "shall") if root else "shall"
     port = args.port or int(cfg.get("hooks.port"))
     print(json.dumps(hook_settings(cfg, args.transport, port, command, not args.no_stop), indent=2))
-    return EXIT_OK
+    return ExitCode.OK
 
 
-def cmd_eval_verify(args, cfg) -> int:
+def cmd_eval_verify(args, cfg) -> ExitCode:
     from .evaluate import render_verify_eval, run_verify_eval
     from .jev import Jev
     corpus = load_corpus(cfg)
-    models = [m for m in args.models.split(",") if m]
+    models = [m for m in (args.models or cfg.verify_model).split(",") if m]
     retrievals = ["keyword", "treesitter"] if args.retrieval == "all" else [args.retrieval]
 
     async def run():
@@ -699,14 +727,14 @@ def cmd_eval_verify(args, cfg) -> int:
     if args.out:
         _dump(report, args.out)
     print(render_verify_eval(report))
-    return EXIT_OK
+    return ExitCode.OK
 
 
 # ---------------------------------------------------------------- parser
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="shall", description=(
+    p = Parser(prog="shall", description=(
         "shall: RFC-2119 engineering standards for humans and agents. "
         "Corpus: lint/build/new/show/list. Review: select (Jev) -> agent -> validate."))
     p.add_argument("--config", help="path to shall.yaml (default: search upwards, or $SHALL_CONFIG)")
@@ -775,7 +803,7 @@ def build_parser() -> argparse.ArgumentParser:
     artifact_args(s)
     s.add_argument("--out-dir", default=".shall-out")
     s.add_argument("--format", choices=["markdown", "github"], default="markdown")
-    s.add_argument("--fail-on-blocking", action="store_true", help=f"exit {EXIT_BLOCKING} on blocking findings")
+    s.add_argument("--fail-on-blocking", action="store_true", help=f"exit {ExitCode.BLOCKING} on blocking findings")
     s.add_argument("--dry-run", action="store_true", help="select only and write bundle.md, no agent call")
     s.add_argument("--no-verify", action="store_true", help="skip verification of blocking findings")
     s.set_defaults(fn=cmd_review)
@@ -787,8 +815,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--status", help="comma-separated RFC statuses to check (default: selection.include_status)")
     s.add_argument("--exclude", action="append", default=[], help="glob to skip (repeatable), on top of scan.exclude")
     s.add_argument("--fail-on-blocking", action="store_true",
-                   help=f"exit {EXIT_BLOCKING} on a blocking finding (secret-scanner hit on an enforced MUST)")
-    s.add_argument("--fail-on-warn", action="store_true", help=f"exit {EXIT_BLOCKING} on any warning")
+                   help=f"exit {ExitCode.BLOCKING} on a blocking finding (secret-scanner hit on an enforced MUST)")
+    s.add_argument("--fail-on-warn", action="store_true", help=f"exit {ExitCode.BLOCKING} on any warning")
     s.add_argument("--no-cache", action="store_true", help="ignore the Jev answer cache")
     s.set_defaults(fn=cmd_scan)
 
@@ -850,7 +878,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("eval-verify", help="measure verification verdicts and evidence recall on fixture repos")
     s.add_argument("--cases", default="eval/verify")
-    s.add_argument("--models", default="claude-sonnet-5", help="comma-separated verifier models")
+    s.add_argument("--models", help="comma-separated verifier models (default: review.verify_model, else review.model)")
     s.add_argument("--retrieval", choices=["keyword", "treesitter", "all"], default="all")
     s.add_argument("--out")
     s.set_defaults(fn=cmd_eval_verify)
@@ -906,13 +934,16 @@ def main(argv: list[str] | None = None) -> None:
             and args.cmd in ("lint", "build", "new", "list")):
         print("note: using .shall/ (this repository's own rules); "
               "pass --config shall.yaml for the corpus defined at the root", file=sys.stderr)
-    from typesafe_sdk import TypeSafeError
     try:
         sys.exit(args.fn(args, cfg))
-    except TypeSafeError as err:
+    except Exception as err:
+        # a deterministic command never imports shall.jev (and the TypeSafe SDK, ~190 ms): look it up
+        jev = sys.modules.get("shall.jev")
+        if jev is None or not isinstance(err, jev.JevServiceError):
+            raise
         # distinct exit code: CI can tell "the service failed" from "the change is blocked"
         print(f"shall: Jev (TypeSafe) request failed after retries: {str(err)[:300]}", file=sys.stderr)
-        sys.exit(EXIT_SERVICE)
+        sys.exit(ExitCode.SERVICE)
 
 
 if __name__ == "__main__":

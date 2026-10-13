@@ -7,10 +7,14 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from typing import Any, Awaitable, Iterable, Mapping, Protocol, TypeVar
 
-from typesafe_sdk import AsyncTypeSafeClient, Choice, Noul, NoulCriteria, RetryPolicy
+from typesafe_sdk import AsyncTypeSafeClient, Choice, Noul, NoulCriteria, RetryPolicy, TypeSafeError
 
-from .config import Config, make_dir
+from .config import Config, load_json, merge_save_json
+
+# A Jev request that failed after retries. Callers catch this name, never the SDK's own.
+JevServiceError = TypeSafeError
 
 # The API budgets are 64k tokens per request and 32k for state + the longest question.
 STATE_PLUS_QUESTION_TOKENS = 30000
@@ -27,8 +31,27 @@ def noul(instructions: str, true: str | None = None, false: str | None = None) -
     return Noul(instructions=instructions)
 
 
-def choice(instructions: str, options: dict[str, str | None]) -> Choice:
-    return Choice(instructions=instructions, criteria=options)
+Option = TypeVar("Option", bound=str)
+
+
+def choice(instructions: str, options: Mapping[Option, str | None]) -> Choice:
+    return Choice(instructions=instructions, criteria={str(k): v for k, v in options.items()})
+
+
+class JevLike(Protocol):
+    """What selection, verification, triage, scan and hooks need from Jev. Code takes a `JevLike`,
+    so the one test fake (tests/fakes.py) fits every caller without a cast."""
+
+    model: str
+    usage: dict
+
+    def available(self) -> bool: ...
+
+    def save(self) -> None: ...
+
+    async def gather(self, aws: Iterable[Awaitable[Any]]) -> list: ...
+
+    async def ask(self, state: Any, questions: dict) -> dict: ...
 
 
 class Jev:
@@ -38,9 +61,7 @@ class Jev:
         self.cache_path: Path = cfg.cache_file
         self.use_cache = use_cache
         self.sem = asyncio.Semaphore(int(cfg.get("jev.concurrency")))
-        self.cache: dict = {}
-        if use_cache and self.cache_path.is_file():
-            self.cache = json.loads(self.cache_path.read_text(encoding="utf-8"))
+        self.cache: dict = load_json(self.cache_path) if use_cache else {}
         # est_input_tokens counts cached calls too: a cache-independent cost measure for evals
         self.usage = {"requests": 0, "cached": 0, "input_tokens": 0, "est_input_tokens": 0}
         self._client: AsyncTypeSafeClient | None = None
@@ -69,21 +90,8 @@ class Jev:
         return self._client
 
     def save(self) -> None:
-        """Merge with what is on disk, then replace atomically: parallel runs sharing one
-        cache (CI matrix, two local commands) keep each other's answers."""
-        if not self.use_cache:
-            return
-        make_dir(self.cache_path.parent)
-        merged = {}
-        if self.cache_path.is_file():
-            try:
-                merged = json.loads(self.cache_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                merged = {}
-        merged.update(self.cache)
-        tmp = self.cache_path.with_suffix(f".{os.getpid()}.tmp")
-        tmp.write_text(json.dumps(merged, sort_keys=True), encoding="utf-8")
-        os.replace(tmp, self.cache_path)
+        if self.use_cache:
+            merge_save_json(self.cache_path, self.cache)
 
     def _key(self, state, questions: dict) -> str:
         payload = {

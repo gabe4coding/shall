@@ -21,6 +21,16 @@ not_applies_when: >
 
 # JTOOL-0002: Agent boundaries
 
+## Checks in code
+
+Code checks part of these rules. Review checks the rest.
+
+- JTOOL-0002.1: `plugins/shall/tooling/tests/test_boundaries.py` (`test_every_claude_call_is_tool_less`, `test_only_owner_modules_start_processes`).
+- JTOOL-0002.2: `plugins/shall/tooling/tests/test_boundaries.py` (`test_findings_are_built_only_by_validation`, `test_findings_schema_matches_raw_finding`).
+- JTOOL-0002.4: `plugins/shall/tooling/tests/test_publish.py` (`test_dry_run_reads_but_never_writes`).
+- JTOOL-0002.5 and JTOOL-0002.6: `Finding.blocking` in `plugins/shall/tooling/src/shall/findings.py` is
+  computed, not stored. `plugins/shall/tooling/tests/test_verify.py` tests each verdict.
+
 ## Requirements
 
 ### JTOOL-0002.1 Agents run without tools in the pipeline

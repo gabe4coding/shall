@@ -4,9 +4,12 @@ JRFC := plugins/shall/bin/shall
 # the root resolves to .shall/; organisation targets pass --config explicitly.
 ORG := $(JRFC) --config shall.yaml
 
-.PHONY: check lint build test eval eval-scale eval-facts eval-hooks eval-hooks-claude eval-triage eval-realpr review-example self-check self-conflicts self-review
+TOOLING := uv run --quiet --project plugins/shall/tooling
 
-check: lint          ## organisation corpus: deterministic CI checks (no model calls)
+.PHONY: check lint build test typecheck lint-imports test-plugin eval eval-scale eval-facts eval-hooks eval-hooks-claude eval-triage eval-realpr review-example self-check self-conflicts self-review
+
+# test-plugin is not part of check: it needs the claude CLI, and check must run with uv only.
+check: lint typecheck lint-imports  ## deterministic CI checks: corpus, index, types, module layers (no model calls)
 	$(ORG) build --check
 
 lint:
@@ -16,7 +19,17 @@ build:
 	$(ORG) build
 
 test:                ## tooling unit tests (no network)
-	uv run --quiet --project plugins/shall/tooling pytest -q plugins/shall/tooling/tests
+	$(TOOLING) pytest -q plugins/shall/tooling/tests
+
+typecheck:           ## pyright: Literal statuses/levels/verdicts, Optional narrowing, exhaustive match
+	$(TOOLING) --group check pyright -p plugins/shall/tooling/pyproject.toml
+
+lint-imports:        ## import-linter: deterministic modules never import a model module (JTOOL-0003.2)
+	$(TOOLING) --group check lint-imports --config plugins/shall/tooling/pyproject.toml
+
+test-plugin:         ## plugin manifest and TypeScript hook tests (needs the claude CLI)
+	claude plugin validate plugins/shall
+	claude plugin test plugins/shall
 
 eval:                ## selection recall/precision on eval/cases (needs TYPESAFE_API_KEY)
 	$(ORG) eval --out .shall-out/eval.json

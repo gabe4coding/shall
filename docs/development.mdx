@@ -38,7 +38,7 @@ The code is in `plugins/shall/tooling/src/shall/`. The flow of `shall review`:
 
 ```
 cli.py → config.py → corpus.py → artifact.py → effects.py → select.py → review.py
-       → verify.py (+ codegraph.py) → health.py → outputs
+       → findings.py (validate) → verify.py (+ codegraph.py) → health.py → outputs
 ```
 
 | Module | What it does |
@@ -49,8 +49,11 @@ cli.py → config.py → corpus.py → artifact.py → effects.py → select.py 
 | `artifact.py` | Splits the input into `Chunk`s: one for each file of a diff, split by size. `Chunk.state()` is the Jev state. |
 | `effects.py` | Finds the known side effects of library calls, direct and through `codegraph.expand` |
 | `select.py` | The prefilter in code, then one Jev Noul for each statement (`flat`) or domain → RFC → statement (`layered`) |
-| `jev.py` | The only access point to TypeSafe: cache, request packing, retries, usage |
-| `review.py` | The reviewer prompt, `run_claude` (`claude -p` without tools), `validate_findings`, the rendering |
+| `jev.py` | The only access point to TypeSafe: cache, request packing, retries, usage. Other code takes a `JevLike`. |
+| `claude.py` | The only module that starts `claude`: `claude_command` adds `ISOLATION_FLAGS` (no tools), `run_claude`, `run_claude_text`, the answer cache, `agent_prompt` |
+| `git.py` | The only module that starts `git`: a timeout on each call, no exception on a git failure |
+| `review.py` | The reviewer prompt and `run_agents`. The output is `RawFinding` data that is not trusted. |
+| `findings.py` | `RawFinding` → `validate_findings` → `Finding`. Only this module makes a `Finding`. `blocking` is a property: the corpus decides it, and verification can only make it lower. Also the Markdown and GitHub rendering. |
 | `verify.py`, `codegraph.py` | Evidence for blocking findings (tree-sitter, imports, `git grep`), the verifier agent, `apply_verdict` |
 | `health.py` | `health.json` and the warnings about silent failures |
 | `publish.py` | Posts to GitHub. Deterministic, with `--dry-run`. |
@@ -67,13 +70,28 @@ cli.py → config.py → corpus.py → artifact.py → effects.py → select.py 
 ## Tests and checks
 
 ```bash
-make test                     # unit tests, no network
-make check                    # example corpus: lint and index are current (no model calls)
+make test                     # unit tests and boundary tests, no network
+make typecheck                # pyright: Literal types, Optional values, exhaustive match
+make lint-imports             # import-linter: deterministic modules import no model module
+make test-plugin              # plugin manifest and hook module tests (needs the claude CLI)
+make check                    # typecheck, lint-imports, then example corpus lint and index (no model calls)
 make self-check               # rules of this repository: lint and index
 make build                    # write corpus/index/ again after a change to corpus/
-claude plugin validate plugins/shall   # the plugin manifest, hooks.json and the hooks module
-claude plugin test plugins/shall       # tests of the hooks module (plugins/shall/tests/*.test.ts)
 ```
+
+CI (`.github/workflows/ci.yml`) runs all of these on each pull request.
+
+Some rules are checked by code, not by review:
+
+| Check | What it stops |
+| --- | --- |
+| `make typecheck` | A status, level, verdict or hook action that is not in its `Literal` type. A `match` that does not cover each value. An `Optional` value that is used without a check (use `Corpus.require`, not `Corpus.statement`, for an id that code already checked). |
+| `make lint-imports` | A deterministic module (`corpus`, `index`, `findings`, `publish`, ...) that imports a model module. A module other than `jev` that imports `typesafe_sdk`. |
+| `tests/test_boundaries.py` | A process that starts outside `git.py`, `claude.py`, `publish.py` or `hooks.py`. A `Finding` that is made outside `findings.py`. A command without an `ExitCode`. A deterministic command that loads `shall.jev`. An exit code that is not 0 to 3. A model id outside `DEFAULTS`, or an alias that moves. A setting that has no default. A `shall` command or flag in the docs or skills that does not exist. |
+| `load_config` | An unknown key in the local `shall.yaml` (not in the `extends` parent: a newer org config can add keys), or a `hooks.actions` row that is not `[min p, action]`. In the parent config, `load_config` removes such a row and writes a note to stderr. |
+
+Tests use the shared fakes in `tests/fakes.py`: `FakeJev` (subclass it and change `p` for scores that
+depend on the state) and `make_finding`.
 
 To run one test:
 
@@ -88,8 +106,8 @@ If you develop with Claude Code, do this loop before each commit:
 1. Run `/simplify`. This built-in skill cleans up the diff and applies the fixes.
 2. Run `/code-review`. This built-in skill finds correctness bugs in the diff. Check each finding against the
    code, and fix the real ones.
-3. Run `make test`, `make check` and `make self-check`. If you have `TYPESAFE_API_KEY` and a Claude login, also
-   run `make self-review`.
+3. Run `make test`, `make check` and `make self-check`. If you have
+   `TYPESAFE_API_KEY` and a Claude login, also run `make self-review`.
 4. Run `/verify` after a change under `plugins/shall/` or to a rule that the hooks apply. This built-in skill
    drives the change end to end. It has nothing to drive in a change to docs, tests or eval labels only.
 5. If a step changes code, start again at step 1.

@@ -8,14 +8,16 @@
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
+
+from typing import Literal
 
 from .config import Config
 from .corpus import Corpus, Issue, Rfc, Statement, parse_rfc
-from .jev import Jev, choice, noul
+from .jev import JevLike, choice, noul
 
-RELATION = {
+Relation = Literal["duplicate", "weakens", "conflict", "overlap", "unrelated"]
+RELATION: dict[Relation, str] = {
     "duplicate": "Both statements require the same thing, or the new statement repeats the existing "
                  "requirement for a narrower case that the existing statement already covers.",
     "weakens": "The new statement relaxes, delays or makes optional something the existing statement "
@@ -25,10 +27,10 @@ RELATION = {
                "without relaxing either one.",
     "unrelated": "They govern different things; there is no meaningful overlap.",
 }
-FAILING = ("duplicate", "weakens", "conflict")
+FAILING: tuple[Relation, ...] = ("duplicate", "weakens", "conflict")
 
 
-async def compare(jev: Jev, new: list[tuple[Rfc, Statement]], existing: list[tuple[Rfc, Statement]],
+async def compare(jev: JevLike, new: list[tuple[Rfc, Statement]], existing: list[tuple[Rfc, Statement]],
                   fail_p: float, report_p: float) -> list[dict]:
     """One small request per pair (packing the corpus into one state and pointing at
     `existing[i]` failed badly: indirection + distracting state).
@@ -53,7 +55,7 @@ async def compare(jev: Jev, new: list[tuple[Rfc, Statement]], existing: list[tup
         probs = ans["relation"]["probabilities"]
         gate = max(sum(probs.get(k, 0.0) for k in FAILING), ans["permits"]["p"], ans["violates"]["p"])
         if gate >= fail_p:
-            relation = max(FAILING, key=lambda k: probs.get(k, 0.0))
+            relation: Relation = max(FAILING, key=lambda k: probs.get(k, 0.0))
             p = gate
         else:
             # below the gate: report as info when the pair is related at all, using the
@@ -87,7 +89,7 @@ def _thresholds(cfg: Config, fail_p: float | None) -> tuple[float, float]:
             float(cfg.get("conflicts.report_threshold")))
 
 
-async def find_conflicts(cfg: Config, corpus: Corpus, jev: Jev, path: Path, all_domains: bool,
+async def find_conflicts(cfg: Config, corpus: Corpus, jev: JevLike, path: Path, all_domains: bool,
                          fail_p: float | None = None) -> list[dict]:
     issues: list[Issue] = []
     draft = parse_rfc(path.resolve(), cfg.root, issues, cfg.prefix or "JRFC")
@@ -97,7 +99,7 @@ async def find_conflicts(cfg: Config, corpus: Corpus, jev: Jev, path: Path, all_
     return await compare(jev, [(draft, s) for s in draft.statements], existing, *_thresholds(cfg, fail_p))
 
 
-async def find_local_conflicts(cfg: Config, corpus: Corpus, jev: Jev, all_domains: bool = True,
+async def find_local_conflicts(cfg: Config, corpus: Corpus, jev: JevLike, all_domains: bool = True,
                                fail_p: float | None = None) -> list[dict]:
     if cfg.parent is None:
         raise SystemExit("shall conflicts --local: this workspace does not extend another corpus")

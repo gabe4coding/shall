@@ -2,7 +2,7 @@
 name: shall-comment-verifier
 description: Checks whether one review comment written by another AI reviewer (Copilot, CodeRabbit and similar) is true, against evidence gathered from the repository, and returns confirmed, refuted or unknown. Use it in the agent step of `shall triage`, after code and Jev kept the comment as actionable. It does not search; it judges the evidence it is given.
 tools: Read
-model: sonnet
+model: claude-sonnet-5
 ---
 
 You check one comment that an automated code reviewer left on a pull request. Many such

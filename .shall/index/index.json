@@ -1,5 +1,5 @@
 {
-  "corpus_hash": "f96990cddff7f113",
+  "corpus_hash": "107b6b4976368374",
   "counts": {
     "domains": 3,
     "rfcs": 4,
@@ -194,7 +194,7 @@
       "level": "MUST",
       "not_applies_when": "The content does not call Jev and does not use Jev answers.",
       "rfc": "JTOOL-0001",
-      "source": ".shall/rfcs/JTOOL-0001-jev-usage.md#L32",
+      "source": ".shall/rfcs/JTOOL-0001-jev-usage.md#L40",
       "status": "enforced",
       "text": "Code MUST call Jev only through `shall.jev.Jev` (which caches answers, packs requests under the token budget and counts usage) and MUST NOT create a `TypeSafeClient` or `AsyncTypeSafeClient` anywhere else.",
       "title": "One client, one wrapper"
@@ -217,7 +217,7 @@
       "level": "MUST",
       "not_applies_when": "The content does not call Jev and does not use Jev answers.",
       "rfc": "JTOOL-0001",
-      "source": ".shall/rfcs/JTOOL-0001-jev-usage.md#L40",
+      "source": ".shall/rfcs/JTOOL-0001-jev-usage.md#L48",
       "status": "enforced",
       "text": "Jev state MUST contain only the text the questions judge; code MUST NOT put a whole corpus or list into the state and refer to one item by index (such as `existing[i]`) in the question text.",
       "title": "Small state, no indirection"
@@ -240,7 +240,7 @@
       "level": "MUST",
       "not_applies_when": "The content does not call Jev and does not use Jev answers.",
       "rfc": "JTOOL-0001",
-      "source": ".shall/rfcs/JTOOL-0001-jev-usage.md#L48",
+      "source": ".shall/rfcs/JTOOL-0001-jev-usage.md#L56",
       "status": "enforced",
       "text": "A pass/fail decision based on Jev MUST be gated on Noul probabilities or on the summed probability of all failing Choice options, not on the probability of the single top Choice option.",
       "title": "Absolute gates"
@@ -263,7 +263,7 @@
       "level": "MUST",
       "not_applies_when": "The content does not call Jev and does not use Jev answers.",
       "rfc": "JTOOL-0001",
-      "source": ".shall/rfcs/JTOOL-0001-jev-usage.md#L56",
+      "source": ".shall/rfcs/JTOOL-0001-jev-usage.md#L64",
       "status": "enforced",
       "text": "Model identifiers in configuration and code MUST be pinned versions, not moving aliases such as `jev-latest`, `jev-preview`, `sonnet` or `opus`.",
       "title": "Pinned models"
@@ -286,7 +286,7 @@
       "level": "MUST",
       "not_applies_when": "No agent runs, no agent output is used, and nothing is written to an external system.",
       "rfc": "JTOOL-0002",
-      "source": ".shall/rfcs/JTOOL-0002-agent-boundaries.md#L26",
+      "source": ".shall/rfcs/JTOOL-0002-agent-boundaries.md#L36",
       "status": "enforced",
       "text": "The review agent invoked by the pipeline MUST run with no tools (`--tools \"\"`), so that it can only return text.",
       "title": "Agents run without tools in the pipeline"
@@ -309,7 +309,7 @@
       "level": "MUST",
       "not_applies_when": "No agent runs, no agent output is used, and nothing is written to an external system.",
       "rfc": "JTOOL-0002",
-      "source": ".shall/rfcs/JTOOL-0002-agent-boundaries.md#L33",
+      "source": ".shall/rfcs/JTOOL-0002-agent-boundaries.md#L43",
       "status": "enforced",
       "text": "Findings returned by an agent MUST pass `validate_findings` (statement selected for the chunk, line or quote present in the artifact) before they reach a report or a comment.",
       "title": "Agent output is validated before use"
@@ -332,7 +332,7 @@
       "level": "MUST",
       "not_applies_when": "No agent runs, no agent output is used, and nothing is written to an external system.",
       "rfc": "JTOOL-0002",
-      "source": ".shall/rfcs/JTOOL-0002-agent-boundaries.md#L40",
+      "source": ".shall/rfcs/JTOOL-0002-agent-boundaries.md#L50",
       "status": "enforced",
       "text": "Writes to external systems (GitHub reviews, comments, thread resolution) MUST be performed by deterministic code, never by an agent, and the command that performs them MUST offer a `--dry-run` that performs no write.",
       "title": "External writes are deterministic and previewable"
@@ -355,7 +355,7 @@
       "level": "MUST",
       "not_applies_when": "No agent runs, no agent output is used, and nothing is written to an external system.",
       "rfc": "JTOOL-0002",
-      "source": ".shall/rfcs/JTOOL-0002-agent-boundaries.md#L48",
+      "source": ".shall/rfcs/JTOOL-0002-agent-boundaries.md#L58",
       "status": "enforced",
       "text": "Whether a finding is blocking MUST be computed by code from the corpus (RFC status and statement level) and the verification verdict; agent output MUST only lower a finding's severity, never raise it.",
       "title": "Severity comes from the corpus and verification"
@@ -378,7 +378,7 @@
       "level": "MUST",
       "not_applies_when": "No agent runs, no agent output is used, and nothing is written to an external system.",
       "rfc": "JTOOL-0002",
-      "source": ".shall/rfcs/JTOOL-0002-agent-boundaries.md#L56",
+      "source": ".shall/rfcs/JTOOL-0002-agent-boundaries.md#L66",
       "status": "enforced",
       "text": "A finding MUST NOT block a merge unless the verifier confirmed it from code or configuration it was shown, and a finding MUST only be dropped as refuted when the verdict cites evidence that exists.",
       "title": "Blocking needs seen evidence"
@@ -401,7 +401,7 @@
       "level": "MUST",
       "not_applies_when": "The content does not change CLI commands, exit codes or generated files.",
       "rfc": "JTOOL-0003",
-      "source": ".shall/rfcs/JTOOL-0003-cli-contract.md#L25",
+      "source": ".shall/rfcs/JTOOL-0003-cli-contract.md#L36",
       "status": "enforced",
       "text": "Commands MUST exit with 0 on success, 1 on errors, 2 on blocking findings and 3 when a Jev request fails after retries, and new failure cases MUST reuse one of these codes.",
       "title": "Stable exit codes"
@@ -424,7 +424,7 @@
       "level": "MUST",
       "not_applies_when": "The content does not change CLI commands, exit codes or generated files.",
       "rfc": "JTOOL-0003",
-      "source": ".shall/rfcs/JTOOL-0003-cli-contract.md#L32",
+      "source": ".shall/rfcs/JTOOL-0003-cli-contract.md#L43",
       "status": "enforced",
       "text": "The commands `lint`, `build`, `new`, `show`, `list`, `catalog`, `init`, `validate`, `bundle` and `publish` MUST NOT call Jev or Claude.",
       "title": "Deterministic commands stay model-free"
@@ -447,7 +447,7 @@
       "level": "MUST",
       "not_applies_when": "The content does not change CLI commands, exit codes or generated files.",
       "rfc": "JTOOL-0003",
-      "source": ".shall/rfcs/JTOOL-0003-cli-contract.md#L39",
+      "source": ".shall/rfcs/JTOOL-0003-cli-contract.md#L50",
       "status": "enforced",
       "text": "Generated files MUST be byte-for-byte reproducible from their inputs: no timestamps, no absolute paths, and sorted keys in JSON.",
       "title": "Reproducible generated files"
@@ -469,7 +469,7 @@
       "level": "MUST",
       "not_applies_when": "The content is not a skill, agent definition or plugin manifest.",
       "rfc": "JTOOL-0004",
-      "source": ".shall/rfcs/JTOOL-0004-plugin-content.md#L25",
+      "source": ".shall/rfcs/JTOOL-0004-plugin-content.md#L32",
       "status": "approved",
       "text": "The `description` of a skill or agent MUST state the situations in which it is used, not only what it does.",
       "title": "Descriptions say when to use"
@@ -491,7 +491,7 @@
       "level": "MUST",
       "not_applies_when": "The content is not a skill, agent definition or plugin manifest.",
       "rfc": "JTOOL-0004",
-      "source": ".shall/rfcs/JTOOL-0004-plugin-content.md#L32",
+      "source": ".shall/rfcs/JTOOL-0004-plugin-content.md#L39",
       "status": "approved",
       "text": "The review instructions MUST live only in `agents/shall-reviewer.md`, which both the in-session agent and the CI pipeline use; skills and code MUST NOT carry a second copy.",
       "title": "One reviewer prompt"
@@ -513,7 +513,7 @@
       "level": "SHOULD",
       "not_applies_when": "The content is not a skill, agent definition or plugin manifest.",
       "rfc": "JTOOL-0004",
-      "source": ".shall/rfcs/JTOOL-0004-plugin-content.md#L39",
+      "source": ".shall/rfcs/JTOOL-0004-plugin-content.md#L46",
       "status": "approved",
       "text": "Every `shall` command and flag shown in a skill SHOULD exist in the CLI (`shall <command> -h`).",
       "title": "Commands in skills exist"

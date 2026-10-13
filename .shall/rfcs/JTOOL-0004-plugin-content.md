@@ -20,6 +20,13 @@ not_applies_when: >
 
 # JTOOL-0004: Plugin skills and agents
 
+## Checks in code
+
+Code checks part of these rules. Review checks the rest.
+
+- JTOOL-0004.3: `plugins/shall/tooling/tests/test_boundaries.py` (`test_docs_and_skills_use_existing_commands_and_flags`).
+- JTOOL-0004.1 and JTOOL-0004.2: review only.
+
 ## Requirements
 
 ### JTOOL-0004.1 Descriptions say when to use

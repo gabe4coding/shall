@@ -2,9 +2,10 @@
 
 import json
 
+from fakes import make_finding
 from shall.artifact import build_artifact
+from shall.findings import render_github
 from shall.publish import SUMMARY_MARKER, publish
-from shall.review import render_github
 
 BOT, HUMAN = "shall-bot", "alice"
 SELECTION = {"applicable": [], "model": "jev-test", "strategy": "layered"}
@@ -64,11 +65,8 @@ def review_for(lines: list[str], findings: list[tuple[str, str]], start: int = 1
     """findings: (statement_id, exact added line text) -> the GitHub payload shall renders."""
     art = build_artifact("pr.diff", diff(lines, start), "diff", 40000)
     by_text = {t: n for n, t in art.chunks[0].line_text.items()}
-    kept = [{
-        "statement_id": sid, "rfc": sid.split(".")[0], "title": "t", "level": "MUST", "blocking": True,
-        "path": "src/a.ts", "line": by_text[text], "quote": text, "message": "m", "suggestion": "",
-        "statement_text": "s", "source": "x#L1",
-    } for sid, text in findings]
+    kept = [make_finding(statement_id=sid, path="src/a.ts", line=by_text[text], quote=text, message="m",
+                         statement_text="s") for sid, text in findings]
     return render_github(art, SELECTION, kept, [])
 
 

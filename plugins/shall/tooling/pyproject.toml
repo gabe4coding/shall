@@ -22,6 +22,42 @@ packages = ["src/shall"]
 
 [dependency-groups]
 dev = ["pytest>=8"]
+# `make typecheck` / `make lint-imports` only (uv --group check): plugin users never install them
+check = ["pyright[nodejs]>=1.1.400", "import-linter>=2.1"]  # nodejs: Node from a wheel, no download at run time
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+
+[tool.pyright]
+# `make typecheck`. Standard mode: Literal statuses, levels and verdicts are checked at every
+# assignment, and an Optional must be narrowed before use (Corpus.require, not Corpus.statement).
+include = ["src", "tests/fakes.py"]
+typeCheckingMode = "standard"
+pythonVersion = "3.11"
+reportUnnecessaryComparison = "error"
+reportMatchNotExhaustive = "error"
+
+[tool.importlinter]
+# `make lint-imports`. JTOOL-0001.1 and JTOOL-0003.2: deterministic code never reaches
+# a model, and only shall.jev talks to the TypeSafe SDK.
+root_package = "shall"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+# indirect imports count: a deterministic module that imports shall.select (which imports shall.jev) fails too
+name = "Deterministic modules call no model (JTOOL-0003.2): move model calls to jev/claude callers"
+type = "forbidden"
+source_modules = [
+    "shall.corpus", "shall.index", "shall.artifact", "shall.config", "shall.fetch", "shall.publish",
+    "shall.findings", "shall.checks", "shall.health", "shall.git", "shall.effects", "shall.codegraph",
+]
+forbidden_modules = ["shall.jev", "shall.claude", "typesafe_sdk"]
+
+[[tool.importlinter.contracts]]
+name = "Only shall.jev imports the TypeSafe SDK (JTOOL-0001.1): use shall.jev.Jev / JevLike"
+type = "forbidden"
+source_modules = ["shall"]
+forbidden_modules = ["typesafe_sdk"]
+ignore_imports = ["shall.jev -> typesafe_sdk"]
+allow_indirect_imports = true

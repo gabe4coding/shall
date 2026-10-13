@@ -14,15 +14,12 @@ same prompts through `claude -p` (`run=claude_text`).
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
-import os
 import re
-import tempfile
 
 from .config import Config
-from .review import AnswerCache
+from .claude import AnswerCache, run_claude_text
 
 # The fixed scale and the p that code gives each answer. "likely" sits in the ask band of an
 # enforced MUST (0.5 <= p < 0.9) and at the warn line of a SHOULD (0.7).
@@ -171,20 +168,5 @@ def claude_text(cfg: Config, model: str):
     """`run` for ClaudeJudge outside Claude Code (eval): one tool-less `claude -p` call
     (JTOOL-0002.1) with the request's system prompt; the reply text, or None on a failure."""
     async def run(req: dict) -> str | None:
-        cmd = list(cfg.get("review.command")) + [
-            "--model", model, "--output-format", "text", "--system-prompt", req["system"], "--tools", "",
-            "--no-session-persistence", "--strict-mcp-config", "--setting-sources", ""]
-        with tempfile.TemporaryFile() as fh:
-            fh.write(req["prompt"].encode())
-            fh.seek(0)
-            proc = await asyncio.create_subprocess_exec(
-                *cmd, stdin=fh, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-                env={**os.environ, "SHALL_HOOKS_DISABLED": "1"})
-            try:
-                out, _ = await asyncio.wait_for(proc.communicate(), timeout=float(cfg.get("review.timeout")))
-            except asyncio.TimeoutError:
-                proc.kill()
-                await proc.wait()
-                return None
-        return out.decode(errors="replace") if proc.returncode == 0 else None
+        return await run_claude_text(cfg, model, req["system"], req["prompt"])
     return run

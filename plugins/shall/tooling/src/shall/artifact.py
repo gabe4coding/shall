@@ -186,6 +186,8 @@ def read_source(source: str | None, text: str | None) -> tuple[str, str]:
     """Return (name, raw text) for a file path, '-' (stdin) or inline text."""
     if text is not None:
         return "task.txt", text
+    if source is None:
+        raise SystemExit("shall: give a file path, '-' for stdin, or --text")
     if source == "-":
         import sys
         return "stdin", sys.stdin.read()

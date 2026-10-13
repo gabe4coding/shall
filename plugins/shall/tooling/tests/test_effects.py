@@ -1,10 +1,10 @@
 """Known effects (effects.py) and run health (health.py): no network, no model."""
 
-import subprocess
 from pathlib import Path
 
 import pytest
 
+from shall import git
 from shall.artifact import build_artifact
 from shall.codegraph import RepoIndex, treesitter_available
 from shall.config import load_config
@@ -63,7 +63,7 @@ def test_indirect_fact_through_wrapper(effects, tmp_path):
     (tmp_path / "payments" / "provider.py").write_text(
         "from payments.http import make_session\n\n\ndef charge(x):\n    return make_session().post('/c', json=x)\n")
     (tmp_path / "job.py").write_text("from payments import provider\n\n\ndef run(b):\n    provider.charge(b)\n")
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    git.init(tmp_path)
     facts = facts_for(effects, "job.py", (tmp_path / "job.py").read_text(), RepoIndex(tmp_path))
     assert any("requests.Session" in f and "payments/http.py" in f for f in facts), facts
 

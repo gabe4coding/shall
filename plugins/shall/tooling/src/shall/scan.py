@@ -17,26 +17,20 @@ from __future__ import annotations
 import asyncio
 import fnmatch
 import os
-import subprocess
 from pathlib import Path
 
+from . import git
 from .artifact import DOC_EXTS, language_of, parse_diff
 from .config import Config
 from .corpus import Corpus
 from .hooks import Hooks, redact, scan_secrets, synthetic_diff
-from .jev import Jev
+from .jev import JevLike
 
 JEV_PRICE_IN = 0.042  # $ per 1M input tokens (evaluate.py uses the same rate)
 
 
-def _git(root: Path, *args: str) -> str | None:
-    proc = subprocess.run(["git", "-C", str(root), *args], capture_output=True)
-    return proc.stdout.decode("utf-8", "surrogateescape") if proc.returncode == 0 else None
-
-
 def repo_root(start: Path) -> Path:
-    top = (_git(start, "rev-parse", "--show-toplevel") or "").strip()
-    return Path(top) if top else start
+    return git.toplevel(start) or start
 
 
 def excluded(rel: str, patterns: list[str]) -> bool:
@@ -52,7 +46,9 @@ def list_files(root: Path, paths: list[str], exclude: list[str]) -> list[str]:
         if not full.is_relative_to(root):
             raise SystemExit(f"shall scan: {p} is outside the repository {root}")
         targets.append(full.relative_to(root).as_posix() or ".")
-    listed = _git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", *targets)
+    # long timeout: the fallback walk ignores .gitignore, so it would scan build output
+    listed = git.git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", *targets,
+                     timeout=600)
     if listed is not None:
         names = [n for n in listed.split("\0") if n]
     else:  # not a git work tree
@@ -116,7 +112,7 @@ async def scan_file(hooks: Hooks, rel: str, text: str, threshold: float, secret_
                                     texts={rel: text})
 
     def blocking(f: dict) -> bool:  # a code check is exact, as the secret scanner: the statement's severity
-        rfc, st = hooks.corpus.statement(f["id"])
+        rfc, st = hooks.corpus.require(f["id"])
         return f["by"] == "check" and rfc.statement_blocking(st)
 
     findings += [{**f, "lines": f["lines"] if f["by"] == "check" else None, "blocking": blocking(f)}
@@ -129,7 +125,7 @@ async def scan_file(hooks: Hooks, rel: str, text: str, threshold: float, secret_
             "findings": sorted(findings, key=lambda f: (-f["p"], f["id"]))}
 
 
-async def run_scan(cfg: Config, corpus: Corpus, jev: Jev, paths: list[str], root: Path | None = None,
+async def run_scan(cfg: Config, corpus: Corpus, jev: JevLike, paths: list[str], root: Path | None = None,
                    threshold: float | None = None, statuses: list[str] | None = None,
                    exclude: list[str] | None = None) -> dict:
     root = root or repo_root(Path.cwd())

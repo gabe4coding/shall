@@ -1,0 +1,45 @@
+# This repository's own CI. Deterministic checks only: no model calls, no secrets.
+# (ci/github/*.yml are templates for the repositories that use shall.)
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  tooling:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Unit and boundary tests
+        run: make test
+
+      - name: Corpus lint, index is current, types (pyright), module layers (import-linter)
+        run: make check
+
+      - name: Published statement ids are stable
+        if: github.event_name == 'pull_request'
+        run: |
+          if git show "origin/${{ github.base_ref }}:corpus/index/index.json" > /tmp/base-index.json 2>/dev/null; then
+            plugins/shall/bin/shall --config shall.yaml lint --quiet --against /tmp/base-index.json
+          fi
+
+      - name: This repo's own rules (.shall/, prefix JTOOL)
+        run: make self-check
+
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+
+      - name: Install the claude CLI
+        run: npm install -g @anthropic-ai/claude-code@2.1.296   # pinned: a new CLI must not turn CI red
+
+      - name: Plugin manifest and hook tests
+        run: make test-plugin

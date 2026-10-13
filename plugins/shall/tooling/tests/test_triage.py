@@ -3,9 +3,10 @@ and evidence-backed refutations; GitHub writes are deterministic and leave peopl
 
 import asyncio
 import json
-import subprocess
 from pathlib import Path
 
+from fakes import FakeJev, make_finding
+from shall import git
 from shall.artifact import build_artifact
 from shall.config import load_config
 from shall.corpus import load_corpus
@@ -170,30 +171,23 @@ def test_verdict_needs_cited_evidence():
     assert apply_comment_verdict(None, [])[0] == "unverified"
 
 
-class FakeJev:
+class CommentJev(FakeJev):
     """Scores from keywords in the comment: enough to exercise every branch of the code."""
 
-    def __init__(self):
-        self.asked = []
-
-    async def gather(self, aws):
-        return list(await asyncio.gather(*aws))
-
-    async def ask(self, state, questions):
-        self.asked.append(set(questions))
-        if "same" in questions:
+    def p(self, state, qid):
+        if qid == "same":
             both = state["first"] + " | " + state["second"]
-            return {"same": {"p": 0.9 if both.count("SQL") == 2 or both.count("email") == 2 else 0.1}}
+            return 0.9 if both.count("SQL") == 2 or both.count("email") == 2 else 0.1
         if "review_comment" not in state:   # selection of the chunk, as in `shall review`
-            return {q: {"p": 0.9 if q in ("JRFC-0003.1", "JRFC-0006.1") else 0.1} for q in questions}
+            return 0.9 if qid in ("JRFC-0003.1", "JRFC-0006.1") else 0.1
         text = state["review_comment"]
-        out = {q: {"p": 0.1} for q in questions}
-        out["actionable"] = {"p": 0.1 if ("Nice" in text or "rename" in text) else 0.9}
-        if "email" in text and "JRFC-0003.1" in out:
-            out["JRFC-0003.1"] = {"p": 0.95}
-        if "timeout" in text and "JRFC-0006.1" in out:
-            out["JRFC-0006.1"] = {"p": 0.9}
-        return out
+        if qid == "actionable":
+            return 0.1 if ("Nice" in text or "rename" in text) else 0.9
+        if qid == "JRFC-0003.1" and "email" in text:
+            return 0.95
+        if qid == "JRFC-0006.1" and "timeout" in text:
+            return 0.9
+        return 0.1
 
 
 def test_triage_end_to_end(tmp_path):
@@ -203,7 +197,7 @@ def test_triage_end_to_end(tmp_path):
     (tmp_path / "src" / "gateway.ts").write_text("export const gateway = { hold: (b) => request('/hold', b) };\n"
                                                  "function request(url, b) { return fetch(url, { signal: "
                                                  "AbortSignal.timeout(5000) }); }\n")
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    git.init(tmp_path)
     art = build_artifact("pr.diff", DIFF, "diff", 40000)
     comments = [
         thread(1, "copilot", 2, "SQL injection: `req.params.id` is concatenated into the query."),
@@ -215,8 +209,8 @@ def test_triage_end_to_end(tmp_path):
         thread(7, "copilot", 6, "The handler never checks the guest owns the booking."),
         thread(8, "copilot", 99, "Old comment on removed code."),
     ]
-    shall_findings = [{"statement_id": "JRFC-0003.1", "title": "No personal data in logs", "path": "src/confirm.ts",
-                      "line": 3, "message": "The guest email is logged."}]
+    shall_findings = [make_finding(statement_id="JRFC-0003.1", title="No personal data in logs",
+                                   path="src/confirm.ts", line=3, message="The guest email is logged.")]
     prompts = {}
 
     async def agent(prompt, sem):
@@ -229,7 +223,7 @@ def test_triage_end_to_end(tmp_path):
             return {"verdict": "confirmed", "reason": "id interpolated", "evidence": ["chunk"]}, {"cost_usd": 0.01}
         return {"verdict": "unknown", "reason": "auth may be in a middleware", "evidence": []}, {}
 
-    jev = FakeJev()
+    jev = CommentJev()
     items, stats = asyncio.run(triage_comments(cfg, corpus, art, jev, comments, shall_findings, agent=agent,
                                                search_root=tmp_path))
     status = {i["id"]: (i["status"], i["reason"].split(":")[0].split(" (")[0]) for i in items}

@@ -17,10 +17,11 @@ import base64
 import os
 import re
 import shutil
-import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+
+from . import git
 
 RESOLVED = ".shall-resolved"
 GIT_TIMEOUT = 120  # seconds per git command (a shallow fetch of the corpus)
@@ -52,18 +53,15 @@ def parse_spec(spec) -> dict:
 
 
 def _git(args: list[str], cwd: Path, url: str | None = None) -> str:
-    cmd = ["git", "-c", "advice.detachedHead=false"]
+    options = ["-c", "advice.detachedHead=false"]
     token = os.environ.get("SHALL_GIT_TOKEN")
     if token and url and url.startswith("https://"):
         basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
-        cmd += ["-c", f"http.extraHeader=Authorization: Basic {basic}"]
-    try:
-        proc = subprocess.run(cmd + args, cwd=cwd, capture_output=True, text=True, timeout=GIT_TIMEOUT)
-    except subprocess.TimeoutExpired:
-        raise SystemExit(f"shall: git {args[0]} timed out after {GIT_TIMEOUT}s")
-    if proc.returncode != 0:
-        raise SystemExit(f"shall: git {args[0]} failed: {proc.stderr.strip()[-400:]}")
-    return proc.stdout.strip()
+        options += ["-c", f"http.extraHeader=Authorization: Basic {basic}"]
+    r = git.run(cwd, *args, options=tuple(options), timeout=GIT_TIMEOUT)
+    if not r.ok:
+        raise SystemExit(f"shall: git {args[0]} failed: {r.err.strip()[-400:]}")
+    return r.out.strip()
 
 
 def _fetch(url: str, ref: str, dest: Path) -> str:
@@ -93,9 +91,7 @@ def resolve_parent(spec, base: Path, update: bool = False) -> Parent:
             raise SystemExit(f"shall: extends.path {root} does not exist")
         sha = None
         if (root / ".git").exists():
-            proc = subprocess.run(["git", "rev-parse", "--verify", "-q", "HEAD"], cwd=root,
-                                  capture_output=True, text=True, timeout=GIT_TIMEOUT)
-            sha = proc.stdout.strip() if proc.returncode == 0 else None
+            sha = (git.git(root, "rev-parse", "--verify", "-q", "HEAD", timeout=GIT_TIMEOUT) or "").strip() or None
         return Parent(root=root, name=spec.get("name") or root.name, repo=None, ref=None, sha=sha, url_base=None)
     repo, ref = spec.get("repo"), spec.get("ref")
     if not repo or not ref:

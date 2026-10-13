@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 from shall.artifact import Chunk
 from shall.config import load_config
@@ -91,6 +92,25 @@ def test_extends_fetches_pinned_ref_and_merges_layers(tmp_path, monkeypatch, org
     # settings are inherited from the org shall.yaml
     assert cfg.get("conflicts.exclude_domains") == ["governance"]
     assert cfg.get("selection.always_domains") == ["security"]
+
+
+def test_org_action_rows_this_version_cannot_read_are_dropped(tmp_path, monkeypatch, org_repo, capsys):
+    """The org config is not checked as a local config (a newer plugin may read more): a row or a
+    shape that this version cannot read is dropped at load, with a note, so the hooks never fail open."""
+    org_cfg = yaml.safe_load((org_repo / "shall.yaml").read_text())
+    org_cfg.setdefault("hooks", {})["actions"] = {
+        "enforced": {"MUST": [[0.9, "block"], ["high", "deny"], [0.5, "ask"]]},
+        "proposed": [[0.9, "warn"]],
+    }
+    (org_repo / "shall.yaml").write_text(yaml.safe_dump(org_cfg))
+    git("commit", "-qam", "newer actions", cwd=org_repo)
+    git("tag", "-f", "v1", cwd=org_repo)
+    workspace(tmp_path, monkeypatch, org_repo)
+    cfg = load_config()
+    assert cfg.get("hooks.actions.enforced.MUST") == [[0.5, "ask"]]
+    assert cfg.get("hooks.actions.proposed") is None    # the list shape is dropped
+    err = capsys.readouterr().err
+    assert "'block'" in err and "'high'" in err and "hooks.actions.proposed" in err
 
 
 def test_new_commits_upstream_do_not_move_a_pinned_workspace(tmp_path, monkeypatch, org_repo):
