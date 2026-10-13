@@ -9,7 +9,7 @@ Same pipeline as `shall review`, with the reviewer as an in-session agent.
    `.shall-out/pr/findings.agent.json` as `{"findings": [{"chunk": "c0", ...}]}`.
 4. `shall validate .shall-out/pr/findings.agent.json /tmp/pr.diff --selection .shall-out/pr/selection.json --out-dir .shall-out/pr/validated`
    (drops findings whose statement was not selected for the chunk or whose line is not changed,
-   dedupes, recomputes blocking, caps comments)
+   dedupes, caps comments; nothing blocks before step 5)
 5. `shall verify .shall-out/pr/validated/findings.json /tmp/pr.diff --selection .shall-out/pr/selection.json --out-dir .shall-out/pr`
    from the repository root (gathers evidence; refuted findings drop only with cited evidence,
    unknown ones stay advisory).

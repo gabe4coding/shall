@@ -82,6 +82,22 @@ def test_findings_schema_matches_raw_finding():
                                        "agent returns, RawFinding is how code reads it.")
 
 
+def test_review_instructions_live_only_in_the_agent_prompt():
+    """JTOOL-0004.2: code sends the reviewer data only; its rules are in agents/shall-reviewer.md,
+    which the in-session agent and CI both use. A second copy in code drifts from the first."""
+    from shall.artifact import build_artifact
+    from shall.corpus import load_corpus
+    from shall.findings import chunk_prompt
+    corpus = load_corpus(load_config(str(REPO / "shall.yaml")))
+    diff = "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -0,0 +1 @@\n+print(1)\n"
+    for name, raw, kind in (("a.diff", diff, "diff"), ("a.md", "# Title\n\nText.\n", "doc")):
+        chunk = build_artifact(name, raw, kind, 4000).chunks[0]
+        prompt = chunk_prompt(corpus, chunk, ["JRFC-0003.1"], ["a fact"])
+        rest = re.sub(r"<(chunk|known_effects|standards)\b.*?</\1>", "", prompt, flags=re.S).strip()
+        assert not rest, (f"chunk_prompt ({kind}) has text outside its data tags: {rest!r}. Put review "
+                          "rules in plugins/shall/agents/shall-reviewer.md (JTOOL-0004.2)")
+
+
 def test_every_claude_call_is_tool_less():
     cfg = type("Cfg", (), {"get": lambda self, key: ["claude", "-p"]})()
     for schema in (None, {"type": "object"}):

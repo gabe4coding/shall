@@ -355,8 +355,9 @@ def cmd_validate(args, cfg) -> ExitCode:
     raw = json.loads(Path(args.findings).read_text(encoding="utf-8"))
     raw = raw.get("findings", raw) if isinstance(raw, dict) else raw
     findings, dropped = validate_findings(corpus, artifact, selection, raw, int(cfg.get("review.max_comments")))
-    blocking = _write_outputs(cfg, Path(args.out_dir), artifact, selection, findings, dropped, args.format)
-    return ExitCode.BLOCKING if (blocking and args.fail_on_blocking) else ExitCode.OK
+    # nothing blocks before `shall verify` (JTOOL-0002.6): no --fail-on-blocking here
+    _write_outputs(cfg, Path(args.out_dir), artifact, selection, findings, dropped, args.format)
+    return ExitCode.OK
 
 
 def cmd_review(args, cfg) -> ExitCode:
@@ -368,6 +369,9 @@ def cmd_review(args, cfg) -> ExitCode:
     corpus = load_corpus(cfg)
     out_dir = Path(args.out_dir)
     verify = cfg.get("review.verify") and not args.no_verify
+    if args.fail_on_blocking and not verify:
+        print("shall review: verification is off, so no finding blocks and --fail-on-blocking "
+              "cannot fail (JTOOL-0002.6)", file=sys.stderr)
     # incremental re-review: unchanged chunks and unchanged evidence reuse earlier answers
     cache = answer_cache(cfg, enabled=not args.no_cache)
 
@@ -805,7 +809,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--format", choices=["markdown", "github"], default="markdown")
     s.add_argument("--fail-on-blocking", action="store_true", help=f"exit {ExitCode.BLOCKING} on blocking findings")
     s.add_argument("--dry-run", action="store_true", help="select only and write bundle.md, no agent call")
-    s.add_argument("--no-verify", action="store_true", help="skip verification of blocking findings")
+    s.add_argument("--no-verify", action="store_true",
+                   help="skip verification: no finding blocks, blocking findings stay advisory")
     s.set_defaults(fn=cmd_review)
 
     s = sub.add_parser("scan", help="lint whole files: secret scanner + Jev per file (warnings, no agent)")
@@ -842,7 +847,6 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--selection", required=True)
     s.add_argument("--out-dir", default=".shall-out")
     s.add_argument("--format", choices=["markdown", "github"], default="markdown")
-    s.add_argument("--fail-on-blocking", action="store_true")
     s.set_defaults(fn=cmd_validate)
 
     s = sub.add_parser("publish", help="post a review to a GitHub PR idempotently (via gh)")

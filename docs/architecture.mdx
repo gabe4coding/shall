@@ -78,7 +78,7 @@ The reviewer sees one chunk. A finding can be wrong because of code in another p
    shall parses files lazily (`git grep` first). It marks hops that it resolved only by name with "(by name)". A keyword search runs at the same time. The search uses the YAML key path, `depends_on`, code spans of the statement and identifiers of the quote (code before docs). The search also covers files that have no grammar. For a diff, it also covers the file of the finding, except the lines that the verifier sees as the chunk: a diff shows only the changed hunks, and the setting that decides a finding (a variable, a client configuration) is frequently in another part of the same file.
 3. **Jev filters the excerpts** when there are more than 6 (one Noul per excerpt).
 4. **The `shall-verifier` agent** (no tools) answers confirmed / refuted / unknown. It must cite excerpt ids.
-5. **Code applies the verdict. Severity only goes down.** Refuted → code drops the finding only if the cited evidence exists. Unknown or confirmed-without-evidence → advisory. Confirmed → unchanged.
+5. **Code applies the verdict. Severity only goes down.** Refuted → code drops the finding only if the cited evidence exists. Unknown or confirmed-without-evidence → advisory. Confirmed → unchanged. A finding without a verdict (`--no-verify`, `review.verify: false`, or before `shall verify`) is advisory: only a confirmed finding blocks.
 
 Limits: shall resolves by imports and names, not by types. A language server or a SCIP index would resolve `this.partner.notify` by type. The graph cannot see dependency injection, reflection, and clients configured in YAML or environment variables.
 
