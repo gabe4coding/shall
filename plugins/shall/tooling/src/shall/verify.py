@@ -50,7 +50,7 @@ STOPWORDS = {
     "const", "let", "var", "function", "return", "await", "async", "import", "export", "default",
     "def", "class", "new", "string", "number", "int", "str", "dict", "list", "bool", "any", "void",
     "promise", "if", "else", "elif", "try", "catch", "except", "raise", "throw", "not", "in", "is",
-    "defaults", "default", "value", "values", "code", "file", "config", "library", "outside", "chunk",
+    "defaults", "value", "values", "code", "file", "config", "library", "outside", "chunk",
 }
 MAX_TERMS = 8
 HITS_PER_TERM = 8

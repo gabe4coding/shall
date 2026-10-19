@@ -175,8 +175,8 @@ def chunk_prompt(corpus: Corpus, chunk: Chunk, ids: list[str], facts: list[str] 
     return (
         f"<chunk kind=\"{chunk.kind}\" file=\"{chunk.path}\" language=\"{chunk.language}\">\n"
         f"{chunk.rendered}\n</chunk>\n\n"
-        + (f"<known_effects>\nFacts found by code (effects registry and code graph) about what the "
-           f"code in the chunk calls:\n" + "\n".join(f"- {x}" for x in facts) + "\n</known_effects>\n\n"
+        + ("<known_effects>\nFacts found by code (effects registry and code graph) about what the "
+           "code in the chunk calls:\n" + "\n".join(f"- {x}" for x in facts) + "\n</known_effects>\n\n"
            if facts else "")
         + f"<standards>\n{render_statements(corpus, ids)}\n</standards>"
     )
