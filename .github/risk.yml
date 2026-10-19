@@ -6,7 +6,7 @@ version: 1
 repo: gabe4coding/shall
 
 # T0 candidates. A PR whose files are all docs or tests, and that does not remove an assertion
-# or add a skip, only or todo, is T0. A missing Greptile pass on that PR raises it to T1.
+# or add a skip, only or todo, is T0. A Greptile non-pass raises that tier one step.
 docs: ["*.md", "*.mdx", "*.txt", "docs/**", "**/assets/**", "*.svg", "*.png", "*.jpg", "*.gif", "*.webp"]
 # Markdown that a model or an agent reads is product text, not docs: T1 at least.
 not_docs: ["AGENTS.md", "CLAUDE.md", "plugins/**", "corpus/**", ".shall/**", ".claude/**", "examples/**", "eval/**"]
